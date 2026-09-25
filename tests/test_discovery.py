@@ -20,7 +20,8 @@ class DiscoveryTests(unittest.TestCase):
             if '/pages/' in route:
                 return {'body': '<a href="/courses/123/files/13">Reading</a>'}, ''
             if '/files/' in route:
-                return {'display_name': f"file-{route.rsplit('/', 1)[-1]}.pdf", 'size': 10}, ''
+                return {'display_name': f"file-{route.rsplit('/', 1)[-1]}.pdf", 'size': 10,
+                        'url': 'https://files.example.edu/item'}, ''
             raise AssertionError(route)
         def listing(route, max_pages):
             if '/modules?' in route:
@@ -33,6 +34,7 @@ class DiscoveryTests(unittest.TestCase):
         client.list.side_effect = listing
         result = linked_files(client, '123', 100)
         self.assertEqual([f['id'] for f in result['files']], [10, 11, 12, 13])
+        self.assertTrue(all(f['downloadable'] for f in result['files']))
         self.assertEqual(result['skipped_sources'], [])
 
     def test_partial_permissions_are_reported_without_hiding_other_files(self):
@@ -41,7 +43,8 @@ class DiscoveryTests(unittest.TestCase):
             if route.endswith('syllabus_body'):
                 return {'syllabus_body': '<a href="/courses/123/files/10">Syllabus</a>'}, ''
             if '/files/' in route:
-                return {'display_name': 'file.pdf'}, ''
+                return {'display_name': 'file.pdf', 'hidden_for_user': True,
+                        'url': 'https://files.example.edu/item'}, ''
             raise AssertionError(route)
         def listing(route, max_pages):
             if '/modules?' in route:
@@ -53,4 +56,14 @@ class DiscoveryTests(unittest.TestCase):
         client.list.side_effect = listing
         result = linked_files(client, '123', 100)
         self.assertEqual([f['id'] for f in result['files']], [10])
+        self.assertFalse(result['files'][0]['downloadable'])
         self.assertEqual(result['skipped_sources'], ['modules'])
+
+    def test_quick_mode_skips_file_metadata_requests(self):
+        client = Mock(host='https://canvas.example.edu')
+        client.request.return_value = ({'syllabus_body': '<a href="/courses/123/files/10">File</a>'}, '')
+        client.list.return_value = []
+        result = linked_files(client, '123', 100, resolve=False)
+        self.assertEqual(result['files'], [{'id': 10, 'sources': ['syllabus'],
+                                            'metadata_not_checked': True}])
+        client.request.assert_called_once()

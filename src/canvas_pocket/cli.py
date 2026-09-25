@@ -63,6 +63,7 @@ def parser():
     due.add_argument('--course', type=identifier, help='Limit to one course')
     linked = sub.add_parser('linked-files', help='Find file links in accessible course content')
     linked.add_argument('course', type=identifier)
+    linked.add_argument('--quick', action='store_true', help='Skip per-file metadata checks for a faster link index')
     sub.add_parser('capabilities', help='Discover commands without logging in')
     s = sub.add_parser('download', help='Download one accessible course file without overwriting')
     s.add_argument('course', type=identifier)
@@ -73,6 +74,9 @@ def parser():
         s = sub.add_parser(name, help='Read one resource or list module items')
         s.add_argument('course', type=identifier)
         s.add_argument('item', type=str if name == 'page' else identifier)
+    submission = sub.add_parser('submission', help='Read your own assignment submission and feedback')
+    submission.add_argument('course', type=identifier)
+    submission.add_argument('assignment', type=identifier)
     s = sub.add_parser('get', help='Advanced read-only Canvas API request')
     s.add_argument('path', help='An /api/v1/ path, including optional query parameters')
     s.add_argument('--paginate', action='store_true')
@@ -95,7 +99,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'todo', 'upcoming', 'overview', 'deadlines', 'linked-files', 'assignments', 'assignment', 'syllabus', 'modules', 'module-items', 'pages', 'page', 'files', 'announcements', 'discussions', 'entries', 'replies', 'get'], 'write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'todo', 'upcoming', 'overview', 'deadlines', 'linked-files', 'assignments', 'assignment', 'submission', 'syllabus', 'modules', 'module-items', 'pages', 'page', 'files', 'announcements', 'discussions', 'entries', 'replies', 'get'], 'write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'auth' and args.action == 'login':
         host = origin(args.origin)
         if not sys.stdin.isatty():
@@ -125,7 +129,7 @@ def run(args):
     client = Client(host, token)
     if args.command == 'linked-files':
         from .discovery import linked_files
-        return linked_files(client, args.course, args.max_pages)
+        return linked_files(client, args.course, args.max_pages, resolve=not args.quick)
     if args.command == 'deadlines':
         from .planning import deadlines
         if args.days < 1:
@@ -160,6 +164,8 @@ def run(args):
             route += '&enrollment_state=active'
         return client.list(route, args.max_pages)
     base = f'/api/v1/courses/{args.course}'
+    if args.command == 'submission':
+        return client.request(base + f'/assignments/{args.assignment}/submissions/self?include[]=submission_comments&include[]=rubric_assessment')[0]
     if args.command == 'download':
         from .download import download
         metadata = client.request(base + f'/files/{args.file}')[0]
@@ -218,6 +224,10 @@ def brief(data):
             elif item.get('course_name') and item.get('name'):
                 label = f"{item['course_name']}: {item['name']}"
             detail = item.get('due_at') or item.get('start_at') or item.get('workflow_state') or ''
+            if item.get('downloadable') is False:
+                detail = 'not downloadable'
+            elif item.get('metadata_not_checked'):
+                detail = 'availability not checked'
             lines.append('  '.join(str(x) for x in (number, label, detail) if x != ''))
         return '\n'.join(lines)
     if isinstance(data, dict) and all(k in data for k in ('courses', 'upcoming', 'todo')):
@@ -236,6 +246,14 @@ def brief(data):
         if data['skipped_sources']:
             result += f"\nSkipped {len(data['skipped_sources'])} source(s); see JSON for details."
         return result
+    if isinstance(data, dict) and 'assignment_id' in data and 'workflow_state' in data:
+        fields = [('Status', data.get('workflow_state')),
+                  ('Submitted', data.get('submitted_at')),
+                  ('Grade', data.get('grade')),
+                  ('Late', data.get('late')),
+                  ('Missing', data.get('missing')),
+                  ('Comments', len(data.get('submission_comments') or []))]
+        return '\n'.join(f'{name}: {value}' for name, value in fields if value is not None)
     return json.dumps(data, indent=2)
 
 

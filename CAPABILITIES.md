@@ -14,7 +14,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Discussions | discussions, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
 | Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
 | Calendar and planner | advanced get with documented API path | First-class commands; mutations separately guarded |
-| Grades and submissions | advanced get where authorized | Student-only views and upload/submit workflow with destination review |
+| Grades and submissions | submission (own assignment + feedback), advanced get where authorized | Aggregate student views and upload/submit workflow with destination review |
 | Rubrics and feedback | advanced get where authorized | Summaries and submission comments |
 | Inbox | advanced get where authorized | Conversation commands; send/reply with previews |
 | Groups, sections, enrollments | advanced get where authorized | First-class discovery, no administrative privileges assumed |
@@ -38,4 +38,4 @@ The generic `get` command is an expert escape hatch for documented read endpoint
 4. Opt-in live read-only smoke tests after user authentication.
 5. Write integration tests only against an explicitly designated sandbox course.
 
-Current live-test gap: token/keyring login and institution-specific downloads have not been exercised against a real account. Mock E2E tests are not equivalent to that assurance. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
+Current live-test gap: write actions have not been exercised against a real account. Personal-token login, selected read commands and one temporary file download have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.

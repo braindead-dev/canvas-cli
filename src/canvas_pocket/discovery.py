@@ -31,7 +31,7 @@ def referenced_ids(markup, host, course_id):
     return found
 
 
-def linked_files(client, course_id, max_pages):
+def linked_files(client, course_id, max_pages, resolve=True):
     base = f'/api/v1/courses/{course_id}'
     references = {}
     skipped = []
@@ -83,10 +83,17 @@ def linked_files(client, course_id, max_pages):
     files = []
     for fid, sources in sorted(references.items()):
         item = {'id': fid, 'sources': sorted(sources)}
+        if not resolve:
+            item['metadata_not_checked'] = True
+            files.append(item)
+            continue
         try:
             metadata, _ = client.request(base + f'/files/{fid}')
+            locked = bool(metadata.get('locked_for_user'))
+            hidden = bool(metadata.get('hidden_for_user'))
             item.update({'display_name': metadata.get('display_name'), 'size': metadata.get('size'),
-                         'locked_for_user': metadata.get('locked_for_user', False)})
+                         'locked_for_user': locked, 'hidden_for_user': hidden,
+                         'downloadable': not (locked or hidden) and bool(metadata.get('url'))})
         except CanvasError:
             item['metadata_unavailable'] = True
         files.append(item)

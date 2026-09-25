@@ -58,7 +58,12 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/modules?include[]=items&per_page=100':
                     data = []
                 elif self.path == '/api/v1/courses/101/files/7':
-                    data = {'display_name': 'synthetic-syllabus.pdf', 'size': 123}
+                    data = {'display_name': 'synthetic-syllabus.pdf', 'size': 123,
+                            'hidden_for_user': True, 'url': 'https://files.example.edu/item'}
+                elif self.path == '/api/v1/courses/101/assignments/88/submissions/self?include[]=submission_comments&include[]=rubric_assessment':
+                    data = {'assignment_id': 88, 'workflow_state': 'submitted',
+                            'submitted_at': '2026-09-01T12:00:00Z', 'grade': 'A',
+                            'submission_comments': [{'comment': 'Synthetic feedback'}]}
                 else: data = {'id': 101, 'name': 'Synthetic resource'}
                 self.end_headers(); self.wfile.write(json.dumps(data).encode())
             def do_POST(self):
@@ -120,6 +125,22 @@ class E2E(unittest.TestCase):
         linked = self.invoke('linked-files', '101')
         self.assertEqual(linked.returncode, 0, linked.stderr)
         self.assertEqual(json.loads(linked.stdout)['files'][0]['display_name'], 'synthetic-syllabus.pdf')
+        self.assertFalse(json.loads(linked.stdout)['files'][0]['downloadable'])
+        brief = self.invoke('--format', 'brief', 'linked-files', '101')
+        self.assertIn('not downloadable', brief.stdout)
+        quick = self.invoke('linked-files', '101', '--quick')
+        self.assertEqual(quick.returncode, 0, quick.stderr)
+        self.assertTrue(json.loads(quick.stdout)['files'][0]['metadata_not_checked'])
+
+    def test_own_submission_and_feedback_are_read_only(self):
+        before = len(self.calls)
+        result = self.invoke('submission', '101', '88')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['submission_comments'][0]['comment'], 'Synthetic feedback')
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/courses/101/assignments/88/submissions/self?include[]=submission_comments&include[]=rubric_assessment')])
+        brief = self.invoke('--format', 'brief', 'submission', '101', '88')
+        self.assertIn('Status: submitted', brief.stdout)
+        self.assertIn('Comments: 1', brief.stdout)
 
     def test_redirect_refused(self):
         before = len(self.calls)
