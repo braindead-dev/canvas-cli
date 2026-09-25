@@ -8,9 +8,11 @@ class DiscoveryTests(unittest.TestCase):
     def test_links_keep_course_and_origin(self):
         html = ('<a href="/courses/123/files/10?wrap=1">a</a>'
                 '<a data-api-endpoint="/courses/123/files/13/preview">d</a>'
+                '<a data-api-endpoint="/api/v1/courses/123/files/14">api</a>'
+                '<a href="/api/v1/files/15">global api</a>'
                 '<a href="https://evil.example/courses/123/files/11">b</a>'
                 '<a href="/courses/456/files/12">c</a>')
-        self.assertEqual(referenced_ids(html, 'https://canvas.example.edu', '123'), {10, 13})
+        self.assertEqual(referenced_ids(html, 'https://canvas.example.edu', '123'), {10, 13, 14, 15})
 
     def test_finds_references_without_files_list_permission(self):
         client = Mock(host='https://canvas.example.edu')
@@ -67,3 +69,26 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(result['files'], [{'id': 10, 'sources': ['syllabus'],
                                             'metadata_not_checked': True}])
         client.request.assert_called_once()
+
+    def test_all_pages_scans_published_unmoduled_pages_only(self):
+        client = Mock(host='https://canvas.example.edu')
+        def request(route):
+            if route.endswith('syllabus_body'):
+                return {'syllabus_body': ''}, ''
+            if route.endswith('/pages/extra'):
+                return {'body': '<a href="/courses/123/files/50">Extra</a>', 'published': True}, ''
+            raise AssertionError(route)
+        def listing(route, max_pages):
+            if '/modules?' in route or '/assignments?' in route:
+                return []
+            if '/pages?' in route:
+                return [{'url': 'extra', 'title': 'Extra', 'published': True},
+                        {'url': 'draft', 'title': 'Draft', 'published': False},
+                        {'url': 'locked', 'title': 'Locked', 'locked_for_user': True}]
+            raise AssertionError(route)
+        client.request.side_effect = request
+        client.list.side_effect = listing
+        result = linked_files(client, '123', 100, resolve=False, all_pages=True)
+        self.assertEqual(result['files'][0]['id'], 50)
+        self.assertIn('all listed published pages', result['note'])
+        self.assertNotIn('draft', str(client.request.call_args_list))

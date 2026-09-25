@@ -5,22 +5,23 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Area | Current interface | Next implementation / constraint |
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
-| Courses | courses, courses --active, syllabus | Favorites, name lookup |
+| Courses | courses, courses --active, syllabus, sections | Favorites, name lookup |
 | Assignments | assignments, assignment, deadlines | Date overrides and richer submission status |
-| Modules | modules, module-items | Nested course outline with locked-state labels |
+| Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
 | Pages | pages, page | Markdown rendering and incremental snapshots |
-| Files | files, linked-files, download | Folder traversal, selection and batch manifest; no overwrites; course Files list may be disabled while linked files remain accessible |
+| Files | files, folders, folder, folder-files, folder-folders, linked-files (optional all published pages), download, preview-first download-linked | Course Files list may be disabled while linked files remain accessible; discovered links are not a complete inventory |
 | Announcements | announcements | Incremental updates; creation would be a write |
-| Discussions | discussions, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
+| Discussions | discussions, topic, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
 | Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
-| Calendar and planner | advanced get with documented API path | First-class commands; mutations separately guarded |
-| Grades and submissions | submission (own assignment + feedback), advanced get where authorized | Aggregate student views and upload/submit workflow with destination review |
+| Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
+| Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), advanced get where authorized | Aggregate student views and upload/submit workflow with destination review |
 | Rubrics and feedback | advanced get where authorized | Summaries and submission comments |
 | Inbox | advanced get where authorized | Conversation commands; send/reply with previews |
 | Groups, sections, enrollments | advanced get where authorized | First-class discovery, no administrative privileges assumed |
 | Quizzes / New Quizzes | Not a first-class workflow | Different APIs and permissions; no automated exam-taking |
 | Uploads | Not implemented | Multi-step upload handshake; separate credential-free storage transport |
-| Course exports | Not implemented | Asynchronous jobs and polling; role-dependent |
+| Local course snapshots | snapshot (private JSON, no Git checkout, explicit incomplete state), offline snapshot-diff | Incremental Markdown projection |
+| Canvas course exports | Not implemented | Separate asynchronous jobs and polling; role-dependent |
 | Account administration / SIS | Not implemented | Separate high-risk/admin surface, not student defaults |
 | Video, Zoom, publisher tools | Links only | Separate providers/auth; not covered by Canvas credentials |
 
@@ -38,4 +39,4 @@ The generic `get` command is an expert escape hatch for documented read endpoint
 4. Opt-in live read-only smoke tests after user authentication.
 5. Write integration tests only against an explicitly designated sandbox course.
 
-Current live-test gap: write actions have not been exercised against a real account. Personal-token login, selected read commands and one temporary file download have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
+Current live-test gap: write actions have not been exercised against a real account. Personal-token login, calendar, own grades, folders, sections, outline, linked-file discovery, local snapshots, selected other read commands and one temporary file download have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. In a live course, the token received 404 for the pages list; module-page fallback recovered 27 readable pages and correctly left the snapshot marked incomplete. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.

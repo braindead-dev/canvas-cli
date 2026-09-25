@@ -64,6 +64,30 @@ class E2E(unittest.TestCase):
                     data = {'assignment_id': 88, 'workflow_state': 'submitted',
                             'submitted_at': '2026-09-01T12:00:00Z', 'grade': 'A',
                             'submission_comments': [{'comment': 'Synthetic feedback'}]}
+                elif self.path == '/api/v1/users/self/profile':
+                    data = {'id': 7, 'name': 'Synthetic Student'}
+                elif self.path == '/api/v1/courses/101/enrollments?user_id=7&per_page=100':
+                    data = [{'id': 30, 'user_id': 7, 'course_id': 101,
+                             'grades': {'current_score': 95}}]
+                elif self.path == '/api/v1/courses/101/folders?per_page=100':
+                    data = [{'id': 3, 'name': 'Synthetic folder'}]
+                elif self.path == '/api/v1/folders/3/files?per_page=100':
+                    data = [{'id': 4, 'display_name': 'Synthetic file.pdf'}]
+                elif self.path == '/api/v1/courses/101/sections?per_page=100':
+                    data = [{'id': 5, 'name': 'Synthetic section'}]
+                elif self.path == '/api/v1/courses/101/modules?per_page=100':
+                    data = [{'id': 6, 'name': 'Week 1'}]
+                elif self.path == '/api/v1/courses/101/modules/6/items?per_page=100':
+                    data = [{'id': 9, 'title': 'Welcome', 'type': 'Page'}]
+                elif self.path == '/api/v1/courses/101/pages?per_page=100':
+                    data = [{'url': 'welcome', 'title': 'Welcome', 'published': True}]
+                elif self.path == '/api/v1/courses/101/pages/welcome':
+                    data = {'url': 'welcome', 'title': 'Welcome', 'published': True,
+                            'body': '<p>Synthetic page</p>'}
+                elif self.path == '/api/v1/courses/101/discussion_topics?per_page=100&only_announcements=true':
+                    data = [{'id': 22, 'title': 'Synthetic announcement'}]
+                elif self.path.startswith('/api/v1/calendar_events?'):
+                    data = [{'id': 10, 'title': 'Synthetic event'}]
                 else: data = {'id': 101, 'name': 'Synthetic resource'}
                 self.end_headers(); self.wfile.write(json.dumps(data).encode())
             def do_POST(self):
@@ -163,3 +187,39 @@ class E2E(unittest.TestCase):
     def test_capabilities_without_credentials(self):
         r = self.invoke('capabilities')
         self.assertIn('get', json.loads(r.stdout)['read'])
+
+    def test_new_read_commands_over_tls(self):
+        before = len(self.calls)
+        commands = [
+            (['grades', '101'], lambda d: d[0]['grades']['current_score'] == 95),
+            (['folders', '101'], lambda d: d[0]['id'] == 3),
+            (['folder-files', '3'], lambda d: d[0]['id'] == 4),
+            (['sections', '101'], lambda d: d[0]['id'] == 5),
+            (['outline', '101'], lambda d: d[0]['items'][0]['title'] == 'Welcome'),
+            (['calendar', '--start', '2026-09-25', '--end', '2026-09-30', '--course', '101'],
+             lambda d: d[0]['id'] == 10),
+        ]
+        for command, check in commands:
+            with self.subTest(command=command):
+                result = self.invoke(*command)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(check(json.loads(result.stdout)))
+        outline = self.invoke('--format', 'brief', 'outline', '101')
+        self.assertIn('Week 1\n  9  Welcome', outline.stdout)
+        grades = self.invoke('--format', 'brief', 'grades', '101')
+        self.assertIn('Course 101: 95', grades.stdout)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_snapshot_over_tls_is_private_and_read_only(self):
+        destination = Path(self.tmp.name) / 'course-snapshot.json'
+        before = len(self.calls)
+        result = self.invoke('snapshot', '101', '--output', str(destination))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads(result.stdout)['complete'])
+        snapshot = json.loads(destination.read_text())
+        self.assertEqual(snapshot['pages'][0]['body'], '<p>Synthetic page</p>')
+        self.assertEqual(snapshot['announcements'][0]['id'], 22)
+        self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        repeated = self.invoke('snapshot', '101', '--output', str(destination))
+        self.assertEqual(repeated.returncode, 1)

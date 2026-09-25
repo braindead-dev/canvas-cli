@@ -1,3 +1,5 @@
+from contextlib import redirect_stderr
+from io import StringIO
 import os
 import tempfile
 import unittest
@@ -5,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 from canvas_pocket.cli import parser, run
+from canvas_pocket.client import CanvasError
 
 
 class CLITests(unittest.TestCase):
@@ -48,6 +51,48 @@ class CLITests(unittest.TestCase):
         self.assertEqual(result['deadlines']['assignments'][0]['assignment_id'], 88)
         self.assertEqual(client.return_value.list.call_args_list[0].args[0],
                          '/api/v1/courses?enrollment_state=active&per_page=100')
+
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
+    def test_calendar_contexts_and_dates_are_explicit(self, client):
+        client.return_value.list.side_effect = [
+            [{'id': 8}, {'id': 9}], [{'id': 44, 'title': 'Synthetic event'}]]
+        client.return_value.request.return_value = ({'id': 7}, '')
+        result = run(parser().parse_args(['calendar', '--start', '2026-09-25', '--end', '2026-09-30',
+                                          '--active', '--course', '8', '--personal']))
+        self.assertEqual(result[0]['id'], 44)
+        self.assertEqual(client.return_value.list.call_args_list[-1].args[0],
+                         '/api/v1/calendar_events?type=event&start_date=2026-09-25&end_date=2026-09-30&per_page=100&context_codes%5B%5D=course_8&context_codes%5B%5D=course_9&context_codes%5B%5D=user_7')
+        with self.assertRaises(CanvasError):
+            run(parser().parse_args(['calendar', '--start', '2026-09-30', '--end', '2026-09-25']))
+        with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+            parser().parse_args(['calendar', '--start', '20260925'])
+
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
+    def test_grades_only_returns_own_course_enrollment(self, client):
+        client.return_value.request.return_value = ({'id': 7}, '')
+        client.return_value.list.return_value = [{'user_id': 7, 'course_id': 8, 'grades': {'current_score': 90}}]
+        result = run(parser().parse_args(['grades', '8']))
+        self.assertEqual(result[0]['grades']['current_score'], 90)
+        client.return_value.list.assert_called_once_with('/api/v1/courses/8/enrollments?user_id=7&per_page=100', 100)
+        client.return_value.list.return_value = [{'user_id': 99, 'course_id': 8}]
+        with self.assertRaises(CanvasError):
+            run(parser().parse_args(['grades', '8']))
+
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
+    def test_folder_and_outline_routes_are_read_only(self, client):
+        client.return_value.list.side_effect = [
+            [{'id': 4, 'name': 'Week 1'}], [{'id': 5, 'title': 'Page'}], [{'id': 2, 'name': 'Docs'}]]
+        result = run(parser().parse_args(['outline', '8']))
+        self.assertEqual(result[0]['items'][0]['title'], 'Page')
+        self.assertEqual(client.return_value.list.call_args_list[1].args[0],
+                         '/api/v1/courses/8/modules/4/items?per_page=100')
+        run(parser().parse_args(['folder-files', '2']))
+        self.assertEqual(client.return_value.list.call_args_list[2].args[0],
+                         '/api/v1/folders/2/files?per_page=100')
+        client.return_value.request.assert_not_called()
 
 
 if __name__ == '__main__': unittest.main()

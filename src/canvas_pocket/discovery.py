@@ -25,13 +25,17 @@ def referenced_ids(markup, host, course_id):
         url = urlsplit(urljoin(host, raw))
         if f'{url.scheme}://{url.netloc}' != host:
             continue
-        match = re.fullmatch(rf'/courses/{course_id}/files/(\d+)(?:/(?:download|preview))?', url.path)
-        if match:
-            found.add(int(match.group(1)))
+        for pattern in (rf'/courses/{course_id}/files/(\d+)(?:/(?:download|preview))?',
+                        rf'/api/v1/courses/{course_id}/files/(\d+)',
+                        r'/api/v1/files/(\d+)'):
+            match = re.fullmatch(pattern, url.path)
+            if match:
+                found.add(int(match.group(1)))
+                break
     return found
 
 
-def linked_files(client, course_id, max_pages, resolve=True):
+def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
     base = f'/api/v1/courses/{course_id}'
     references = {}
     skipped = []
@@ -65,6 +69,16 @@ def linked_files(client, course_id, max_pages, resolve=True):
                 add([item['content_id']], source)
             if item.get('type') == 'Page' and item.get('page_url'):
                 page_slugs.add((item['page_url'], item.get('title') or item['page_url']))
+    if all_pages:
+        try:
+            pages = client.list(base + '/pages?per_page=100', max_pages)
+            for page in pages:
+                if page.get('published') is not False and not page.get('locked_for_user'):
+                    slug = page.get('url')
+                    if slug:
+                        page_slugs.add((slug, page.get('title') or slug))
+        except CanvasError:
+            skipped.append('all pages')
     try:
         assignments = client.list(base + '/assignments?per_page=100', max_pages)
     except CanvasError:
@@ -76,7 +90,8 @@ def linked_files(client, course_id, max_pages, resolve=True):
     for slug, title in sorted(page_slugs):
         try:
             page, _ = client.request(base + '/pages/' + quote(slug, safe=''))
-            add(referenced_ids(page.get('body'), client.host, course_id), f'page: {title}')
+            if page.get('published') is not False and not page.get('locked_for_user'):
+                add(referenced_ids(page.get('body'), client.host, course_id), f'page: {title}')
         except CanvasError:
             skipped.append(f'page: {title}')
 
@@ -98,4 +113,6 @@ def linked_files(client, course_id, max_pages, resolve=True):
             item['metadata_unavailable'] = True
         files.append(item)
     return {'files': files, 'skipped_sources': skipped,
-            'note': 'References from readable syllabus, modules, module pages, and assignments only. This is not a complete course file listing.'}
+            'note': 'References from readable syllabus, modules, assignments, and ' +
+                    ('all listed published pages' if all_pages else 'module pages') +
+                    ' only. This is not a complete course file listing.'}

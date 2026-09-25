@@ -3,10 +3,11 @@ import getpass
 import html
 import json
 import os
+import re
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from .client import CanvasError, Client, origin
 
@@ -42,6 +43,16 @@ def identifier(value):
     return value
 
 
+def calendar_date(value):
+    try:
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+            raise ValueError
+        date.fromisoformat(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError('Expected a date in YYYY-MM-DD format') from None
+    return value
+
+
 def parser():
     p = argparse.ArgumentParser(description='Canvas API CLI. JSON output may contain private academic data.')
     p.add_argument('--max-pages', type=int, default=100)
@@ -57,6 +68,13 @@ def parser():
     sub.add_parser('me')
     sub.add_parser('todo', help='Your Canvas to-do items')
     sub.add_parser('upcoming', help='Upcoming assignments and events')
+    calendar = sub.add_parser('calendar', help='Events or assignments in a date window')
+    calendar.add_argument('--start', type=calendar_date, help='First date (YYYY-MM-DD); default today')
+    calendar.add_argument('--end', type=calendar_date, help='Last date (YYYY-MM-DD); default 13 days after start')
+    calendar.add_argument('--type', choices=('event', 'assignment', 'sub_assignment'), default='event')
+    calendar.add_argument('--course', type=identifier, action='append', default=[], help='Include a course calendar; repeatable')
+    calendar.add_argument('--active', action='store_true', help='Include all active course calendars')
+    calendar.add_argument('--personal', action='store_true', help='Include your personal calendar with selected courses')
     sub.add_parser('overview', help='Active courses, upcoming work, and to-do items')
     due = sub.add_parser('deadlines', help='Assignment deadlines across active courses')
     due.add_argument('--days', type=int, default=14, help='Look ahead this many days; default 14')
@@ -64,12 +82,26 @@ def parser():
     linked = sub.add_parser('linked-files', help='Find file links in accessible course content')
     linked.add_argument('course', type=identifier)
     linked.add_argument('--quick', action='store_true', help='Skip per-file metadata checks for a faster link index')
+    linked.add_argument('--all-pages', action='store_true', help='Also scan listed published pages outside modules')
     sub.add_parser('capabilities', help='Discover commands without logging in')
+    snap = sub.add_parser('snapshot', help='Save a private, read-only course snapshot outside Git')
+    snap.add_argument('course', type=identifier)
+    snap.add_argument('--output', required=True, type=Path)
+    difference = sub.add_parser('snapshot-diff', help='Compare two local snapshots without Canvas login')
+    difference.add_argument('older', type=Path)
+    difference.add_argument('newer', type=Path)
     s = sub.add_parser('download', help='Download one accessible course file without overwriting')
     s.add_argument('course', type=identifier)
     s.add_argument('file', type=identifier)
     s.add_argument('--output', required=True, type=Path)
     s.add_argument('--max-bytes', type=int, default=100 * 1024 * 1024)
+    batch = sub.add_parser('download-linked', help='Preview or download files linked in readable course content')
+    batch.add_argument('course', type=identifier)
+    batch.add_argument('--directory', required=True, type=Path)
+    batch.add_argument('--all-pages', action='store_true')
+    batch.add_argument('--max-files', type=int, default=20)
+    batch.add_argument('--max-bytes', type=int, default=250 * 1024 * 1024)
+    batch.add_argument('--yes', action='store_true', help='Download after reviewing a preview')
     for name in ('assignment', 'page', 'module-items'):
         s = sub.add_parser(name, help='Read one resource or list module items')
         s.add_argument('course', type=identifier)
@@ -77,6 +109,15 @@ def parser():
     submission = sub.add_parser('submission', help='Read your own assignment submission and feedback')
     submission.add_argument('course', type=identifier)
     submission.add_argument('assignment', type=identifier)
+    grades = sub.add_parser('grades', help='Read only your own course enrollment and visible grade')
+    grades.add_argument('course', type=identifier)
+    for name in ('folders', 'sections', 'outline'):
+        sub.add_parser(name).add_argument('course', type=identifier)
+    for name in ('folder', 'folder-files', 'folder-folders'):
+        sub.add_parser(name).add_argument('folder', type=identifier)
+    topic = sub.add_parser('topic', help='Read one discussion topic')
+    topic.add_argument('course', type=identifier)
+    topic.add_argument('topic', type=identifier)
     s = sub.add_parser('get', help='Advanced read-only Canvas API request')
     s.add_argument('path', help='An /api/v1/ path, including optional query parameters')
     s.add_argument('--paginate', action='store_true')
@@ -99,7 +140,10 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'todo', 'upcoming', 'overview', 'deadlines', 'linked-files', 'assignments', 'assignment', 'submission', 'syllabus', 'modules', 'module-items', 'pages', 'page', 'files', 'announcements', 'discussions', 'entries', 'replies', 'get'], 'write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'linked-files', 'assignments', 'assignment', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'folder-folders', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
+    if args.command == 'snapshot-diff':
+        from .snapshot_diff import compare, read
+        return compare(read(args.older), read(args.newer))
     if args.command == 'auth' and args.action == 'login':
         host = origin(args.origin)
         if not sys.stdin.isatty():
@@ -129,7 +173,16 @@ def run(args):
     client = Client(host, token)
     if args.command == 'linked-files':
         from .discovery import linked_files
-        return linked_files(client, args.course, args.max_pages, resolve=not args.quick)
+        return linked_files(client, args.course, args.max_pages, resolve=not args.quick,
+                            all_pages=args.all_pages)
+    if args.command == 'download-linked':
+        from .batch import batch_download
+        return batch_download(client, args.course, args.directory, args.max_pages,
+                              args.max_files, args.max_bytes, args.all_pages, args.yes)
+    if args.command == 'snapshot':
+        from .snapshot import capture, save_private, validate_destination
+        output = validate_destination(args.output)
+        return save_private(output, capture(client, args.course, args.max_pages))
     if args.command == 'deadlines':
         from .planning import deadlines
         if args.days < 1:
@@ -139,6 +192,24 @@ def run(args):
         if not args.path.startswith('/api/v1/'):
             raise CanvasError('get requires an /api/v1/ path')
         return client.list(args.path, args.max_pages) if args.paginate else client.request(args.path)[0]
+    if args.command == 'calendar':
+        start = args.start or date.today().isoformat()
+        end = args.end or (date.fromisoformat(start) + timedelta(days=13)).isoformat()
+        if end < start:
+            raise CanvasError('--end must not precede --start')
+        contexts = [f'course_{number}' for number in args.course]
+        if args.active:
+            courses = client.list('/api/v1/courses?enrollment_state=active&per_page=100', args.max_pages)
+            contexts += [f"course_{course['id']}" for course in courses if course.get('id')]
+        if args.personal:
+            profile = client.request('/api/v1/users/self/profile')[0]
+            contexts.append(f"user_{profile['id']}")
+        contexts = list(dict.fromkeys(contexts))
+        if len(contexts) > 10:
+            raise CanvasError('Canvas calendar supports at most 10 contexts; select courses explicitly')
+        query = [('type', args.type), ('start_date', start), ('end_date', end), ('per_page', '100')]
+        query += [('context_codes[]', context) for context in contexts]
+        return client.list('/api/v1/calendar_events?' + urlencode(query), args.max_pages)
     if args.command == 'todo':
         return client.list('/api/v1/users/self/todo?per_page=100', args.max_pages)
     if args.command == 'upcoming':
@@ -163,7 +234,32 @@ def run(args):
         if args.active:
             route += '&enrollment_state=active'
         return client.list(route, args.max_pages)
+    if args.command in ('folder', 'folder-files', 'folder-folders'):
+        route = f'/api/v1/folders/{args.folder}'
+        return (client.request(route)[0] if args.command == 'folder' else
+                client.list(route + ('/files' if args.command == 'folder-files' else '/folders') + '?per_page=100', args.max_pages))
     base = f'/api/v1/courses/{args.course}'
+    if args.command == 'grades':
+        profile = client.request('/api/v1/users/self/profile')[0]
+        user_id = profile['id']
+        enrollments = client.list(base + f'/enrollments?user_id={user_id}&per_page=100', args.max_pages)
+        if any(enrollment.get('user_id') != user_id or str(enrollment.get('course_id')) != args.course
+               for enrollment in enrollments):
+            raise CanvasError('Canvas returned enrollment data outside the requested user/course; refusing output')
+        return enrollments
+    if args.command == 'folders':
+        return client.list(base + '/folders?per_page=100', args.max_pages)
+    if args.command == 'sections':
+        return client.list(base + '/sections?per_page=100', args.max_pages)
+    if args.command == 'outline':
+        modules = client.list(base + '/modules?per_page=100', args.max_pages)
+        return [{'id': module.get('id'), 'name': module.get('name'),
+                 'position': module.get('position'), 'state': module.get('state'),
+                 'unlock_at': module.get('unlock_at'), 'completed_at': module.get('completed_at'),
+                 'items': client.list(base + f"/modules/{module['id']}/items?per_page=100", args.max_pages)}
+                for module in modules]
+    if args.command == 'topic':
+        return client.request(base + f'/discussion_topics/{args.topic}')[0]
     if args.command == 'submission':
         return client.request(base + f'/assignments/{args.assignment}/submissions/self?include[]=submission_comments&include[]=rubric_assessment')[0]
     if args.command == 'download':
@@ -211,6 +307,20 @@ def brief(data):
     if isinstance(data, list):
         if not data:
             return 'No items.'
+        if all(isinstance(item, dict) and 'items' in item and 'name' in item for item in data):
+            return '\n\n'.join(
+                f"{module['name']}" +
+                ''.join(f"\n  {item.get('id', '')}  {item.get('title', 'item')}"
+                        for item in module['items'])
+                for module in data)
+        if all(isinstance(item, dict) and 'course_id' in item and 'grades' in item for item in data):
+            return '\n'.join(
+                f"Course {item['course_id']}: " +
+                (f"{item['grades'].get('current_grade') or item['grades'].get('current_score')}"
+                 if item.get('grades') and (item['grades'].get('current_grade') is not None or
+                                            item['grades'].get('current_score') is not None)
+                 else 'grade not visible')
+                for item in data)
         lines = []
         for item in data:
             if not isinstance(item, dict):

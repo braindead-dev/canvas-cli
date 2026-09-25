@@ -32,14 +32,24 @@ canvas-pocket deadlines --days 30
 canvas-pocket linked-files 123
 canvas-pocket linked-files 123 --quick
 canvas-pocket upcoming
+canvas-pocket calendar --start 2026-09-25 --end 2026-10-09 --active --personal
+canvas-pocket calendar --type assignment --course 123
 canvas-pocket assignments 123
 canvas-pocket submission 123 456
+canvas-pocket grades 123
 canvas-pocket syllabus 123
 canvas-pocket modules 123
+canvas-pocket outline 123
 canvas-pocket pages 123
 canvas-pocket files 123
+canvas-pocket folders 123
+canvas-pocket folder 456
+canvas-pocket folder-files 456
+canvas-pocket folder-folders 456
+canvas-pocket sections 123
 canvas-pocket announcements 123
 canvas-pocket discussions 123
+canvas-pocket topic 123 456
 canvas-pocket entries 123 456
 canvas-pocket replies 123 456 789
 canvas-pocket assignment 123 456
@@ -50,9 +60,23 @@ canvas-pocket download 123 456 --output ./syllabus.pdf
 canvas-pocket capabilities
 canvas-pocket get '/api/v1/courses/123/tabs' --paginate
 canvas-pocket --max-pages 200 assignments 123
+canvas-pocket linked-files 123 --all-pages --quick
+canvas-pocket download-linked 123 --directory /private/path/course-files
+# Review the preview, then repeat with --yes and suitable limits.
+canvas-pocket download-linked 123 --directory /private/path/course-files --max-files 100 --yes
+canvas-pocket snapshot 123 --output /private/path/course-123.json
+canvas-pocket snapshot-diff /private/path/older.json /private/path/newer.json
 ```
 
-List commands follow Canvas Link pagination, including empty pages. A page limit fails explicitly, never silently truncates. JSON is the complete output; `--format brief` gives a compact human index. `overview` adds deadlines derived from active course assignments because Canvas's upcoming feed may be empty. `deadlines` lists due dates over a chosen window and reports courses whose assignments could not be read. `submission` reads only your own status, grade, comments and rubric feedback; it issues no submission or read-status mutation. Use `page` for a page body and `module-items` for paginated module contents. `linked-files` discovers links in readable syllabus, modules, pages, and assignments, useful when a course's Files tab is hidden; it is not a complete inventory and reports when a linked file is hidden or locked for the user. `linked-files --quick` skips per-file metadata requests, so availability is unknown, but is substantially faster for courses with many files. The default remains sequential to avoid Canvas's [parallel-request throttling penalty](https://developerdocs.instructure.com/services/canvas/basics/file.throttling). Downloads use an explicit output path, refuse overwrites, remove failed partial files, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
+List commands follow Canvas Link pagination, including empty pages. A page limit fails explicitly, never silently truncates. JSON is the complete output; `--format brief` gives a compact human index. `overview` adds deadlines derived from active course assignments because Canvas's upcoming feed may be empty. `deadlines` lists due dates over a chosen window and reports courses whose assignments could not be read. `calendar` defaults to your personal calendar; use `--active` or repeated `--course` for course calendars, and `--personal` to include your own calendar alongside them. The [Canvas calendar API](https://developerdocs.instructure.com/services/canvas/resources/calendar_events) allows at most ten contexts, so the CLI fails instead of silently dropping extras. `grades` requests the signed-in user's numeric ID and rejects any enrollment returned for another user or course. It reports only grades Canvas makes visible. `submission` reads only your own status, grade, comments and rubric feedback; it issues no submission or read-status mutation. `outline` fetches each module's items separately because Canvas may omit them from the module listing. Use `page` for a page body and `module-items` for paginated module contents. `folders` lists a course's flat folder inventory; `folder-files` and `folder-folders` browse one folder. These may be unavailable when the course Files tab is disabled.
+
+`linked-files` discovers links in readable syllabus, modules, module pages, and assignments, useful when a course's Files tab is hidden; it is not a complete inventory and reports when a linked file is hidden or locked for the user. `--all-pages` adds accessible published pages outside modules. `--quick` skips per-file metadata requests, so availability is unknown, but is substantially faster for courses with many files. Requests remain sequential to avoid Canvas's [parallel-request throttling penalty](https://developerdocs.instructure.com/services/canvas/basics/file.throttling). Downloads use an explicit output path, refuse overwrites, remove failed partial files, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
+
+`snapshot` reads the syllabus-bearing course record, assignments, module items, accessible published pages, and announcements into one local JSON file. It makes no quiz attempts or writes to Canvas. If an endpoint is unavailable, the snapshot says `complete: false` and records the missing resource. When the pages list is unavailable, it tries readable page links from modules but still marks the snapshot incomplete. The file is mode `0600`, cannot overwrite an existing file, and cannot be placed inside a Git checkout, including through a symlinked parent. It may contain copyrighted course materials, private academic information or expiring links; keep it local and do not post it to a public repo.
+
+`snapshot-diff` works offline and reports added/removed resources and which fields changed, without printing full assignment descriptions or page bodies. It skips categories that were incomplete in either snapshot, avoiding false “removed” claims. It does not need a Canvas credential.
+
+`download-linked` previews a batch of downloadable files referenced by readable content, then writes only with `--yes`. It requires an existing destination outside Git, refuses filename collisions, limits file count and total bytes, and sanitizes server filenames. Hidden or locked files are skipped. Successful earlier files remain if a later download fails, and the error reports that partial batch progress. It never sends the Canvas API token to storage URLs. It does not promise a complete course file inventory or access beyond your account's permissions.
 
 See [the capability map](CAPABILITIES.md) for implemented features, permission boundaries and the broader roadmap. The expert `get` command extends read coverage without exposing arbitrary write methods.
 
@@ -91,6 +115,6 @@ python3 -m venv .venv
 
 Architecture: `client.py` owns transport and pagination; `cli.py` owns command routing, credential setup and write previews; `planning.py` and `discovery.py` derive useful indexes from readable course data. No school-specific logic. Automated tests use synthetic API fixtures and local HTTPS; selected read routes, personal-token login, and read commands have also been tested against a live account. No private fixtures or output are committed. Contributions should include synthetic fixtures only.
 
-Roadmap: richer resource selection, incremental Markdown export, concise human views, institution-approved OAuth, and broader integration tests. No npm/PyPI release yet; install from this repository for development testing.
+Roadmap: richer resource selection and snapshot comparison, incremental Markdown export, institution-approved OAuth, and broader integration tests. No npm/PyPI release yet; install from this repository for development testing.
 
 Sources: [Canvas API](https://developerdocs.instructure.com/services/canvas), [pagination](https://developerdocs.instructure.com/services/canvas/basics/file.pagination), [OAuth](https://developerdocs.instructure.com/services/canvas/oauth2/file.oauth), [discussions](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics).
