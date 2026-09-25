@@ -6,13 +6,13 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
 | Courses | courses, courses --active, syllabus | Favorites, name lookup |
-| Assignments | assignments, assignment | Due-date dashboard and individual date overrides |
+| Assignments | assignments, assignment, deadlines | Date overrides and richer submission status |
 | Modules | modules, module-items | Nested course outline with locked-state labels |
 | Pages | pages, page | Markdown rendering and incremental snapshots |
-| Files | files, download | Folder traversal, selection and batch manifest; no overwrites |
+| Files | files, linked-files, download | Folder traversal, selection and batch manifest; no overwrites; course Files list may be disabled while linked files remain accessible |
 | Announcements | announcements | Incremental updates; creation would be a write |
 | Discussions | discussions, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
-| Personal tasks | todo, upcoming, overview | Planner/calendar date filters and reminders |
+| Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
 | Calendar and planner | advanced get with documented API path | First-class commands; mutations separately guarded |
 | Grades and submissions | advanced get where authorized | Student-only views and upload/submit workflow with destination review |
 | Rubrics and feedback | advanced get where authorized | Summaries and submission comments |

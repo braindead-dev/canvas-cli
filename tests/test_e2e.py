@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -35,6 +36,8 @@ class E2E(unittest.TestCase):
                     self.send_response(302)
                     self.send_header('Location', '/api/v1/users/self/profile')
                     self.end_headers(); return
+                if self.path == '/api/v1/courses/101/files?per_page=100':
+                    self.send_response(403); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 if self.path == '/api/v1/courses?per_page=100':
@@ -47,6 +50,15 @@ class E2E(unittest.TestCase):
                     data = [{'id': 55, 'title': 'Synthetic upcoming event'}]
                 elif self.path == '/api/v1/users/self/todo?per_page=100':
                     data = [{'id': 77}]
+                elif self.path == '/api/v1/courses/101/assignments?per_page=100':
+                    data = [{'id': 88, 'name': 'Synthetic paper',
+                             'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()}]
+                elif self.path == '/api/v1/courses/101?include[]=syllabus_body':
+                    data = {'syllabus_body': '<a href="/courses/101/files/7">Syllabus</a>'}
+                elif self.path == '/api/v1/courses/101/modules?include[]=items&per_page=100':
+                    data = []
+                elif self.path == '/api/v1/courses/101/files/7':
+                    data = {'display_name': 'synthetic-syllabus.pdf', 'size': 123}
                 else: data = {'id': 101, 'name': 'Synthetic resource'}
                 self.end_headers(); self.wfile.write(json.dumps(data).encode())
             def do_POST(self):
@@ -89,12 +101,25 @@ class E2E(unittest.TestCase):
         self.assertEqual(data['courses'][0]['id'], 101)
         self.assertEqual(data['upcoming'][0]['id'], 55)
         self.assertEqual(data['todo'][0]['id'], 77)
+        self.assertEqual(data['deadlines']['assignments'][0]['assignment_id'], 88)
 
     def test_brief_overview_is_readable(self):
         r = self.invoke('--format', 'brief', 'overview')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn('Active courses\n101  TEST 101 — Synthetic course', r.stdout)
         self.assertIn('Upcoming\n55  Synthetic upcoming event', r.stdout)
+        self.assertIn('Deadlines (next 14 days)\n88  Synthetic course: Synthetic paper', r.stdout)
+
+    def test_deadlines_brief_and_linked_files_without_files_list(self):
+        due = self.invoke('--format', 'brief', 'deadlines')
+        self.assertEqual(due.returncode, 0, due.stderr)
+        self.assertIn('88  Synthetic course: Synthetic paper', due.stdout)
+        self.assertNotIn('unavailable', due.stdout)
+        listing = self.invoke('files', '101')
+        self.assertEqual(listing.returncode, 1)
+        linked = self.invoke('linked-files', '101')
+        self.assertEqual(linked.returncode, 0, linked.stderr)
+        self.assertEqual(json.loads(linked.stdout)['files'][0]['display_name'], 'synthetic-syllabus.pdf')
 
     def test_redirect_refused(self):
         before = len(self.calls)

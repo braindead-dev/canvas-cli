@@ -58,6 +58,11 @@ def parser():
     sub.add_parser('todo', help='Your Canvas to-do items')
     sub.add_parser('upcoming', help='Upcoming assignments and events')
     sub.add_parser('overview', help='Active courses, upcoming work, and to-do items')
+    due = sub.add_parser('deadlines', help='Assignment deadlines across active courses')
+    due.add_argument('--days', type=int, default=14, help='Look ahead this many days; default 14')
+    due.add_argument('--course', type=identifier, help='Limit to one course')
+    linked = sub.add_parser('linked-files', help='Find file links in accessible course content')
+    linked.add_argument('course', type=identifier)
     sub.add_parser('capabilities', help='Discover commands without logging in')
     s = sub.add_parser('download', help='Download one accessible course file without overwriting')
     s.add_argument('course', type=identifier)
@@ -90,7 +95,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'todo', 'upcoming', 'overview', 'assignments', 'assignment', 'syllabus', 'modules', 'module-items', 'pages', 'page', 'files', 'announcements', 'discussions', 'entries', 'replies', 'get'], 'write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'todo', 'upcoming', 'overview', 'deadlines', 'linked-files', 'assignments', 'assignment', 'syllabus', 'modules', 'module-items', 'pages', 'page', 'files', 'announcements', 'discussions', 'entries', 'replies', 'get'], 'write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or submissions', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'auth' and args.action == 'login':
         host = origin(args.origin)
         if not sys.stdin.isatty():
@@ -118,6 +123,14 @@ def run(args):
     if not token:
         raise CanvasError('No credential found. Run auth login again.')
     client = Client(host, token)
+    if args.command == 'linked-files':
+        from .discovery import linked_files
+        return linked_files(client, args.course, args.max_pages)
+    if args.command == 'deadlines':
+        from .planning import deadlines
+        if args.days < 1:
+            raise CanvasError('--days must be positive')
+        return deadlines(client, args.max_pages, args.days, args.course)
     if args.command == 'get':
         if not args.path.startswith('/api/v1/'):
             raise CanvasError('get requires an /api/v1/ path')
@@ -127,6 +140,7 @@ def run(args):
     if args.command == 'upcoming':
         return client.list('/api/v1/users/self/upcoming_events?per_page=100', args.max_pages)
     if args.command == 'overview':
+        from .planning import deadlines
         courses = client.list('/api/v1/courses?enrollment_state=active&per_page=100', args.max_pages)
         upcoming = client.list('/api/v1/users/self/upcoming_events?per_page=100', args.max_pages)
         todo = client.list('/api/v1/users/self/todo?per_page=100', args.max_pages)
@@ -135,6 +149,7 @@ def run(args):
             'courses': [{'id': c.get('id'), 'name': c.get('name'), 'course_code': c.get('course_code'),
                          'workflow_state': c.get('workflow_state')} for c in courses],
             'upcoming': upcoming, 'todo': todo,
+            'deadlines': deadlines(client, args.max_pages, 14, courses=courses),
         }
     if args.command in ('auth', 'me'):
         data, _ = client.request('/api/v1/users/self/profile')
@@ -195,17 +210,32 @@ def brief(data):
             if not isinstance(item, dict):
                 lines.append(str(item))
                 continue
-            number = item.get('id', '')
+            number = item.get('id') or item.get('assignment_id') or ''
             label = (item.get('course_code') or item.get('name') or item.get('title')
                      or item.get('display_name') or item.get('filename') or item.get('type') or 'item')
             if item.get('course_code') and item.get('name') and item['name'] != item['course_code']:
                 label += f" — {item['name']}"
+            elif item.get('course_name') and item.get('name'):
+                label = f"{item['course_name']}: {item['name']}"
             detail = item.get('due_at') or item.get('start_at') or item.get('workflow_state') or ''
             lines.append('  '.join(str(x) for x in (number, label, detail) if x != ''))
         return '\n'.join(lines)
     if isinstance(data, dict) and all(k in data for k in ('courses', 'upcoming', 'todo')):
-        return '\n\n'.join(f'{title}\n{brief(data[key])}' for title, key in
-                         [('Active courses', 'courses'), ('Upcoming', 'upcoming'), ('To do', 'todo')])
+        lines = [(title, data[key]) for title, key in
+                 [('Active courses', 'courses'), ('Upcoming', 'upcoming'), ('To do', 'todo')]]
+        if 'deadlines' in data:
+            lines.append(('Deadlines (next 14 days)', data['deadlines']))
+        return '\n\n'.join(f'{title}\n{brief(values)}' for title, values in lines)
+    if isinstance(data, dict) and 'assignments' in data and 'unavailable_courses' in data:
+        result = brief(data['assignments'])
+        if data['unavailable_courses']:
+            result += f"\nAssignments unavailable for {len(data['unavailable_courses'])} course(s); see JSON for details."
+        return result
+    if isinstance(data, dict) and 'files' in data and 'skipped_sources' in data:
+        result = brief(data['files'])
+        if data['skipped_sources']:
+            result += f"\nSkipped {len(data['skipped_sources'])} source(s); see JSON for details."
+        return result
     return json.dumps(data, indent=2)
 
 

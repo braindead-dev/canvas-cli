@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 from canvas_pocket.cli import parser, run
@@ -33,15 +34,18 @@ class CLITests(unittest.TestCase):
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
     def test_overview_uses_active_courses_and_preserves_upcoming(self, client):
+        due = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
         client.return_value.list.side_effect = [
             [{'id': 123, 'name': 'Example', 'course_code': 'EX 1', 'workflow_state': 'available', 'private_field': 'omit'}],
             [{'id': 55, 'title': 'Upcoming synthetic assignment'}],
             [{'id': 77}],
+            [{'id': 88, 'name': 'Paper', 'due_at': due}],
         ]
         result = run(parser().parse_args(['overview']))
         self.assertEqual(result['courses'], [{'id': 123, 'name': 'Example', 'course_code': 'EX 1', 'workflow_state': 'available'}])
         self.assertEqual(result['upcoming'][0]['id'], 55)
         self.assertEqual(result['todo'][0]['id'], 77)
+        self.assertEqual(result['deadlines']['assignments'][0]['assignment_id'], 88)
         self.assertEqual(client.return_value.list.call_args_list[0].args[0],
                          '/api/v1/courses?enrollment_state=active&per_page=100')
 
