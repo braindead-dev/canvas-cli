@@ -1,8 +1,12 @@
 # Canvas Pocket
 
-A small Canvas LMS CLI for students and scripts. JSON in your terminal, credentials in your OS keyring, no telemetry. Unofficial and not affiliated with Instructure.
+A small Canvas LMS CLI under development. JSON in your terminal, credentials in your OS keyring, no telemetry. Unofficial and not affiliated with Instructure.
 
-## Install
+## Personal development testing
+
+Canvas permits manually generated personal tokens for testing with your own account. Its [OAuth guide](https://developerdocs.instructure.com/services/canvas/oauth2/file.oauth) says applications used by multiple users must use OAuth. This release is a developer preview for the owner's account. An institution must enable a developer key before the OAuth path can be finished.
+
+### Install
 
 Requires Python 3.10+ and an available OS keyring.
 
@@ -13,7 +17,7 @@ canvas-pocket auth status
 canvas-pocket courses
 ```
 
-Login prompts for a personal access token without echoing it. Create one in Canvas Account → Settings → Approved Integrations, if your institution permits it. Prefer an expiration date and revoke unused tokens. No passwords or browser cookies are collected. macOS Keychain, Windows Credential Locker, Secret Service and KWallet backends are supported; unsupported backends fail closed. Linux may require selecting its secure keyring backend explicitly.
+Login prompts for a token from your own account without echoing it. Create one in Canvas Account → Settings → Approved Integrations, if your institution permits it. Prefer an expiration date and revoke unused tokens. No passwords or browser cookies are collected. macOS Keychain, Windows Credential Locker, Secret Service and KWallet backends are supported; unsupported backends fail closed. Linux may require selecting its secure keyring backend explicitly.
 
 For ephemeral/headless use, supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a secret manager/environment. Do not put tokens in command arguments, shell history, source control, or bug reports.
 
@@ -21,6 +25,10 @@ For ephemeral/headless use, supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a 
 
 ```sh
 canvas-pocket courses
+canvas-pocket courses --active
+canvas-pocket overview
+canvas-pocket --format brief overview
+canvas-pocket upcoming
 canvas-pocket assignments 123
 canvas-pocket syllabus 123
 canvas-pocket modules 123
@@ -40,7 +48,7 @@ canvas-pocket get '/api/v1/courses/123/tabs' --paginate
 canvas-pocket --max-pages 200 assignments 123
 ```
 
-List commands follow Canvas Link pagination, including empty pages. A page limit fails explicitly, never silently truncates. Use `page` for a page body and `module-items` for paginated module contents. Downloads use an explicit output path, refuse overwrites, remove failed partial files, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
+List commands follow Canvas Link pagination, including empty pages. A page limit fails explicitly, never silently truncates. JSON is the complete output; `--format brief` gives a compact human index. Use `page` for a page body and `module-items` for paginated module contents. Downloads use an explicit output path, refuse overwrites, remove failed partial files, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
 
 See [the capability map](CAPABILITIES.md) for implemented features, permission boundaries and the broader roadmap. The expert `get` command extends read coverage without exposing arbitrary write methods.
 
@@ -67,7 +75,7 @@ Input is plain UTF-8 text, safely escaped to HTML. This can publish real coursew
 
 ## OAuth and browser login
 
-A universal one-click Canvas login is not implemented. Canvas OAuth requires an institution-enabled developer key; do not embed a client secret in an open-source desktop client. A future institution-supported OAuth adapter needs state validation, secure token storage, refresh handling and a suitable registered redirect. The v0.1 token flow works without a hosted service where institutional policy permits personal tokens.
+A universal one-click Canvas login is not implemented. Canvas OAuth requires an institution-enabled developer key; do not embed a client secret in an open-source desktop client. A future institution-supported OAuth adapter needs state validation, secure token storage, refresh handling and a suitable registered redirect. The current personal-token flow is for development testing on your own account only.
 
 ## Development
 
@@ -79,6 +87,6 @@ python3 -m venv .venv
 
 Architecture: `client.py` owns transport and pagination; `cli.py` owns command routing, credential setup and write previews. No school-specific logic. Current testing covers mocked API behavior, not a live institution's token flow. Contributions should include synthetic fixtures only.
 
-Roadmap: richer resource selection, incremental Markdown export, due-date views, module-item pagination, optional institutional OAuth, and broader integration tests. No npm/PyPI release yet; install from this repository.
+Roadmap: richer resource selection, incremental Markdown export, concise human views, institution-approved OAuth, and broader integration tests. No npm/PyPI release yet; install from this repository for development testing.
 
 Sources: [Canvas API](https://developerdocs.instructure.com/services/canvas), [pagination](https://developerdocs.instructure.com/services/canvas/basics/file.pagination), [OAuth](https://developerdocs.instructure.com/services/canvas/oauth2/file.oauth), [discussions](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics).

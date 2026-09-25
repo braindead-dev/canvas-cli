@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 import sys
+from datetime import datetime, timezone
 
 from .client import CanvasError, Client, origin
 
@@ -44,14 +45,19 @@ def identifier(value):
 def parser():
     p = argparse.ArgumentParser(description='Canvas API CLI. JSON output may contain private academic data.')
     p.add_argument('--max-pages', type=int, default=100)
+    p.add_argument('--format', choices=('json', 'brief'), default='json', help='Output format; JSON is complete')
     sub = p.add_subparsers(dest='command', required=True)
     a = sub.add_parser('auth').add_subparsers(dest='action', required=True)
-    a.add_parser('login').add_argument('--origin', required=True)
+    login = a.add_parser('login', help='Personal development testing with your own account')
+    login.add_argument('--origin', required=True)
     a.add_parser('status')
     a.add_parser('logout')
-    sub.add_parser('courses')
+    courses = sub.add_parser('courses')
+    courses.add_argument('--active', action='store_true', help='Only current active enrollments')
     sub.add_parser('me')
     sub.add_parser('todo', help='Your Canvas to-do items')
+    sub.add_parser('upcoming', help='Upcoming assignments and events')
+    sub.add_parser('overview', help='Active courses, upcoming work, and to-do items')
     sub.add_parser('capabilities', help='Discover commands without logging in')
     s = sub.add_parser('download', help='Download one accessible course file without overwriting')
     s.add_argument('course', type=identifier)
@@ -84,12 +90,12 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'todo', 'assignments', 'assignment', 'syllabus', 'modules', 'module-items', 'pages', 'page', 'files', 'announcements', 'discussions', 'entries', 'replies', 'get'], 'write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'todo', 'upcoming', 'overview', 'assignments', 'assignment', 'syllabus', 'modules', 'module-items', 'pages', 'page', 'files', 'announcements', 'discussions', 'entries', 'replies', 'get'], 'write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or submissions', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'auth' and args.action == 'login':
         host = origin(args.origin)
         if not sys.stdin.isatty():
             raise CanvasError('Login requires an interactive terminal with hidden token entry.')
-        print(f'Create a personal access token in {host}/profile/settings. Institutional policy may disable tokens.', file=sys.stderr)
+        print(f'Personal development testing with your own account only. Create a token in {host}/profile/settings. Apps for other users require institution-approved OAuth.', file=sys.stderr)
         token = getpass.getpass('Canvas token (hidden): ').strip()
         if not token:
             raise CanvasError('Empty token')
@@ -118,11 +124,26 @@ def run(args):
         return client.list(args.path, args.max_pages) if args.paginate else client.request(args.path)[0]
     if args.command == 'todo':
         return client.list('/api/v1/users/self/todo?per_page=100', args.max_pages)
+    if args.command == 'upcoming':
+        return client.list('/api/v1/users/self/upcoming_events?per_page=100', args.max_pages)
+    if args.command == 'overview':
+        courses = client.list('/api/v1/courses?enrollment_state=active&per_page=100', args.max_pages)
+        upcoming = client.list('/api/v1/users/self/upcoming_events?per_page=100', args.max_pages)
+        todo = client.list('/api/v1/users/self/todo?per_page=100', args.max_pages)
+        return {
+            'generated_at': datetime.now(timezone.utc).isoformat(),
+            'courses': [{'id': c.get('id'), 'name': c.get('name'), 'course_code': c.get('course_code'),
+                         'workflow_state': c.get('workflow_state')} for c in courses],
+            'upcoming': upcoming, 'todo': todo,
+        }
     if args.command in ('auth', 'me'):
         data, _ = client.request('/api/v1/users/self/profile')
         return {'authenticated': True} if args.command == 'auth' else data
     if args.command == 'courses':
-        return client.list('/api/v1/courses?per_page=100', args.max_pages)
+        route = '/api/v1/courses?per_page=100'
+        if args.active:
+            route += '&enrollment_state=active'
+        return client.list(route, args.max_pages)
     base = f'/api/v1/courses/{args.course}'
     if args.command == 'download':
         from .download import download
@@ -164,9 +185,35 @@ def run(args):
     return client.list(route, args.max_pages)
 
 
+def brief(data):
+    """Small human index. JSON remains the complete representation."""
+    if isinstance(data, list):
+        if not data:
+            return 'No items.'
+        lines = []
+        for item in data:
+            if not isinstance(item, dict):
+                lines.append(str(item))
+                continue
+            number = item.get('id', '')
+            label = (item.get('course_code') or item.get('name') or item.get('title')
+                     or item.get('display_name') or item.get('filename') or item.get('type') or 'item')
+            if item.get('course_code') and item.get('name') and item['name'] != item['course_code']:
+                label += f" — {item['name']}"
+            detail = item.get('due_at') or item.get('start_at') or item.get('workflow_state') or ''
+            lines.append('  '.join(str(x) for x in (number, label, detail) if x != ''))
+        return '\n'.join(lines)
+    if isinstance(data, dict) and all(k in data for k in ('courses', 'upcoming', 'todo')):
+        return '\n\n'.join(f'{title}\n{brief(data[key])}' for title, key in
+                         [('Active courses', 'courses'), ('Upcoming', 'upcoming'), ('To do', 'todo')])
+    return json.dumps(data, indent=2)
+
+
 def main():
     try:
-        print(json.dumps(run(parser().parse_args()), indent=2))
+        args = parser().parse_args()
+        data = run(args)
+        print(brief(data) if args.format == 'brief' else json.dumps(data, indent=2))
     except CanvasError as e:
         print(f'Error: {e}', file=sys.stderr)
         return 1

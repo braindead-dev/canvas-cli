@@ -30,5 +30,20 @@ class CLITests(unittest.TestCase):
                 '/api/v1/courses/123/discussion_topics/456/entries/789/replies',
                 'POST', {'message': '<p>Synthetic test only</p>'})
 
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
+    def test_overview_uses_active_courses_and_preserves_upcoming(self, client):
+        client.return_value.list.side_effect = [
+            [{'id': 123, 'name': 'Example', 'course_code': 'EX 1', 'workflow_state': 'available', 'private_field': 'omit'}],
+            [{'id': 55, 'title': 'Upcoming synthetic assignment'}],
+            [{'id': 77}],
+        ]
+        result = run(parser().parse_args(['overview']))
+        self.assertEqual(result['courses'], [{'id': 123, 'name': 'Example', 'course_code': 'EX 1', 'workflow_state': 'available'}])
+        self.assertEqual(result['upcoming'][0]['id'], 55)
+        self.assertEqual(result['todo'][0]['id'], 77)
+        self.assertEqual(client.return_value.list.call_args_list[0].args[0],
+                         '/api/v1/courses?enrollment_state=active&per_page=100')
+
 
 if __name__ == '__main__': unittest.main()

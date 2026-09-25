@@ -41,6 +41,12 @@ class E2E(unittest.TestCase):
                     self.send_header('Link', '</api/v1/courses?page=2>; rel="next"')
                     data = [{'id': 101, 'name': 'Synthetic course'}]
                 elif self.path == '/api/v1/courses?page=2': data = [{'id': 102}]
+                elif self.path == '/api/v1/courses?enrollment_state=active&per_page=100':
+                    data = [{'id': 101, 'name': 'Synthetic course', 'course_code': 'TEST 101', 'workflow_state': 'available'}]
+                elif self.path == '/api/v1/users/self/upcoming_events?per_page=100':
+                    data = [{'id': 55, 'title': 'Synthetic upcoming event'}]
+                elif self.path == '/api/v1/users/self/todo?per_page=100':
+                    data = [{'id': 77}]
                 else: data = {'id': 101, 'name': 'Synthetic resource'}
                 self.end_headers(); self.wfile.write(json.dumps(data).encode())
             def do_POST(self):
@@ -75,6 +81,20 @@ class E2E(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn('auth login', r.stderr)
         self.assertNotIn('invalid-secret', r.stderr)
+
+    def test_overview_against_tls_fixture(self):
+        r = self.invoke('overview')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        data = json.loads(r.stdout)
+        self.assertEqual(data['courses'][0]['id'], 101)
+        self.assertEqual(data['upcoming'][0]['id'], 55)
+        self.assertEqual(data['todo'][0]['id'], 77)
+
+    def test_brief_overview_is_readable(self):
+        r = self.invoke('--format', 'brief', 'overview')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Active courses\n101  TEST 101 — Synthetic course', r.stdout)
+        self.assertIn('Upcoming\n55  Synthetic upcoming event', r.stdout)
 
     def test_redirect_refused(self):
         before = len(self.calls)

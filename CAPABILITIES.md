@@ -5,14 +5,14 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Area | Current interface | Next implementation / constraint |
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
-| Courses | courses, syllabus | Enrollment filters, favorites, name lookup |
+| Courses | courses, courses --active, syllabus | Favorites, name lookup |
 | Assignments | assignments, assignment | Due-date dashboard and individual date overrides |
 | Modules | modules, module-items | Nested course outline with locked-state labels |
 | Pages | pages, page | Markdown rendering and incremental snapshots |
 | Files | files, download | Folder traversal, selection and batch manifest; no overwrites |
 | Announcements | announcements | Incremental updates; creation would be a write |
 | Discussions | discussions, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
-| Personal tasks | todo | Planner/calendar date filters and reminders |
+| Personal tasks | todo, upcoming, overview | Planner/calendar date filters and reminders |
 | Calendar and planner | advanced get with documented API path | First-class commands; mutations separately guarded |
 | Grades and submissions | advanced get where authorized | Student-only views and upload/submit workflow with destination review |
 | Rubrics and feedback | advanced get where authorized | Summaries and submission comments |
@@ -38,4 +38,4 @@ The generic `get` command is an expert escape hatch for documented read endpoint
 4. Opt-in live read-only smoke tests after user authentication.
 5. Write integration tests only against an explicitly designated sandbox course.
 
-Current live-test gap: token/keyring login and institution-specific downloads have not been exercised against a real account. Mock E2E tests are not equivalent to that assurance.
+Current live-test gap: token/keyring login and institution-specific downloads have not been exercised against a real account. Mock E2E tests are not equivalent to that assurance. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
