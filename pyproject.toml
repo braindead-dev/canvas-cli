@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "canvas-pocket"
+version = "0.1.0"
+description = "A small, privacy-conscious Canvas LMS CLI"
+requires-python = ">=3.10"
+dependencies = ["keyring>=25,<26"]
+license = {text = "MIT"}
+
+[project.scripts]
+canvas-pocket = "canvas_pocket.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

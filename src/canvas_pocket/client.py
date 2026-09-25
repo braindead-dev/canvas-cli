@@ -1,0 +1,73 @@
+import json
+import re
+from urllib.parse import urljoin, urlsplit
+from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.error import HTTPError, URLError
+
+
+class CanvasError(Exception):
+    pass
+
+
+def origin(value):
+    u = urlsplit(value)
+    if (u.scheme != 'https' or not u.hostname or u.username or u.password
+            or u.path not in ('', '/') or u.query or u.fragment):
+        raise CanvasError('Use an HTTPS Canvas origin, e.g. https://canvas.example.edu')
+    return f'https://{u.netloc}'.rstrip('/')
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+class Client:
+    def __init__(self, host, token, transport=None):
+        self.host = origin(host)
+        self.token = token
+        self.transport = transport or build_opener(NoRedirect()).open
+
+    def request(self, route, method='GET', body=None):
+        url = urljoin(self.host, route)
+        u = urlsplit(url)
+        if (f'{u.scheme}://{u.netloc}' != self.host or u.username or u.password
+                or not u.path.startswith('/api/v1/') or u.fragment):
+            raise CanvasError('Refusing request outside the configured Canvas API origin')
+        if method not in ('GET', 'POST'):
+            raise CanvasError('Unsupported method')
+        req = Request(url, method=method, headers={
+            'Authorization': f'Bearer {self.token}', 'Accept': 'application/json',
+            'Content-Type': 'application/json', 'User-Agent': 'canvas-pocket/0.1.0'},
+            data=json.dumps(body).encode() if body is not None else None)
+        try:
+            with self.transport(req, timeout=30) as response:
+                return json.load(response), response.headers.get('Link', '')
+        except HTTPError as e:
+            if e.code == 401:
+                raise CanvasError('Authentication expired or revoked. Run auth login again.') from None
+            if e.code == 403:
+                raise CanvasError('Canvas denied access. Check permissions/publication; this is not necessarily expired auth.') from None
+            if e.code == 429:
+                raise CanvasError('Canvas rate limit reached. Wait before retrying; no automatic write retries.') from None
+            raise CanvasError(f'Canvas HTTP {e.code}. No automatic retries; verify a write in Canvas before repeating it.') from None
+        except (URLError, TimeoutError, OSError):
+            raise CanvasError('Network failure. If posting, verify in Canvas before retrying to avoid duplicates.') from None
+        except (ValueError, UnicodeError):
+            raise CanvasError('Canvas returned an unexpected response; no response body was logged.') from None
+
+    def list(self, route, max_pages=100):
+        rows, seen = [], set()
+        for _ in range(max_pages):
+            if route in seen:
+                raise CanvasError('Pagination loop detected')
+            seen.add(route)
+            data, links = self.request(route)
+            if not isinstance(data, list):
+                raise CanvasError('Expected a paginated list')
+            rows.extend(data)
+            match = re.search(r'<([^>]+)>;\s*rel="next"', links)
+            if not match:
+                return rows
+            route = match.group(1)
+        raise CanvasError('Page limit reached; increase --max-pages. Partial results were not emitted.')
