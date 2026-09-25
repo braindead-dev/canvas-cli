@@ -1,6 +1,6 @@
 import json
 import re
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, unquote, parse_qs
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
 
@@ -31,8 +31,12 @@ class Client:
     def request(self, route, method='GET', body=None):
         url = urljoin(self.host, route)
         u = urlsplit(url)
+        decoded = unquote(u.path)
         if (f'{u.scheme}://{u.netloc}' != self.host or u.username or u.password
-                or not u.path.startswith('/api/v1/') or u.fragment):
+                or not u.path.startswith('/api/v1/') or u.fragment
+                or any(p in ('.', '..') for p in decoded.split('/'))
+                or '\\' in decoded
+                or any(k.lower() in ('access_token', 'as_user_id') for k in parse_qs(u.query))):
             raise CanvasError('Refusing request outside the configured Canvas API origin')
         if method not in ('GET', 'POST'):
             raise CanvasError('Unsupported method')
@@ -44,6 +48,7 @@ class Client:
             with self.transport(req, timeout=30) as response:
                 return json.load(response), response.headers.get('Link', '')
         except HTTPError as e:
+            e.close()
             if e.code == 401:
                 raise CanvasError('Authentication expired or revoked. Run auth login again.') from None
             if e.code == 403:

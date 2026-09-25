@@ -30,10 +30,19 @@ canvas-pocket announcements 123
 canvas-pocket discussions 123
 canvas-pocket entries 123 456
 canvas-pocket replies 123 456 789
+canvas-pocket assignment 123 456
+canvas-pocket page 123 introduction
+canvas-pocket module-items 123 456
+canvas-pocket todo
+canvas-pocket download 123 456 --output ./syllabus.pdf
+canvas-pocket capabilities
+canvas-pocket get '/api/v1/courses/123/tabs' --paginate
 canvas-pocket --max-pages 200 assignments 123
 ```
 
-List commands follow Canvas Link pagination, including empty pages. A page limit fails explicitly, never silently truncates. Pages/files/modules currently list metadata; they do not recursively download attachments or nested module items. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
+List commands follow Canvas Link pagination, including empty pages. A page limit fails explicitly, never silently truncates. Use `page` for a page body and `module-items` for paginated module contents. Downloads use an explicit output path, refuse overwrites, remove failed partial files, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
+
+See [the capability map](CAPABILITIES.md) for implemented features, permission boundaries and the broader roadmap. The expert `get` command extends read coverage without exposing arbitrary write methods.
 
 ### Posting deliberately
 
