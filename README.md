@@ -31,6 +31,9 @@ canvas-pocket groups
 canvas-pocket course-groups 123
 canvas-pocket inbox --scope unread --course 123
 canvas-pocket conversation 456
+canvas-pocket recipients --search 'Example Name' --course 123
+canvas-pocket recipients --user-id 789
+canvas-pocket inbox-compose --recipient 789 --subject 'Question' --message-file message.txt
 canvas-pocket inbox-reply 456 --message-file reply.txt
 canvas-pocket overview
 canvas-pocket --format brief overview
@@ -99,6 +102,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 
 `inbox` lists your Canvas conversations; `conversation` fetches one with `auto_mark_as_read=false`. The [Canvas Conversations API](https://developerdocs.instructure.com/services/canvas/resources/conversations) otherwise marks an unread thread read by default on a GET. The transport blocks that unsafe GET even through the expert `get` command unless the query explicitly sets `auto_mark_as_read=false`. These reads do not send or alter messages. `inbox-reply` previews the current participants and exact message and also uses the safe GET. It only sends with both `--yes` and a matching `--confirm` digest from that preview, and refuses to send if the message or thread audience changes between preview and execution. This send route has synthetic TLS tests but has not been exercised against a live account. `groups` returns only your active groups; `course-groups` returns only groups visible to your Canvas role.
 
+`recipients` searches Canvas's [messageable-user directory](https://developerdocs.instructure.com/services/canvas/resources/search) or confirms one numeric user ID. Text search can be limited to a course; Canvas ignores course context in an ID lookup, so the CLI refuses that misleading combination. `inbox-compose` addresses exactly one verified individual, previews their identity and exact subject/body, then requires `--yes` and a matching digest to send. Canvas may reuse an existing private thread with that recipient. The lookup and preview were live-tested without sending; actual sends have synthetic TLS tests only. Do not use a course or group ID as a recipient.
+
 `news` lists recently posted announcements across active or selected courses using Canvas's dedicated [Announcements API](https://developerdocs.instructure.com/services/canvas/resources/announcements). It fetches each course separately so one inaccessible course does not hide all the others, and reports any unavailable course. JSON includes the full visible announcement body; brief output is a title/date index. The date window is based on posting time, not subsequent edits, so older edited announcements need a longer `--days` window.
 
 `assignment-groups` shows Canvas's group weights and grading rules. `rubrics`/`rubric` read visible criteria. `quizzes`/`quiz` read metadata for Classic Quizzes, including dates, attempt limits and time limits. `new-quizzes`/`new-quiz` read metadata from Canvas's separate [New Quizzes API](https://developerdocs.instructure.com/services/canvas/resources/new_quizzes); the single-item command takes its associated assignment ID. These commands never list quiz questions or create an attempt. Availability depends on Canvas permissions and which quiz engine a course uses.
@@ -118,6 +123,10 @@ canvas-pocket post 123 456 --message-file reply.txt --yes
 canvas-pocket inbox-reply 456 --message-file reply.txt
 # Read the preview and copy its confirm digest.
 canvas-pocket inbox-reply 456 --message-file reply.txt --yes --confirm DIGEST
+
+canvas-pocket inbox-compose --recipient 789 --subject 'Question' --message-file message.txt
+# Read the recipient and message preview, then use its digest.
+canvas-pocket inbox-compose --recipient 789 --subject 'Question' --message-file message.txt --yes --confirm DIGEST
 
 canvas-pocket submit-url 123 456 --url-file project-url.txt
 # Read the assignment, due date and exact URL in the preview, then use its digest.

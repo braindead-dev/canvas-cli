@@ -83,6 +83,18 @@ def parser():
     reply.add_argument('--message-file', required=True, type=Path)
     reply.add_argument('--confirm', help='Digest returned by the preview')
     reply.add_argument('--yes', action='store_true', help='Send only if --confirm matches the fresh preview')
+    people = sub.add_parser('recipients', help='Find individual users Canvas permits you to message')
+    match = people.add_mutually_exclusive_group(required=True)
+    match.add_argument('--search', help='Search name or other permitted recipient text')
+    match.add_argument('--user-id', type=identifier, help='Check one numeric user ID')
+    people.add_argument('--course', type=identifier, help='Limit a text search to one course')
+    compose = sub.add_parser('inbox-compose', help='Preview a new one-recipient Canvas Inbox message')
+    compose.add_argument('--recipient', type=identifier, required=True, help='Numeric Canvas user ID')
+    compose.add_argument('--subject', required=True)
+    compose.add_argument('--message-file', required=True, type=Path)
+    compose.add_argument('--course', type=identifier, help='Set course conversation context')
+    compose.add_argument('--confirm', help='Digest returned by the preview')
+    compose.add_argument('--yes', action='store_true', help='Send only if --confirm matches the fresh preview')
     sub.add_parser('todo', help='Your Canvas to-do items')
     sub.add_parser('upcoming', help='Upcoming assignments and events')
     calendar = sub.add_parser('calendar', help='Events or assignments in a date window')
@@ -184,7 +196,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'snapshot-markdown (private local file, offline)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'submit-url/submit-text (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'recipients', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'snapshot-markdown (private local file, offline)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'inbox-compose (one person, preview and matching digest required)', 'submit-url/submit-text (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -297,6 +309,14 @@ def run(args):
         if args.course:
             query.append(('filter[]', f'course_{args.course}'))
         return client.list('/api/v1/conversations?' + urlencode(query), args.max_pages)
+    if args.command == 'recipients':
+        from .messaging import recipients
+        return recipients(client, args.max_pages, args.search, args.user_id, args.course)
+    if args.command == 'inbox-compose':
+        from .messaging import compose
+        message = args.message_file.read_text(encoding='utf-8')
+        return compose(client, args.max_pages, args.recipient, args.subject, message,
+                       args.course, args.yes, args.confirm)
     if args.command == 'conversation':
         return client.request(f'/api/v1/conversations/{args.conversation}?auto_mark_as_read=false')[0]
     if args.command == 'inbox-reply':

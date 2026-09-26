@@ -117,6 +117,10 @@ class E2E(unittest.TestCase):
                     data = {'id': 12, 'subject': 'Synthetic thread',
                             'participants': [{'id': 7, 'name': 'Synthetic recipient'}], 'audience': [7],
                             'messages': [{'body': 'Synthetic private message'}]}
+                elif self.path == '/api/v1/search/recipients?type=user&per_page=100&user_id=7':
+                    data = [{'id': 7, 'name': 'Synthetic recipient', 'type': 'user'}]
+                elif self.path.startswith('/api/v1/search/recipients?type=user&per_page=100&search='):
+                    data = [{'id': 7, 'name': 'Synthetic recipient', 'type': 'user'}]
                 elif self.path.startswith('/api/v1/announcements?'):
                     data = [{'id': 60, 'title': 'Synthetic announcement',
                              'posted_at': '2026-09-25T12:00:00Z', 'message': '<p>Synthetic update</p>'}]
@@ -344,3 +348,23 @@ class E2E(unittest.TestCase):
         self.assertEqual(self.calls[-2:], [
             ('GET', '/api/v1/conversations/12?auto_mark_as_read=false'),
             ('POST', '/api/v1/conversations/12/add_message')])
+
+    def test_recipient_lookup_and_compose_preview_over_tls(self):
+        source = Path(self.tmp.name) / 'compose.txt'
+        source.write_text('Synthetic hello')
+        before = len(self.calls)
+        found = self.invoke('recipients', '--search', 'Synthetic')
+        self.assertEqual(found.returncode, 0, found.stderr)
+        self.assertEqual(json.loads(found.stdout)[0]['id'], 7)
+        command = ('inbox-compose', '--recipient', '7', '--subject', 'Synthetic subject',
+                   '--message-file', str(source))
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertTrue(data['dry_run'])
+        self.assertEqual([method for method, _ in self.calls[before:]], ['GET', 'GET'])
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(self.calls[-2:], [
+            ('GET', '/api/v1/search/recipients?type=user&per_page=100&user_id=7'),
+            ('POST', '/api/v1/conversations')])
