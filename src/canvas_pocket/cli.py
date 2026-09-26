@@ -90,6 +90,14 @@ def parser():
     due = sub.add_parser('deadlines', help='Assignment deadlines across active courses')
     due.add_argument('--days', type=int, default=14, help='Look ahead this many days; default 14')
     due.add_argument('--course', type=identifier, help='Limit to one course')
+    work = sub.add_parser('work', help='Assignments with your Canvas submission status')
+    work.add_argument('--course', type=identifier, help='Limit to one course')
+    work.add_argument('--days', type=int, help='Show only work due in the next N days; default is all work')
+    work.add_argument('--status', choices=('unknown', 'unsubmitted', 'submitted', 'graded',
+                                           'pending_review', 'missing', 'excused'))
+    news = sub.add_parser('news', help='Recent announcements across active or selected courses')
+    news.add_argument('--days', type=int, default=14)
+    news.add_argument('--course', type=identifier, action='append', help='Limit to a course; repeatable')
     linked = sub.add_parser('linked-files', help='Find file links in accessible course content')
     linked.add_argument('course', type=identifier)
     linked.add_argument('--quick', action='store_true', help='Skip per-file metadata checks for a faster link index')
@@ -151,7 +159,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'linked-files', 'assignments', 'assignment', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'folder-folders', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -199,6 +207,16 @@ def run(args):
         if args.days < 1:
             raise CanvasError('--days must be positive')
         return deadlines(client, args.max_pages, args.days, args.course)
+    if args.command == 'work':
+        from .planning import work
+        if args.days is not None and args.days < 1:
+            raise CanvasError('--days must be positive')
+        return work(client, args.max_pages, args.course, args.days, args.status)
+    if args.command == 'news':
+        from .news import announcement_feed
+        if args.days < 1:
+            raise CanvasError('--days must be positive')
+        return announcement_feed(client, args.max_pages, args.days, args.course)
     if args.command == 'get':
         if not args.path.startswith('/api/v1/'):
             raise CanvasError('get requires an /api/v1/ path')
@@ -375,9 +393,26 @@ def brief(data):
             lines.append(('Deadlines (next 14 days)', data['deadlines']))
         return '\n\n'.join(f'{title}\n{brief(values)}' for title, values in lines)
     if isinstance(data, dict) and 'assignments' in data and 'unavailable_courses' in data:
-        result = brief(data['assignments'])
+        if 'status_filter' in data:
+            result = ('\n'.join(
+                f"{item.get('course_name') or item['course_id']}: "
+                f"{item.get('name') or item.get('assignment_id')} "
+                f"[{item['status']}]"
+                + (f"  due {item['due_at']}" if item.get('due_at') else '  no due date')
+                for item in data['assignments']) or 'No assignments.')
+        else:
+            result = brief(data['assignments'])
         if data['unavailable_courses']:
             result += f"\nAssignments unavailable for {len(data['unavailable_courses'])} course(s); see JSON for details."
+        return result
+    if isinstance(data, dict) and 'announcements' in data and 'unavailable_courses' in data:
+        result = ('\n'.join(
+            f"{item.get('course_name') or item.get('context_code') or item.get('course_id')}: "
+            f"{item.get('title') or item.get('id')}  "
+            f"{item.get('posted_at') or item.get('created_at') or ''}"
+            for item in data['announcements']) or 'No announcements.')
+        if data['unavailable_courses']:
+            result += f"\nAnnouncements unavailable for {len(data['unavailable_courses'])} course(s); see JSON for details."
         return result
     if isinstance(data, dict) and 'files' in data and 'skipped_sources' in data:
         result = brief(data['files'])

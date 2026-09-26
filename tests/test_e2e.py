@@ -53,6 +53,10 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/assignments?per_page=100':
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()}]
+                elif self.path == '/api/v1/courses/101/assignments?include%5B%5D=submission&per_page=100':
+                    data = [{'id': 88, 'name': 'Synthetic paper',
+                             'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
+                             'submission': {'workflow_state': 'submitted', 'submitted_at': '2026-09-01T12:00:00Z'}}]
                 elif self.path == '/api/v1/courses/101?include[]=syllabus_body':
                     data = {'syllabus_body': '<a href="/courses/101/files/7">Syllabus</a>'}
                 elif self.path == '/api/v1/courses/101/modules?include[]=items&per_page=100':
@@ -96,6 +100,9 @@ class E2E(unittest.TestCase):
                     data = [{'id': 12, 'subject': 'Synthetic inbox thread'}]
                 elif self.path == '/api/v1/conversations/12?auto_mark_as_read=false':
                     data = {'id': 12, 'messages': [{'body': 'Synthetic private message'}]}
+                elif self.path.startswith('/api/v1/announcements?'):
+                    data = [{'id': 60, 'title': 'Synthetic announcement',
+                             'posted_at': '2026-09-25T12:00:00Z', 'message': '<p>Synthetic update</p>'}]
                 else: data = {'id': 101, 'name': 'Synthetic resource'}
                 self.end_headers(); self.wfile.write(json.dumps(data).encode())
             def do_POST(self):
@@ -173,6 +180,29 @@ class E2E(unittest.TestCase):
         brief = self.invoke('--format', 'brief', 'submission', '101', '88')
         self.assertIn('Status: submitted', brief.stdout)
         self.assertIn('Comments: 1', brief.stdout)
+
+    def test_work_board_over_tls_is_read_only(self):
+        before = len(self.calls)
+        result = self.invoke('work', '--course', '101', '--days', '14')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data['assignments'][0]['status'], 'submitted')
+        self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/courses/101/assignments?include%5B%5D=submission&per_page=100')])
+        brief = self.invoke('--format', 'brief', 'work', '--course', '101')
+        self.assertIn('Synthetic paper [submitted]', brief.stdout)
+
+    def test_cross_course_news_over_tls_is_read_only(self):
+        before = len(self.calls)
+        result = self.invoke('news', '--course', '101')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data['announcements'][0]['message'], '<p>Synthetic update</p>')
+        self.assertEqual(len(self.calls[before:]), 1)
+        self.assertEqual(self.calls[before][0], 'GET')
+        self.assertIn('context_codes%5B%5D=course_101', self.calls[before][1])
+        brief = self.invoke('--format', 'brief', 'news', '--course', '101')
+        self.assertIn('Synthetic announcement', brief.stdout)
 
     def test_redirect_refused(self):
         before = len(self.calls)

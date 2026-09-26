@@ -54,6 +54,19 @@ class CLITests(unittest.TestCase):
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
+    def test_work_validates_window_and_routes_to_caller_submissions(self, client):
+        client.return_value.list.return_value = [
+            {'id': 7, 'name': 'Synthetic task', 'due_at': None,
+             'submission': {'workflow_state': 'submitted'}}]
+        result = run(parser().parse_args(['work', '--course', '8', '--status', 'submitted']))
+        self.assertEqual(result['assignments'][0]['status'], 'submitted')
+        client.return_value.list.assert_called_once_with(
+            '/api/v1/courses/8/assignments?include%5B%5D=submission&per_page=100', 100)
+        with self.assertRaises(CanvasError):
+            run(parser().parse_args(['work', '--days', '0']))
+
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
     def test_calendar_contexts_and_dates_are_explicit(self, client):
         client.return_value.list.side_effect = [
             [{'id': 8}, {'id': 9}], [{'id': 44, 'title': 'Synthetic event'}]]

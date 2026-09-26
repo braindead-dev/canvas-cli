@@ -6,11 +6,11 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
 | Courses | courses, courses --active, favorites, syllabus, sections | Name lookup |
-| Assignments | assignments, assignment, deadlines | Date overrides and richer submission status |
+| Assignments | assignments, assignment, deadlines, work (own status and effective due date) | Richer planner views and local reminders |
 | Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
 | Pages | pages, page | Markdown rendering and incremental snapshots |
 | Files | files, folders, folder, folder-files, folder-folders, linked-files (optional all published pages), download, preview-first download-linked | Course Files list may be disabled while linked files remain accessible; discovered links are not a complete inventory |
-| Announcements | announcements | Incremental updates; creation would be a write |
+| Announcements | announcements, cross-course news | Incremental change detection; creation would be a write |
 | Discussions | discussions, topic, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
 | Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
 | Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
