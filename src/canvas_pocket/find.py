@@ -40,13 +40,20 @@ def find(client, course_id, query, max_pages=100, selected=None):
                         for remaining, _ in choices[choices.index((area, resource)) + 1:]:
                             coverage[remaining] = 'not_checked_after_rate_limit'
                         break
+                    if fallback_error.status not in (403, 404):
+                        raise
                     unavailable[area] = f'{error}; module fallback: {fallback_error}'
                     coverage[area] = 'unavailable'
                     continue
                 else:
-                    coverage[area] = 'module_pages_only' if not index['complete'] else 'searched'
+                    blocked = [item for item in index['unavailable']
+                               if item['resource'] != 'pages']
+                    coverage[area] = ('module_pages_partially_searched' if blocked else
+                                      'module_pages_only') if not index['complete'] else 'searched'
                     if not index['complete']:
-                        unavailable[area] = 'Canvas pages list unavailable; only visible module pages searched'
+                        unavailable[area] = ('Canvas pages list unavailable; only visible module pages searched'
+                                             + (f'; {len(blocked)} module/page resource(s) also unavailable'
+                                                if blocked else ''))
                     for page in index['pages']:
                         title = page.get('title') or page.get('url') or ''
                         if query.casefold() in title.casefold():
@@ -59,6 +66,8 @@ def find(client, course_id, query, max_pages=100, selected=None):
                 for remaining, _ in choices[choices.index((area, resource)) + 1:]:
                     coverage[remaining] = 'not_checked_after_rate_limit'
                 break
+            if error.status not in (403, 404):
+                raise
             continue
         coverage[area] = 'searched'
         for row in rows:

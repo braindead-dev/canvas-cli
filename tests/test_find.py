@@ -17,9 +17,11 @@ class FakeClient:
         if '/discussion_topics?' in route:
             return [{'id': 3, 'title': 'Synthetic discussion'}]
         if '/pages?' in route:
-            raise CanvasError('Canvas HTTP 404')
+            raise CanvasError('Canvas HTTP 404', status=404)
         if '/files?' in route:
-            raise CanvasError('Canvas denied access')
+            raise CanvasError('Canvas denied access', status=403)
+        if '/modules/4/items?' in route:
+            raise CanvasError('Canvas denied access', status=403)
         if '/modules?' in route:
             return [{'id': 4, 'name': 'Week 1', 'items': None}]
         raise AssertionError(route)
@@ -30,12 +32,12 @@ class FindTests(unittest.TestCase):
         client = FakeClient()
         result = find(client, '101', 'Synthetic', 4)
         self.assertFalse(result['complete'])
-        self.assertEqual(result['coverage']['pages'], 'unavailable')
+        self.assertEqual(result['coverage']['pages'], 'module_pages_partially_searched')
         self.assertEqual(result['coverage']['modules'],
                          'searched_module_names_items_may_be_omitted')
         self.assertEqual([row['id'] for row in result['results']], [1, 3, 4])
         self.assertNotIn('private details', str(result))
-        self.assertEqual(len(client.calls), 5)
+        self.assertEqual(len(client.calls), 7)
 
     def test_area_selection_and_query_validation(self):
         client = FakeClient()
@@ -53,6 +55,13 @@ class FindTests(unittest.TestCase):
         result = find(Limited(), '101', 'paper')
         self.assertEqual(result['coverage']['assignments'], 'unavailable')
         self.assertEqual(result['coverage']['discussions'], 'not_checked_after_rate_limit')
+
+    def test_network_failure_does_not_masquerade_as_missing_area(self):
+        class Offline:
+            def list(self, _route, _max_pages):
+                raise CanvasError('Network failure')
+        with self.assertRaises(CanvasError):
+            find(Offline(), '101', 'paper')
 
     def test_page_search_falls_back_to_module_titles_with_partial_coverage(self):
         class ModulePages:

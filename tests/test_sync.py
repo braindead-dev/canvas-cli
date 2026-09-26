@@ -65,6 +65,18 @@ class SyncTests(unittest.TestCase):
                     sync_course(client, '12', 100, directory)
                 capture.assert_not_called()
 
+    def test_failed_refresh_preserves_last_private_baseline(self):
+        client = Mock(host='https://canvas.example.edu')
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            with patch('canvas_pocket.sync.capture', return_value=snapshot('baseline')):
+                first = sync_course(client, '12', 100, directory)
+            with (patch('canvas_pocket.sync.capture', side_effect=CanvasError('rate limited', status=429)),
+                  self.assertRaises(CanvasError)):
+                sync_course(client, '12', 100, directory)
+            self.assertEqual([str(path.resolve()) for path in directory.glob('*.json')],
+                             [first['saved']])
+
 
 if __name__ == '__main__':
     unittest.main()

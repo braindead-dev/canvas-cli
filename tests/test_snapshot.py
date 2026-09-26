@@ -47,7 +47,7 @@ class SnapshotTests(unittest.TestCase):
                         {'url': 'draft', 'published': False},
                         {'url': 'locked', 'locked_for_user': True}]
             if route.endswith('only_announcements=true'):
-                raise CanvasError('Canvas denied access')
+                raise CanvasError('Canvas denied access', status=403)
             raise AssertionError(route)
         client.request.side_effect = request
         client.list.side_effect = listing
@@ -91,7 +91,7 @@ class SnapshotTests(unittest.TestCase):
                         {'type': 'Page', 'page_url': 'unpublished', 'published': False},
                         {'type': 'Page', 'page_url': 'locked', 'locked_for_user': True}]
             if route.endswith('/pages?per_page=100'):
-                raise CanvasError('Canvas HTTP 404')
+                raise CanvasError('Canvas HTTP 404', status=404)
             return []
         client.request.side_effect = request
         client.list.side_effect = listing
@@ -100,6 +100,14 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual([page['url'] for page in result['pages']], ['week-one'])
         self.assertNotIn('locked', str(client.request.call_args_list))
         self.assertNotIn('unpublished', str(client.request.call_args_list))
+
+    def test_rate_limit_aborts_capture_instead_of_saving_partial_state(self):
+        client = Mock(host='https://canvas.example.edu')
+        client.request.return_value = ({'id': 12}, '')
+        client.list.side_effect = CanvasError('rate limited', status=429)
+        with self.assertRaises(CanvasError):
+            capture(client, '12', 100)
+        client.list.assert_called_once()
 
     def test_diff_reports_only_changed_fields_and_skips_incomplete_categories(self):
         old = {'schema_version': 1, 'origin': 'https://canvas.example.edu', 'course_id': 12,

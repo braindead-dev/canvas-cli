@@ -239,6 +239,13 @@ def parser():
             s.add_argument('--message-file', required=True, type=Path)
             s.add_argument('--confirm', help='Digest returned by the preview')
             s.add_argument('--yes', action='store_true', help='Post only if the fresh preview matches --confirm')
+    # SUPPRESS preserves a root-level value when the subcommand omits the option.
+    for command_parser in (*sub.choices.values(), *a.choices.values()):
+        command_parser.add_argument('--format', choices=('json', 'brief'),
+                                    default=argparse.SUPPRESS,
+                                    help='Output format (also accepted before the command)')
+        command_parser.add_argument('--max-pages', type=int, default=argparse.SUPPRESS,
+                                    help='Pagination cap (also accepted before the command)')
     return p
 
 

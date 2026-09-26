@@ -20,6 +20,8 @@ def deadlines(client, max_pages, days=14, course_id=None, courses=None):
         try:
             assignments = client.list(f'/api/v1/courses/{cid}/assignments?per_page=100', max_pages)
         except CanvasError as exc:
+            if exc.status not in (403, 404):
+                raise
             if course_id:
                 raise
             unavailable.append({'course_id': cid, 'reason': str(exc)})
@@ -65,6 +67,8 @@ def work(client, max_pages, course_id=None, days=None, status=None):
                 f'/api/v1/courses/{cid}/assignments?include%5B%5D=submission&per_page=100',
                 max_pages)
         except CanvasError as exc:
+            if exc.status not in (403, 404):
+                raise
             if course_id:
                 raise
             unavailable.append({'course_id': cid, 'reason': str(exc)})

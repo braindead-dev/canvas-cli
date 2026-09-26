@@ -22,11 +22,21 @@ class PlanningTests(unittest.TestCase):
     def test_reports_unavailable_course_and_keeps_other_deadlines(self):
         soon = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
         client = Mock()
-        client.list.side_effect = [[{'id': 1}, {'id': 2}], CanvasError('Not accessible'),
+        client.list.side_effect = [[{'id': 1}, {'id': 2}], CanvasError('Not accessible', status=403),
                                    [{'id': 22, 'due_at': soon}]]
         result = deadlines(client, 100)
         self.assertEqual(result['unavailable_courses'][0]['course_id'], 1)
         self.assertEqual(result['assignments'][0]['course_id'], 2)
+
+    def test_rate_limit_stops_cross_course_planning(self):
+        for command in (deadlines, work):
+            with self.subTest(command=command.__name__):
+                client = Mock()
+                client.list.side_effect = [[{'id': 1}, {'id': 2}],
+                                           CanvasError('rate limited', status=429)]
+                with self.assertRaises(CanvasError):
+                    command(client, 100)
+                self.assertEqual(client.list.call_count, 2)
 
     def test_work_uses_caller_due_date_and_distinguishes_unknown(self):
         soon = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()

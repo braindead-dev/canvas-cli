@@ -31,11 +31,19 @@ class NewsTests(unittest.TestCase):
 
     def test_unavailable_course_is_reported_without_hiding_others(self):
         client = Mock()
-        client.list.side_effect = [[{'id': 1}, {'id': 2}], CanvasError('Not accessible'),
+        client.list.side_effect = [[{'id': 1}, {'id': 2}], CanvasError('Not accessible', status=403),
                                    [{'id': 22, 'posted_at': '2026-09-24T00:00:00Z'}]]
         result = announcement_feed(client, 100)
         self.assertEqual(result['unavailable_courses'][0]['course_id'], 1)
         self.assertEqual(result['announcements'][0]['id'], 22)
+
+    def test_rate_limit_is_not_reported_as_unavailable_course(self):
+        client = Mock()
+        client.list.side_effect = [[{'id': 1}, {'id': 2}],
+                                   CanvasError('rate limited', status=429)]
+        with self.assertRaises(CanvasError):
+            announcement_feed(client, 100)
+        self.assertEqual(client.list.call_count, 2)
 
     def test_selected_courses_are_deduplicated(self):
         client = Mock()

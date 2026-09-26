@@ -12,6 +12,15 @@ from canvas_pocket.client import CanvasError
 
 
 class CLITests(unittest.TestCase):
+    def test_global_options_work_before_or_after_command(self):
+        self.assertEqual(parser().parse_args(['--format', 'brief', 'courses']).format, 'brief')
+        self.assertEqual(parser().parse_args(['courses', '--format', 'brief']).format, 'brief')
+        self.assertEqual(parser().parse_args(['--max-pages', '3', 'courses']).max_pages, 3)
+        self.assertEqual(parser().parse_args(['courses', '--max-pages', '3']).max_pages, 3)
+        self.assertEqual(parser().parse_args(['--format', 'brief', 'courses']).max_pages, 100)
+        self.assertEqual(parser().parse_args(['auth', 'status', '--format', 'brief']).format,
+                         'brief')
+
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
     def test_post_defaults_to_preview(self, client):

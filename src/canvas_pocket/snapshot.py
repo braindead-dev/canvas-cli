@@ -55,6 +55,8 @@ def capture(client, course_id, max_pages):
         try:
             return client.list(route, max_pages)
         except CanvasError as error:
+            if error.status not in (403, 404):
+                raise
             unavailable[name] = str(error)
             return []
 
@@ -92,6 +94,8 @@ def capture(client, course_id, max_pages):
             else:
                 pages.append(page)
         except CanvasError as error:
+            if error.status not in (403, 404):
+                raise
             unavailable[f'page {slug}'] = str(error)
     announcements = listing('announcements', base + '/discussion_topics?per_page=100&only_announcements=true')
     return redact({

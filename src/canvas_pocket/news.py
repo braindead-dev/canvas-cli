@@ -27,6 +27,8 @@ def announcement_feed(client, max_pages, days=14, course_ids=None):
         try:
             rows = client.list('/api/v1/announcements?' + query, max_pages)
         except CanvasError as exc:
+            if exc.status not in (403, 404):
+                raise
             if course_ids and len(course_ids) == 1:
                 raise
             unavailable.append({'course_id': cid, 'reason': str(exc)})

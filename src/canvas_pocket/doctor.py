@@ -17,16 +17,13 @@ PROBES = (
 
 
 def _status(error):
-    message = str(error)
-    if 'Canvas denied access' in message:
+    if error.status == 403:
         return 'denied_403'
-    if 'Canvas HTTP 404' in message:
+    if error.status == 404:
         return 'not_found_404'
-    if 'Canvas rate limit' in message:
+    if error.status == 429:
         return 'rate_limited_429'
-    if 'Authentication expired' in message:
-        raise error
-    return 'error'
+    raise error
 
 
 def course_doctor(client, course_id):

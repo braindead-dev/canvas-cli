@@ -20,7 +20,7 @@ class FakeClient:
 
 class DoctorTests(unittest.TestCase):
     def test_rate_limit_stops_remaining_probes(self):
-        client = FakeClient(CanvasError('Canvas rate limit reached. Wait before retrying'))
+        client = FakeClient(CanvasError('Canvas rate limit reached. Wait before retrying', status=429))
         data = course_doctor(client, '101')
         self.assertEqual(len(client.calls), 2)
         self.assertEqual(data['probes'][0]['status'], 'rate_limited_429')
@@ -32,3 +32,9 @@ class DoctorTests(unittest.TestCase):
         with self.assertRaisesRegex(CanvasError, 'different course'):
             course_doctor(client, '999')
         self.assertEqual(len(client.calls), 1)
+
+    def test_network_failure_is_not_a_permission_probe(self):
+        client = FakeClient(CanvasError('Network failure'))
+        with self.assertRaises(CanvasError):
+            course_doctor(client, '101')
+        self.assertEqual(len(client.calls), 2)
