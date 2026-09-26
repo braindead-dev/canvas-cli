@@ -74,7 +74,8 @@ def render(snapshot):
     if not isinstance(course, dict) or any(not isinstance(snapshot.get(kind), list)
                                           for kind in ('assignments', 'modules', 'pages', 'announcements')):
         raise CanvasError('Malformed snapshot content')
-    if 'discussions' in snapshot and not isinstance(snapshot['discussions'], list):
+    if any(name in snapshot and not isinstance(snapshot[name], list)
+           for name in ('discussions', 'linked_files')):
         raise CanvasError('Malformed snapshot content')
     title = escaped(course.get('name') or course.get('course_code') or f"Course {snapshot.get('course_id', '')}")
     complete = bool(snapshot.get('complete')) and 'discussions' in snapshot
@@ -127,6 +128,17 @@ def render(snapshot):
         if item.get('posted_at'):
             lines += [f"Posted: {escaped(item['posted_at'])}", '']
         add_body(item.get('message'))
+
+    if 'linked_files' in snapshot:
+        lines += ['## Linked files', '',
+                  'Only file references found in readable course content. Not a complete Files inventory.', '']
+        for item in snapshot['linked_files']:
+            if not isinstance(item, dict):
+                continue
+            label = escaped(item.get('display_name') or item.get('id') or 'Unnamed file')
+            status = 'available' if item.get('downloadable') else 'unavailable or unchecked'
+            lines.append(f'- {label} ({status})')
+        lines.append('')
 
     lines += ['## Modules', '']
     for module in snapshot['modules']:

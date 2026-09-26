@@ -13,6 +13,8 @@ FIELDS = {
     'announcements': ('title', 'message', 'updated_at', 'posted_at', 'published'),
     'discussions': ('title', 'message', 'updated_at', 'posted_at', 'published',
                     'assignment_id', 'lock_at', 'unlock_at'),
+    'linked_files': ('display_name', 'size', 'updated_at', 'modified_at',
+                     'downloadable', 'sources'),
 }
 
 
@@ -31,7 +33,7 @@ def key(kind, item):
 
 
 def visible_label(kind, item):
-    return item.get('name') or item.get('title') or str(key(kind, item))
+    return item.get('name') or item.get('title') or item.get('display_name') or str(key(kind, item))
 
 
 def content(kind, item):
@@ -60,7 +62,7 @@ def compare(old, new):
             missing_new |= any(name.startswith('module ') for name in new.get('unavailable', {}))
         if missing_old or missing_new:
             skipped[kind] = 'incomplete in older or newer snapshot'
-            if kind == 'pages':
+            if kind in ('pages', 'linked_files'):
                 before = {key(kind, item): item for item in old.get(kind, []) if key(kind, item) is not None}
                 after = {key(kind, item): item for item in new.get(kind, []) if key(kind, item) is not None}
                 observed_changes[kind] = [

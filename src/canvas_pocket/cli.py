@@ -133,10 +133,14 @@ def parser():
     snap = sub.add_parser('snapshot', help='Save a private, read-only course snapshot outside Git')
     snap.add_argument('course', type=identifier)
     snap.add_argument('--output', required=True, type=Path)
+    snap.add_argument('--include-linked-files', action='store_true',
+                      help='Also index files referenced by readable course content')
     sync = sub.add_parser('sync', help='Save a private course snapshot and compare with the previous one')
     sync.add_argument('course', type=identifier)
     sync.add_argument('--directory', type=Path,
                       help='Private snapshot directory; defaults to the app config directory')
+    sync.add_argument('--include-linked-files', action='store_true',
+                      help='Also index files referenced by readable course content')
     difference = sub.add_parser('snapshot-diff', help='Compare two local snapshots without Canvas login')
     difference.add_argument('older', type=Path)
     difference.add_argument('newer', type=Path)
@@ -308,11 +312,13 @@ def run(args):
     if args.command == 'snapshot':
         from .snapshot import capture, save_private, validate_destination
         output = validate_destination(args.output)
-        return save_private(output, capture(client, args.course, args.max_pages))
+        return save_private(output, capture(client, args.course, args.max_pages,
+                                            include_linked_files=args.include_linked_files))
     if args.command == 'sync':
         from .sync import sync_course
         directory = args.directory or config_path().parent / 'snapshots'
-        return sync_course(client, args.course, args.max_pages, directory)
+        return sync_course(client, args.course, args.max_pages, directory,
+                           include_linked_files=args.include_linked_files)
     if args.command in ('upload-personal', 'upload-assignment-file'):
         from .upload import upload
         return upload(client, args.file, args.max_bytes,

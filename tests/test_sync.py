@@ -53,6 +53,13 @@ class SyncTests(unittest.TestCase):
                     sync_course(client, '12', 100, Path(folder) / 'snapshots')
                 capture.assert_not_called()
 
+    def test_opt_in_file_index_is_forwarded_to_capture(self):
+        client = Mock(host='https://canvas.example.edu')
+        with tempfile.TemporaryDirectory() as folder:
+            with patch('canvas_pocket.sync.capture', return_value=snapshot('synthetic')) as capture:
+                sync_course(client, '12', 100, Path(folder), include_linked_files=True)
+            capture.assert_called_once_with(client, '12', 100, include_linked_files=True)
+
     def test_invalid_previous_snapshot_is_not_silently_ignored(self):
         client = Mock(host='https://canvas.example.edu')
         with tempfile.TemporaryDirectory() as folder:

@@ -480,6 +480,19 @@ class E2E(unittest.TestCase):
         repeated = self.invoke('snapshot', '101', '--output', str(destination))
         self.assertEqual(repeated.returncode, 1)
 
+    def test_snapshot_can_index_linked_file_metadata_without_binaries(self):
+        destination = Path(self.tmp.name) / 'course-snapshot-files.json'
+        before = len(self.calls)
+        result = self.invoke('snapshot', '101', '--output', str(destination),
+                             '--include-linked-files')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        snapshot = json.loads(destination.read_text())
+        self.assertEqual(snapshot['linked_file_scope'], 'readable-references-only')
+        self.assertEqual(snapshot['linked_files'][0]['id'], 7)
+        self.assertNotIn('url', snapshot['linked_files'][0])
+        self.assertFalse(any(path == '/storage/synthetic-file'
+                             for _, path in self.calls[before:]))
+
     def test_page_index_fallback_over_tls_is_explicitly_partial(self):
         before = len(self.calls)
         raw = self.invoke('pages', '102')

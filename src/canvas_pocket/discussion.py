@@ -13,7 +13,8 @@ def prepare(client, course_id, topic_id, reply_to, message):
             (topic.get('context_id') is not None and
              str(topic['context_id']) != course_id)):
         raise CanvasError('Canvas returned a different topic; refusing post')
-    if topic.get('published') is False or topic.get('locked') or topic.get('locked_for_user'):
+    if (topic.get('published') is False or topic.get('locked') or topic.get('locked_for_user')
+            or topic.get('workflow_state') in ('unpublished', 'deleted')):
         raise CanvasError('Discussion topic is unpublished or locked')
     if not message.strip():
         raise CanvasError('Empty message refused')

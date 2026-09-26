@@ -28,7 +28,8 @@ class DiscussionTests(unittest.TestCase):
 
     def test_locked_or_mismatched_topic_rejected(self):
         for change in ({'id': 9}, {'context_id': 6}, {'locked': True},
-                       {'locked_for_user': True}, {'published': False}):
+                       {'locked_for_user': True}, {'published': False},
+                       {'workflow_state': 'unpublished'}):
             self.client.request.return_value = ({**self.topic, **change}, '')
             with self.assertRaises(CanvasError):
                 post(self.client, '7', '8', None, 'hello')

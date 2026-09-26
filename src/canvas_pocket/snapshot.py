@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from .client import CanvasError
+from .pages import visible
 
 SECRET_FIELDS = {'secure_params', 'access_token', 'refresh_token', 'client_secret',
                  'api_key', 'authorization', 'auth_token'}
@@ -44,7 +45,7 @@ def redact(value):
     return value
 
 
-def capture(client, course_id, max_pages):
+def capture(client, course_id, max_pages, include_linked_files=False):
     base = f'/api/v1/courses/{course_id}'
     course, _ = client.request(base + '?include[]=syllabus_body')
     if not isinstance(course, dict) or str(course.get('id')) != course_id:
@@ -60,24 +61,27 @@ def capture(client, course_id, max_pages):
             unavailable[name] = str(error)
             return []
 
-    assignments = listing('assignments', base + '/assignments?per_page=100')
-    modules = listing('modules', base + '/modules?per_page=100')
+    assignments = [item for item in listing('assignments', base + '/assignments?per_page=100')
+                   if visible(item)]
+    modules = [item for item in listing('modules', base + '/modules?per_page=100')
+               if visible(item)]
     for module in modules:
-        module['items'] = listing(f"module {module['id']} items",
-                                  base + f"/modules/{module['id']}/items?per_page=100")
+        module['items'] = [item for item in listing(f"module {module['id']} items",
+                                                  base + f"/modules/{module['id']}/items?per_page=100")
+                           if visible(item)]
     listed_pages = listing('pages', base + '/pages?per_page=100')
     if 'pages' in unavailable:
         listed_pages = [
             {'url': item['page_url'], 'title': item.get('title')}
             for module in modules for item in module.get('items', [])
             if item.get('type') == 'Page' and item.get('page_url') and
-            item.get('published') is not False and not item.get('locked_for_user')
+            visible(item)
         ]
     pages = []
     excluded_pages = 0
     seen_pages = set()
     for item in listed_pages:
-        if item.get('published') is False or item.get('locked_for_user'):
+        if not visible(item):
             excluded_pages += 1
             continue
         slug = item.get('url')
@@ -89,7 +93,7 @@ def capture(client, course_id, max_pages):
         seen_pages.add(slug)
         try:
             page, _ = client.request(base + '/pages/' + quote(slug, safe=''))
-            if page.get('published') is False or page.get('locked_for_user'):
+            if not visible(page):
                 excluded_pages += 1
             else:
                 pages.append(page)
@@ -97,18 +101,36 @@ def capture(client, course_id, max_pages):
             if error.status not in (403, 404):
                 raise
             unavailable[f'page {slug}'] = str(error)
-    announcements = listing('announcements', base + '/discussion_topics?per_page=100&only_announcements=true')
+    announcements = [item for item in listing(
+        'announcements', base + '/discussion_topics?per_page=100&only_announcements=true')
+        if item.get('published') is not False and item.get('state') != 'unpublished'
+        and item.get('workflow_state') not in ('unpublished', 'deleted')]
     listed_discussions = listing('discussions', base + '/discussion_topics?per_page=100&only_announcements=false')
     discussions = [topic for topic in listed_discussions
                    if topic.get('published') is not False and not topic.get('locked_for_user')
+                   and topic.get('state') != 'unpublished'
+                   and topic.get('workflow_state') not in ('unpublished', 'deleted')
                    and not topic.get('is_announcement')]
-    return redact({
+    if include_linked_files:
+        from .discovery import linked_files
+        try:
+            index = linked_files(client, course_id, max_pages)
+        except CanvasError as error:
+            if error.status not in (403, 404):
+                raise
+            unavailable['linked_files'] = str(error)
+            linked_items = []
+        else:
+            linked_items = index['files']
+            unresolved = sum(bool(item.get('metadata_unavailable')) for item in linked_items)
+            if index['skipped_sources'] or unresolved:
+                unavailable['linked_files'] = (f'{len(index["skipped_sources"])} source(s) skipped; '
+                                               f'{unresolved} file record(s) unavailable')
+    record = {
         'schema_version': 1,
         'captured_at': datetime.now(timezone.utc).isoformat(),
         'origin': client.host,
         'course_id': int(course_id),
-        'complete': not unavailable,
-        'unavailable': unavailable,
         'excluded_unpublished_or_locked_pages': excluded_pages,
         'course': course,
         'assignments': assignments,
@@ -116,7 +138,13 @@ def capture(client, course_id, max_pages):
         'pages': pages,
         'announcements': announcements,
         'discussions': discussions,
-    })
+    }
+    if include_linked_files:
+        record['linked_files'] = linked_items
+        record['linked_file_scope'] = 'readable-references-only'
+    record['complete'] = not unavailable
+    record['unavailable'] = unavailable
+    return redact(record)
 
 
 def validate_destination(path):
@@ -148,6 +176,6 @@ def save_private(path, data):
         raise
     return {'saved': str(path), 'complete': data['complete'],
             'counts': {name: len(data[name]) for name in
-                       ('assignments', 'modules', 'pages', 'announcements', 'discussions')
+                       ('assignments', 'modules', 'pages', 'announcements', 'discussions', 'linked_files')
                        if name in data},
             'unavailable': list(data['unavailable'])}

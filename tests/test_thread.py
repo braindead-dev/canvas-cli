@@ -49,6 +49,14 @@ class ThreadTests(unittest.TestCase):
             read_thread(client, '8', '9', 100)
         client.list.assert_not_called()
 
+    def test_refuses_unpublished_workflow_before_entries_request(self):
+        client = Mock()
+        client.request.return_value = ({'id': 9, 'context_id': 8,
+                                        'workflow_state': 'unpublished'}, '')
+        with self.assertRaisesRegex(CanvasError, 'unpublished'):
+            read_thread(client, '8', '9', 100)
+        client.list.assert_not_called()
+
     def test_denied_replies_leave_partial_result_without_retrying(self):
         client = Mock()
         client.request.return_value = ({'id': 9, 'context_id': 8, 'published': True}, '')

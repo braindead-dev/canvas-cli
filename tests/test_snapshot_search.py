@@ -15,6 +15,7 @@ class SnapshotSearchTests(unittest.TestCase):
                                'message': '<p>We discuss cells tomorrow.</p>'}],
             'discussions': [{'id': 5, 'title': 'Synthetic research prompt',
                              'message': '<p>Compare two methods.</p>'}],
+            'linked_files': [{'id': 6, 'display_name': 'Synthetic slides.pdf'}],
             'pages': [{'url': 'cell-guide', 'title': 'Cell guide',
                        'body': '<p>Cells contain mitochondria.</p>'}],
             'modules': [{'id': 3, 'name': 'Cell module',
@@ -51,3 +52,10 @@ class SnapshotSearchTests(unittest.TestCase):
         self.assertIn('predates discussion capture', legacy['note'])
         with self.assertRaises(CanvasError):
             search({**self.snapshot, 'discussions': None}, 'methods')
+
+    def test_linked_file_name_is_searchable_without_file_content(self):
+        result = search(self.snapshot, 'slides')
+        self.assertEqual(result['shown'][0]['kind'], 'linked_file')
+        self.assertEqual(result['shown'][0]['id'], 6)
+        with self.assertRaises(CanvasError):
+            search({**self.snapshot, 'linked_files': None}, 'slides')

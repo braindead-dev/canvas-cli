@@ -4,6 +4,7 @@ from html.parser import HTMLParser
 from urllib.parse import quote, urljoin, urlsplit
 
 from .client import CanvasError
+from .pages import visible
 
 
 def restricted(error):
@@ -89,6 +90,8 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
         modules = []
     page_slugs = set()
     for module in modules:
+        if not visible(module):
+            continue
         parts = module.get('items') or []
         if len(parts) < (module.get('items_count') or 0):
             try:
@@ -99,6 +102,8 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
                 skipped.append(f"module: {module.get('name', module.get('id'))}")
                 continue
         for item in parts:
+            if not visible(item):
+                continue
             source = f"module: {module.get('name', module.get('id'))}"
             if item.get('type') == 'File' and item.get('content_id'):
                 add([item['content_id']], source)
@@ -108,7 +113,7 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
         try:
             pages = client.list(base + '/pages?per_page=100', max_pages)
             for page in pages:
-                if page.get('published') is not False and not page.get('locked_for_user'):
+                if visible(page):
                     slug = page.get('url')
                     if slug:
                         page_slugs.add((slug, page.get('title') or slug))
@@ -124,6 +129,8 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
         skipped.append('assignments')
         assignments = []
     for assignment in assignments:
+        if not visible(assignment):
+            continue
         add(referenced_ids(assignment.get('description'), client.host, course_id),
             f"assignment: {assignment.get('name', assignment.get('id'))}")
     for kind, route in (
@@ -141,6 +148,7 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
             # A locked announcement can still be readable because replies are
             # closed. A locked discussion prompt may have an availability rule.
             if (not isinstance(topic, dict) or topic.get('published') is False or
+                    topic.get('workflow_state') in ('unpublished', 'deleted') or
                     (kind == 'discussions' and topic.get('locked_for_user'))):
                 continue
             label = 'announcement' if kind == 'announcements' else 'discussion prompt'
@@ -149,7 +157,7 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
     for slug, title in sorted(page_slugs):
         try:
             page, _ = client.request(base + '/pages/' + quote(slug, safe=''))
-            if page.get('published') is not False and not page.get('locked_for_user'):
+            if visible(page):
                 add(referenced_ids(page.get('body'), client.host, course_id), f'page: {title}')
         except CanvasError as error:
             if not restricted(error):

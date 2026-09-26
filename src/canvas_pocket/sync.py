@@ -10,7 +10,7 @@ from .snapshot import capture, save_private
 from .snapshot_diff import compare, read
 
 
-def sync_course(client, course_id, max_pages, directory):
+def sync_course(client, course_id, max_pages, directory, include_linked_files=False):
     directory = Path(directory).expanduser().resolve(strict=False)
     if any((parent / '.git').exists() for parent in (directory, *directory.parents)):
         raise CanvasError('Raw course snapshots cannot be saved inside a Git checkout')
@@ -26,7 +26,8 @@ def sync_course(client, course_id, max_pages, directory):
                      or str(previous.get('course_id')) != str(course_id)):
         raise CanvasError('Latest stored snapshot is for a different origin or course')
 
-    current = capture(client, course_id, max_pages)
+    current = capture(client, course_id, max_pages,
+                      include_linked_files=include_linked_files)
     changes = compare(previous, current) if previous else None
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     destination = directory / f'{prefix}{timestamp}-{secrets.token_hex(4)}.json'

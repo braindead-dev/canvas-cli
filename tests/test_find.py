@@ -77,7 +77,9 @@ class FindTests(unittest.TestCase):
                 if '/modules?' in route:
                     return [{'id': 4, 'name': 'Week one', 'items': [
                         {'id': 5, 'title': 'Synthetic worksheet'},
-                        {'id': 6, 'title': 'Unrelated item'}]}]
+                        {'id': 6, 'title': 'Unrelated item'},
+                        {'id': 7, 'title': 'Synthetic draft', 'published': False}]},
+                        {'id': 8, 'name': 'Synthetic locked module', 'state': 'locked'}]
                 raise AssertionError(route)
 
         assignment = find(Unfiltered(), '101', 'synthetic', selected='assignments')

@@ -21,8 +21,10 @@ def page_index(client, course_id, max_pages):
 
 
 def visible(item):
-    return (item.get('published') is not False
-            and item.get('state') != 'unpublished'
+    return (isinstance(item, dict)
+            and item.get('published') is not False
+            and item.get('state') not in ('unpublished', 'locked')
+            and item.get('workflow_state') not in ('unpublished', 'deleted')
             and not item.get('locked_for_user')
             and not item.get('hidden_for_user'))
 

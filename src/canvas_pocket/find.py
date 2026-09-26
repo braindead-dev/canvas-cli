@@ -3,6 +3,7 @@
 from urllib.parse import urlencode
 
 from .client import CanvasError
+from .pages import visible
 
 AREAS = (
     ('assignments', 'assignments'),
@@ -100,7 +101,7 @@ def find(client, course_id, query, max_pages=100, selected=None):
             continue
         coverage[area] = 'searched'
         for row in rows:
-            if not isinstance(row, dict) or row.get('published') is False or row.get('locked_for_user'):
+            if not isinstance(row, dict) or not visible(row):
                 continue
             title = row.get('display_name') or row.get('name') or row.get('title') or row.get('url') or ''
             kind = area[:-1] if area != 'discussions' else 'discussion'
@@ -112,7 +113,7 @@ def find(client, course_id, query, max_pages=100, selected=None):
                     coverage[area] = 'searched_module_names_items_may_be_omitted'
                 else:
                     for item in row['items']:
-                        if (isinstance(item, dict) and not item.get('locked_for_user') and
+                        if (isinstance(item, dict) and visible(item) and
                                 query.casefold() in str(item.get('title') or '').casefold()):
                             results.append({'area': 'module_item', 'id': item.get('id'),
                                             'title': item.get('title'), 'module_id': row.get('id'),

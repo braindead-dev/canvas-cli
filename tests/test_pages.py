@@ -13,6 +13,9 @@ class PageIndexTests(unittest.TestCase):
             {'url': 'one', 'title': 'One', 'published': True},
             {'url': 'draft', 'published': False},
             {'url': 'locked', 'locked_for_user': True},
+            {'url': 'state-locked', 'state': 'locked'},
+            {'url': 'workflow-draft', 'workflow_state': 'unpublished'},
+            None,
         ]
         result = page_index(client, '12', 100)
         self.assertTrue(result['complete'])

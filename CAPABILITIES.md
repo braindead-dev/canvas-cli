@@ -20,7 +20,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |
 | Quizzes / New Quizzes | Classic quizzes/quiz and New Quizzes new-quizzes/new-quiz metadata only | No question/attempt operations or automated exam-taking |
 | Uploads | Personal and assignment-file three-step uploads, preview + file hash + matching digest; separate credential-free storage transport | Live write validation only in a designated sandbox; larger files and richer destinations |
-| Local course snapshots | snapshot, one-command private sync, offline snapshot-diff, snapshot-search and snapshot-markdown; explicit incomplete state | Efficient per-resource incremental sync and richer Markdown projection |
+| Local course snapshots | snapshot, one-command private sync, optional linked-file metadata index, offline snapshot-diff, snapshot-search and snapshot-markdown; explicit incomplete state | Efficient per-resource incremental sync and richer Markdown projection |
 | Canvas course exports | Not implemented | Separate asynchronous jobs and polling; role-dependent |
 | Account administration / SIS | Not implemented | Separate high-risk/admin surface, not student defaults |
 | Video, Zoom, publisher tools | Links only | Separate providers/auth; not covered by Canvas credentials |

@@ -37,11 +37,15 @@ class SnapshotTests(unittest.TestCase):
             raise AssertionError(route)
         def listing(route, max_pages):
             if route.endswith('/assignments?per_page=100'):
-                return [{'id': 3}]
+                return [{'id': 3}, {'id': 30, 'published': False}]
             if route.endswith('/modules?per_page=100'):
-                return [{'id': 4, 'name': 'Week 1'}]
+                return [{'id': 4, 'name': 'Week 1'},
+                        {'id': 40, 'name': 'Unpublished', 'published': False},
+                        {'id': 41, 'name': 'Locked', 'state': 'locked'}]
             if route.endswith('/modules/4/items?per_page=100'):
-                return [{'id': 5, 'title': 'Welcome'}]
+                return [{'id': 5, 'title': 'Welcome'},
+                        {'id': 50, 'title': 'Draft', 'published': False},
+                        {'id': 51, 'title': 'Locked', 'locked_for_user': True}]
             if route.endswith('/pages?per_page=100'):
                 return [{'url': 'welcome', 'published': True},
                         {'url': 'draft', 'published': False},
@@ -60,8 +64,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn('announcements', result['unavailable'])
         self.assertEqual(result['excluded_unpublished_or_locked_pages'], 2)
         self.assertEqual(result['modules'][0]['items'][0]['title'], 'Welcome')
+        self.assertEqual([item['id'] for item in result['assignments']], [3])
+        self.assertEqual([item['id'] for item in result['modules']], [4])
+        self.assertEqual([item['id'] for item in result['modules'][0]['items']], [5])
         self.assertEqual([topic['id'] for topic in result['discussions']], [8])
         self.assertNotIn('draft', str(client.request.call_args_list))
+        self.assertFalse(any('/modules/40/items' in call.args[0] or '/modules/41/items' in call.args[0]
+                             for call in client.list.call_args_list))
 
     def test_private_save_refuses_git_and_overwrite(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -114,6 +123,32 @@ class SnapshotTests(unittest.TestCase):
             capture(client, '12', 100)
         client.list.assert_called_once()
 
+    def test_opt_in_linked_file_metadata_is_scoped_and_private(self):
+        client = Mock(host='https://canvas.example.edu')
+        client.request.return_value = ({'id': 12, 'syllabus_body': ''}, '')
+        client.list.return_value = []
+        with patch('canvas_pocket.discovery.linked_files', return_value={
+                'files': [{'id': 7, 'display_name': 'Synthetic reading.pdf', 'size': 20,
+                           'downloadable': True, 'sources': ['syllabus']}],
+                'skipped_sources': []}) as linked:
+            result = capture(client, '12', 100, include_linked_files=True)
+        linked.assert_called_once_with(client, '12', 100)
+        self.assertEqual(result['linked_file_scope'], 'readable-references-only')
+        self.assertEqual(result['linked_files'][0]['id'], 7)
+        self.assertTrue(result['complete'])
+        self.assertNotIn('url', result['linked_files'][0])
+
+    def test_partial_linked_file_scan_is_labeled_incomplete(self):
+        client = Mock(host='https://canvas.example.edu')
+        client.request.return_value = ({'id': 12}, '')
+        client.list.return_value = []
+        with patch('canvas_pocket.discovery.linked_files', return_value={
+                'files': [{'id': 7, 'metadata_unavailable': True}],
+                'skipped_sources': ['unreadable page']}):
+            result = capture(client, '12', 100, include_linked_files=True)
+        self.assertFalse(result['complete'])
+        self.assertIn('linked_files', result['unavailable'])
+
     def test_diff_reports_only_changed_fields_and_skips_incomplete_categories(self):
         old = {'schema_version': 1, 'origin': 'https://canvas.example.edu', 'course_id': 12,
                'captured_at': 'yesterday', 'unavailable': {'pages': 'list denied'},
@@ -137,6 +172,10 @@ class SnapshotTests(unittest.TestCase):
         new['discussions'] = [{'id': 8, 'title': 'Prompt', 'message': 'After'}]
         self.assertEqual(compare(old, new)['changes']['discussions']['changed'][0]['fields'],
                          ['message'])
+        old['linked_files'] = [{'id': 7, 'display_name': 'Synthetic.pdf', 'size': 10}]
+        new['linked_files'] = [{'id': 7, 'display_name': 'Synthetic.pdf', 'size': 11}]
+        self.assertEqual(compare(old, new)['changes']['linked_files']['changed'][0]['fields'],
+                         ['size'])
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'old.json'
             path.write_text(json.dumps(old))

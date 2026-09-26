@@ -27,6 +27,8 @@ class MarkdownTests(unittest.TestCase):
                                'message': '<p>Hello &amp; welcome.</p>'}],
             'discussions': [{'id': 6, 'title': 'Synthetic prompt',
                              'message': '<p>Explain your reasoning.</p>'}],
+            'linked_files': [{'id': 7, 'display_name': 'Synthetic reading.pdf',
+                              'downloadable': True}],
             'modules': [{'id': 5, 'name': 'Week 1', 'items': [{'title': 'Introduction'}]}],
             'pages': [{'url': 'intro', 'title': 'Start',
                        'body': '<style>.hidden{}</style><p>First page.</p>'}],
@@ -40,6 +42,8 @@ class MarkdownTests(unittest.TestCase):
         self.assertIn('Hello & welcome', text)
         self.assertIn('## Discussion prompts', text)
         self.assertIn('Explain your reasoning.', text)
+        self.assertIn('## Linked files', text)
+        self.assertIn('Synthetic reading.pdf (available)', text)
         self.assertIn('Some content could not be read', text)
         self.assertNotIn('do_not_render', text)
         self.assertNotIn('.hidden', text)

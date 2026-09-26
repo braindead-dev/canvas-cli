@@ -14,6 +14,7 @@ def _documents(snapshot):
             ('assignment', 'name', 'description', 'id'),
             ('announcement', 'title', 'message', 'id'),
             ('discussion', 'title', 'message', 'id'),
+            ('linked_file', 'display_name', None, 'id'),
             ('page', 'title', 'body', 'url')):
         for item in snapshot.get(kind + 's', []):
             if isinstance(item, dict):
@@ -38,7 +39,8 @@ def search(snapshot, query, limit=20):
     for name in ('assignments', 'announcements', 'pages', 'modules'):
         if not isinstance(snapshot.get(name), list):
             raise CanvasError('Malformed snapshot content')
-    if 'discussions' in snapshot and not isinstance(snapshot['discussions'], list):
+    if any(name in snapshot and not isinstance(snapshot[name], list)
+           for name in ('discussions', 'linked_files')):
         raise CanvasError('Malformed snapshot content')
     hits = []
     for kind, identity, title, body in _documents(snapshot):

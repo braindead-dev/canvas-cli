@@ -108,6 +108,37 @@ class DiscoveryTests(unittest.TestCase):
                                             'metadata_not_checked': True}])
         client.request.assert_called_once()
 
+    def test_locked_or_unpublished_sources_are_not_followed(self):
+        client = Mock(host='https://canvas.example.edu')
+        client.request.return_value = ({'syllabus_body': ''}, '')
+
+        def listing(route, _max_pages):
+            if '/modules?' in route:
+                return [{'id': 1, 'name': 'Draft', 'published': False,
+                         'items': [{'type': 'File', 'content_id': 90}]},
+                        {'id': 3, 'name': 'Locked module', 'state': 'locked',
+                         'items': [{'type': 'File', 'content_id': 96}]},
+                        {'id': 2, 'name': 'Visible', 'published': True,
+                         'items': [{'type': 'File', 'content_id': 91, 'published': False},
+                                   {'type': 'File', 'content_id': 92, 'locked_for_user': True},
+                                   {'type': 'File', 'content_id': 97, 'hidden_for_user': True},
+                                   {'type': 'File', 'content_id': 98, 'state': 'locked'},
+                                   {'type': 'File', 'content_id': 93, 'published': True}]}]
+            if '/assignments?' in route:
+                return [{'id': 4, 'published': False,
+                         'description': '<a href="/courses/123/files/94">Draft</a>'},
+                        {'id': 5, 'locked_for_user': True,
+                         'description': '<a href="/courses/123/files/95">Locked</a>'},
+                        {'id': 6, 'hidden_for_user': True,
+                         'description': '<a href="/courses/123/files/99">Hidden</a>'}]
+            if '/discussion_topics?' in route:
+                return []
+            raise AssertionError(route)
+
+        client.list.side_effect = listing
+        result = linked_files(client, '123', 100, resolve=False)
+        self.assertEqual([item['id'] for item in result['files']], [93])
+
     def test_all_pages_scans_published_unmoduled_pages_only(self):
         client = Mock(host='https://canvas.example.edu')
         def request(route):
