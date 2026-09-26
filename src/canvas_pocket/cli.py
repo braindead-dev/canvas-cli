@@ -561,6 +561,14 @@ def run(args):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and all(key in data for key in
+                                       ('read', 'local_write', 'canvas_write', 'auth', 'limitations')):
+        sections = (('Read-only', 'read'), ('Local writes', 'local_write'),
+                    ('Canvas writes', 'canvas_write'), ('Authentication', 'auth'),
+                    ('Limitations', 'limitations'))
+        return '\n\n'.join(f'{title} ({len(data[key])})\n' +
+                           '\n'.join(f'  {item}' for item in data[key])
+                           for title, key in sections)
     if isinstance(data, dict) and 'topic_id' in data and 'entries' in data and 'unavailable' in data:
         lines = [f"{data.get('title') or 'Discussion'}: {len(data['entries'])} top-level entry(s)."]
         for entry in data['entries']:

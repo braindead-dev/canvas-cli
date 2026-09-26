@@ -442,6 +442,11 @@ class E2E(unittest.TestCase):
     def test_capabilities_without_credentials(self):
         r = self.invoke('capabilities')
         self.assertIn('get', json.loads(r.stdout)['read'])
+        brief = self.invoke('capabilities', '--format', 'brief')
+        self.assertEqual(brief.returncode, 0, brief.stderr)
+        self.assertIn('Read-only (', brief.stdout)
+        self.assertIn('Canvas writes (', brief.stdout)
+        self.assertNotIn('"read":', brief.stdout)
 
     def test_new_read_commands_over_tls(self):
         before = len(self.calls)
