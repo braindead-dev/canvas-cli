@@ -27,6 +27,8 @@ For ephemeral/headless use, supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a 
 canvas-pocket courses
 canvas-pocket courses --active
 canvas-pocket doctor 123
+canvas-pocket find 123 --query 'paper'
+canvas-pocket find 123 --query 'lab' --area assignments
 canvas-pocket favorites
 canvas-pocket groups
 canvas-pocket course-groups 123
@@ -124,6 +126,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 `my-files` and `file-info` use the [Files API](https://developerdocs.instructure.com/services/canvas/resources/files) to locate and verify an accessible uploaded file ID. `my-files --search` filters by partial filename and follows pagination; `file-info` requires an exact numeric ID. These are read-only and may show personal filenames in terminal output.
 
 `doctor COURSE` makes small, sequential GET requests to a visible course's major read APIs and reports only reachability states, not course content. A 403 or 404 may reflect role, publication, or institution configuration, and a readable endpoint does not guarantee every item is visible. It stops probing on a rate limit. This is a diagnostic map, not a way around access controls.
+
+`find COURSE --query TEXT` searches visible titles/names through the documented assignment, discussion, page, file and module filters. It returns IDs, titles and due dates, not bodies, and reports endpoints that were restricted or not found. Use `--area` to search one area faster. Canvas can omit module items from a module response; the result flags that incomplete coverage rather than claiming there were no matches. For body-text searches, first create a private snapshot and use `snapshot-search` offline.
 
 See [the capability map](CAPABILITIES.md) for implemented features, permission boundaries and the broader roadmap. The expert `get` command extends read coverage without exposing arbitrary write methods.
 

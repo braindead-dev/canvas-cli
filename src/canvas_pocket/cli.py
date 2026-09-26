@@ -74,6 +74,10 @@ def parser():
     course_groups.add_argument('course', type=identifier)
     doctor = sub.add_parser('doctor', help='Read-only course API reachability check without content output')
     doctor.add_argument('course', type=identifier)
+    finder = sub.add_parser('find', help='Search visible titles across several areas of one course')
+    finder.add_argument('course', type=identifier)
+    finder.add_argument('--query', required=True)
+    finder.add_argument('--area', choices=('assignments', 'discussions', 'pages', 'files', 'modules'))
     my_files = sub.add_parser('my-files', help='List your personal Canvas files')
     my_files.add_argument('--search', help='Filter by partial filename')
     file_info = sub.add_parser('file-info', help='Get one accessible Canvas file record')
@@ -348,6 +352,9 @@ def run(args):
     if args.command == 'doctor':
         from .doctor import course_doctor
         return course_doctor(client, args.course)
+    if args.command == 'find':
+        from .find import find
+        return find(client, args.course, args.query, args.max_pages, args.area)
     if args.command == 'my-files':
         route = '/api/v1/users/self/files?per_page=100'
         if args.search:
@@ -490,6 +497,16 @@ def run(args):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'coverage' in data and 'results' in data:
+        lines = [f"{len(data['results'])} result(s) in course {data['course_id']}."]
+        for item in data['results']:
+            suffix = f"  due {item['due_at']}" if item.get('due_at') else ''
+            lines.append(f"{item['area']} {item['id']}: {item['title']}{suffix}")
+        if not data.get('complete'):
+            missing = ', '.join(area for area, status in data['coverage'].items()
+                                if status != 'searched')
+            lines.append(f'Coverage incomplete: {missing}. See JSON for details.')
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'shown' in data and 'total_matches' in data:
         lines = [f"{data['total_matches']} match(es) in snapshot; showing {len(data['shown'])}."]
         if not data.get('snapshot_complete'):

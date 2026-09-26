@@ -55,6 +55,9 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/assignments?per_page=100':
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()}]
+                elif self.path == '/api/v1/courses/101/assignments?per_page=100&search_term=Synthetic':
+                    data = [{'id': 88, 'name': 'Synthetic paper',
+                             'due_at': '2026-10-01T00:00:00Z'}]
                 elif self.path == '/api/v1/courses/101/assignments?include%5B%5D=submission&per_page=100':
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
@@ -496,3 +499,10 @@ class E2E(unittest.TestCase):
         self.assertIn('1 match(es)', result.stdout)
         self.assertIn('Snapshot incomplete', result.stdout)
         self.assertIn('Read about synthetic biology.', result.stdout)
+
+    def test_live_title_find_single_area(self):
+        result = self.invoke('--format', 'brief', 'find', '101', '--query', 'Synthetic',
+                             '--area', 'assignments')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('1 result(s) in course 101', result.stdout)
+        self.assertIn('assignment 88: Synthetic paper', result.stdout)
