@@ -519,11 +519,14 @@ def run(args):
     if args.command == 'download':
         from .download import download
         metadata = client.request(base + f'/files/{args.file}')[0]
+        if not isinstance(metadata, dict) or str(metadata.get('id')) != args.file:
+            raise CanvasError('Canvas returned a different file; refusing download')
         if metadata.get('locked_for_user') or metadata.get('hidden_for_user'):
             raise CanvasError('File is unavailable to this user')
         if not metadata.get('url'):
             raise CanvasError('Canvas did not provide a download URL')
-        return download(metadata['url'], args.output, args.max_bytes)
+        return download(metadata['url'], args.output, args.max_bytes,
+                        expected_bytes=metadata.get('size'))
     if args.command in ('assignment', 'page', 'module-items'):
         item = quote(args.item, safe='')
         if args.command == 'module-items':

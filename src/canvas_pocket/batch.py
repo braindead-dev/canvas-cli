@@ -87,6 +87,8 @@ def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
     for item in planned:
         try:
             metadata, _ = client.request(f'/api/v1/courses/{course_id}/files/{item["id"]}')
+            if not isinstance(metadata, dict) or str(metadata.get('id')) != str(item['id']):
+                raise CanvasError('Canvas returned a different file')
             if (metadata.get('locked_for_user') or metadata.get('hidden_for_user') or
                     not metadata.get('url')):
                 raise CanvasError('File became unavailable')
@@ -98,7 +100,8 @@ def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
             remaining = max_bytes - used
             if remaining < 1 or (isinstance(metadata.get('size'), int) and metadata['size'] > remaining):
                 raise CanvasError('Batch byte limit reached')
-            result = download(metadata['url'], target / item['name'], remaining)
+            result = download(metadata['url'], target / item['name'], remaining,
+                              expected_bytes=item['size'])
             used += result['bytes']
             saved.append({'id': item['id'], 'name': item['name'], 'bytes': result['bytes']})
         except CanvasError as error:

@@ -20,7 +20,7 @@ class BatchTests(unittest.TestCase):
                                          {'id': 8, 'downloadable': False}],
                                'skipped_sources': ['files tab']}
         client = Mock()
-        client.request.return_value = ({'url': 'https://files.example.edu/signed', 'size': 30,
+        client.request.return_value = ({'id': 7, 'url': 'https://files.example.edu/signed', 'size': 30,
                                         'display_name': 'Read me.pdf'}, '')
         download.return_value = {'bytes': 30}
         with tempfile.TemporaryDirectory() as folder:
@@ -35,7 +35,8 @@ class BatchTests(unittest.TestCase):
                                     yes=True, confirm=preview['confirm'])
             self.assertEqual(result['bytes'], 30)
             download.assert_called_once_with('https://files.example.edu/signed',
-                                             Path(folder).resolve() / '7-Read-me.pdf', 100)
+                                             Path(folder).resolve() / '7-Read-me.pdf', 100,
+                                             expected_bytes=30)
 
     @patch('canvas_pocket.batch.linked_files')
     def test_limits_and_git_guard_fail_before_download(self, linked):
@@ -97,7 +98,7 @@ class BatchTests(unittest.TestCase):
                                           'size': 10, 'updated_at': 'before',
                                           'downloadable': True}], 'skipped_sources': []}
         client = Mock()
-        client.request.return_value = ({'url': 'https://files.example.edu/signed',
+        client.request.return_value = ({'id': 1, 'url': 'https://files.example.edu/signed',
                                         'display_name': 'one.pdf', 'size': 10,
                                         'updated_at': 'after'}, '')
         with tempfile.TemporaryDirectory() as folder:
@@ -116,7 +117,7 @@ class BatchTests(unittest.TestCase):
             {'id': 3, 'display_name': 'locked.pdf', 'downloadable': False}],
             'skipped_sources': []}
         client = Mock()
-        client.request.return_value = ({'url': 'https://files.example.edu/signed',
+        client.request.return_value = ({'id': 2, 'url': 'https://files.example.edu/signed',
                                         'display_name': 'two.pdf', 'size': 10}, '')
         download.return_value = {'bytes': 10}
         with tempfile.TemporaryDirectory() as folder:

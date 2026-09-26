@@ -91,6 +91,9 @@ class E2E(unittest.TestCase):
                     data = {'id': 8, 'display_name': 'synthetic-reading.pdf', 'size': 20,
                             'updated_at': '2026-09-25T00:00:00Z',
                             'url': f'https://localhost:{cls.server.server_port}/storage/synthetic-file'}
+                elif self.path == '/api/v1/courses/103/files/9':
+                    data = {'id': 9, 'display_name': 'synthetic-truncated.pdf', 'size': 25,
+                            'url': f'https://localhost:{cls.server.server_port}/storage/synthetic-file'}
                 elif self.path == '/api/v1/courses/101/assignments/88/submissions/self?include[]=submission_comments&include[]=rubric_assessment':
                     data = {'assignment_id': 88, 'workflow_state': 'submitted',
                             'submitted_at': '2026-09-01T12:00:00Z', 'grade': 'A',
@@ -381,6 +384,13 @@ class E2E(unittest.TestCase):
         self.assertEqual([call for call in self.calls[before:]
                           if call[1] == '/storage/synthetic-file'],
                          [('GET', '/storage/synthetic-file')])
+
+    def test_single_download_refuses_short_success_response(self):
+        destination = Path(self.tmp.name) / 'synthetic-truncated.pdf'
+        result = self.invoke('download', '103', '9', '--output', str(destination))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('differs from Canvas metadata', result.stderr)
+        self.assertFalse(destination.exists())
 
     def test_assignment_submission_preview_and_confirm_over_tls(self):
         source = Path(self.tmp.name) / 'project-url.txt'

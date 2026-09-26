@@ -8,12 +8,18 @@ from urllib.request import Request, build_opener
 from .client import CanvasError, NoRedirect
 
 
-def download(url, destination, max_bytes=100 * 1024 * 1024, transport=None):
+def download(url, destination, max_bytes=100 * 1024 * 1024, transport=None,
+             expected_bytes=None):
     transport = transport or build_opener(NoRedirect()).open
     target = Path(destination)
     # Never infer output paths from untrusted server filenames.
     if max_bytes < 1:
         raise CanvasError('Download byte limit must be positive')
+    if expected_bytes is not None:
+        if not isinstance(expected_bytes, int) or isinstance(expected_bytes, bool) or expected_bytes < 0:
+            raise CanvasError('Canvas returned an invalid file size')
+        if expected_bytes > max_bytes:
+            raise CanvasError('Canvas file size exceeds download byte limit')
     for _ in range(6):
         u = urlsplit(url)
         if u.scheme != 'https' or not u.hostname or u.username or u.password:
@@ -45,6 +51,8 @@ def download(url, destination, max_bytes=100 * 1024 * 1024, transport=None):
                         if total > max_bytes:
                             raise CanvasError('Download exceeds byte limit; partial file removed')
                         out.write(chunk)
+                    if expected_bytes is not None and total != expected_bytes:
+                        raise CanvasError('Download size differs from Canvas metadata; partial file removed')
             return {'saved': str(target), 'bytes': total}
         except Exception:
             if created:

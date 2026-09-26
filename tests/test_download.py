@@ -29,6 +29,22 @@ class DownloadTests(unittest.TestCase):
                 download('https://files.example/file', path, 2, lambda *a, **kw: Response(b'large'))
             self.assertFalse(path.exists())
 
+    def test_short_success_response_is_removed(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'out'
+            with self.assertRaisesRegex(CanvasError, 'differs from Canvas metadata'):
+                download('https://files.example/file', path, 100,
+                         lambda *a, **kw: Response(b'short'), expected_bytes=10)
+            self.assertFalse(path.exists())
+
+    def test_invalid_or_too_large_advertised_size_stops_before_transport(self):
+        def unexpected(*args, **kwargs):
+            self.fail('Transport should not be used')
+        for size in (-1, '10', True, 101):
+            with self.subTest(size=size), self.assertRaises(CanvasError):
+                download('https://files.example/file', 'unused', 100, unexpected,
+                         expected_bytes=size)
+
     def test_redirect_cannot_downgrade(self):
         def send(req, **kw):
             raise HTTPError(req.full_url, 302, '', {'Location': 'http://files.example/file'}, None)
