@@ -1,5 +1,6 @@
 import argparse
 import getpass
+import hashlib
 import html
 import json
 import os
@@ -77,6 +78,11 @@ def parser():
     inbox.add_argument('--course', type=identifier, help='Filter to a course context')
     conversation = sub.add_parser('conversation', help='Read one Inbox thread without marking it read')
     conversation.add_argument('conversation', type=identifier)
+    reply = sub.add_parser('inbox-reply', help='Preview an Inbox reply; sending requires a matching digest')
+    reply.add_argument('conversation', type=identifier)
+    reply.add_argument('--message-file', required=True, type=Path)
+    reply.add_argument('--confirm', help='Digest returned by the preview')
+    reply.add_argument('--yes', action='store_true', help='Send only if --confirm matches the fresh preview')
     sub.add_parser('todo', help='Your Canvas to-do items')
     sub.add_parser('upcoming', help='Upcoming assignments and events')
     calendar = sub.add_parser('calendar', help='Events or assignments in a date window')
@@ -159,7 +165,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -258,6 +264,31 @@ def run(args):
         return client.list('/api/v1/conversations?' + urlencode(query), args.max_pages)
     if args.command == 'conversation':
         return client.request(f'/api/v1/conversations/{args.conversation}?auto_mark_as_read=false')[0]
+    if args.command == 'inbox-reply':
+        if bool(args.confirm) != bool(args.yes):
+            raise CanvasError('Sending requires both --yes and --confirm from a prior preview')
+        conversation = client.request(
+            f'/api/v1/conversations/{args.conversation}?auto_mark_as_read=false')[0]
+        if str(conversation.get('id')) != args.conversation:
+            raise CanvasError('Canvas returned a different conversation; refusing to send')
+        participants = conversation.get('participants')
+        if not isinstance(participants, list) or not participants:
+            raise CanvasError('Canvas did not identify thread participants; refusing to send')
+        message = args.message_file.read_text(encoding='utf-8')
+        if not message.strip():
+            raise CanvasError('Empty message refused')
+        route = f'/api/v1/conversations/{args.conversation}/add_message'
+        body = {'body': message}
+        preview = {'conversation_id': args.conversation, 'subject': conversation.get('subject'),
+                   'participants': participants, 'audience': conversation.get('audience'),
+                   'route': route, 'body': body}
+        digest = hashlib.sha256(json.dumps(preview, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        if not args.yes:
+            return {'dry_run': True, **preview, 'confirm': digest,
+                    'next': 'Review participants and body, then repeat with --yes --confirm DIGEST to send.'}
+        if args.confirm != digest:
+            raise CanvasError('Preview changed (thread or message); review a fresh preview before sending')
+        return client.request(route, 'POST', body)[0]
     if args.command == 'upcoming':
         return client.list('/api/v1/users/self/upcoming_events?per_page=100', args.max_pages)
     if args.command == 'overview':

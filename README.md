@@ -31,6 +31,7 @@ canvas-pocket groups
 canvas-pocket course-groups 123
 canvas-pocket inbox --scope unread --course 123
 canvas-pocket conversation 456
+canvas-pocket inbox-reply 456 --message-file reply.txt
 canvas-pocket overview
 canvas-pocket --format brief overview
 canvas-pocket deadlines --days 30
@@ -85,7 +86,7 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 
 `snapshot-diff` works offline and reports added/removed resources and which fields changed, without printing full assignment descriptions or page bodies. It skips categories that were incomplete in either snapshot, avoiding false “removed” claims. It does not need a Canvas credential.
 
-`inbox` lists your Canvas conversations; `conversation` fetches one with `auto_mark_as_read=false`. The [Canvas Conversations API](https://developerdocs.instructure.com/services/canvas/resources/conversations) otherwise marks an unread thread read by default on a GET. The transport blocks that unsafe GET even through the expert `get` command unless the query explicitly sets `auto_mark_as_read=false`. These commands do not send or alter messages. `groups` returns only your active groups; `course-groups` returns only groups visible to your Canvas role.
+`inbox` lists your Canvas conversations; `conversation` fetches one with `auto_mark_as_read=false`. The [Canvas Conversations API](https://developerdocs.instructure.com/services/canvas/resources/conversations) otherwise marks an unread thread read by default on a GET. The transport blocks that unsafe GET even through the expert `get` command unless the query explicitly sets `auto_mark_as_read=false`. These reads do not send or alter messages. `inbox-reply` previews the current participants and exact message and also uses the safe GET. It only sends with both `--yes` and a matching `--confirm` digest from that preview, and refuses to send if the message or thread audience changes between preview and execution. This send route has synthetic TLS tests but has not been exercised against a live account. `groups` returns only your active groups; `course-groups` returns only groups visible to your Canvas role.
 
 `news` lists recently posted announcements across active or selected courses using Canvas's dedicated [Announcements API](https://developerdocs.instructure.com/services/canvas/resources/announcements). It fetches each course separately so one inaccessible course does not hide all the others, and reports any unavailable course. JSON includes the full visible announcement body; brief output is a title/date index. The date window is based on posting time, not subsequent edits, so older edited announcements need a longer `--days` window.
 
@@ -100,9 +101,13 @@ canvas-pocket post 123 456 --message-file reply.txt
 # Review the JSON preview. Nothing was posted.
 canvas-pocket post 123 456 --message-file reply.txt --yes
 # Add --reply-to 789 for a reply to an entry.
+
+canvas-pocket inbox-reply 456 --message-file reply.txt
+# Read the preview and copy its confirm digest.
+canvas-pocket inbox-reply 456 --message-file reply.txt --yes --confirm DIGEST
 ```
 
-Input is plain UTF-8 text, safely escaped to HTML. This can publish real coursework under your account. Follow your course rules and review the recipient/topic and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The CLI does not take quizzes, submit assignments, change grades, or bypass initial-post restrictions.
+Discussion-post input is plain UTF-8 text, safely escaped to HTML. Inbox replies use the plain UTF-8 body specified by the Canvas API. Both can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The CLI does not take quizzes, submit assignments, change grades, or bypass initial-post restrictions.
 
 ## Privacy and security
 

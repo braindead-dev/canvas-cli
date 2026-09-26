@@ -99,7 +99,9 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/conversations?per_page=100&scope=unread':
                     data = [{'id': 12, 'subject': 'Synthetic inbox thread'}]
                 elif self.path == '/api/v1/conversations/12?auto_mark_as_read=false':
-                    data = {'id': 12, 'messages': [{'body': 'Synthetic private message'}]}
+                    data = {'id': 12, 'subject': 'Synthetic thread',
+                            'participants': [{'id': 7, 'name': 'Synthetic recipient'}], 'audience': [7],
+                            'messages': [{'body': 'Synthetic private message'}]}
                 elif self.path.startswith('/api/v1/announcements?'):
                     data = [{'id': 60, 'title': 'Synthetic announcement',
                              'posted_at': '2026-09-25T12:00:00Z', 'message': '<p>Synthetic update</p>'}]
@@ -274,3 +276,20 @@ class E2E(unittest.TestCase):
         self.assertEqual(self.calls[before:], [
             ('GET', '/api/v1/conversations?per_page=100&scope=unread'),
             ('GET', '/api/v1/conversations/12?auto_mark_as_read=false')])
+
+    def test_inbox_reply_preview_and_confirm_over_tls(self):
+        message = Path(self.tmp.name) / 'inbox-reply.txt'
+        message.write_text('Synthetic reply')
+        before = len(self.calls)
+        command = ('inbox-reply', '12', '--message-file', str(message))
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertTrue(data['dry_run'])
+        self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/conversations/12?auto_mark_as_read=false')])
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(self.calls[-2:], [
+            ('GET', '/api/v1/conversations/12?auto_mark_as_read=false'),
+            ('POST', '/api/v1/conversations/12/add_message')])

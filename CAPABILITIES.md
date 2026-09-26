@@ -16,7 +16,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
 | Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), advanced get where authorized | Aggregate student views and upload/submit workflow with destination review |
 | Rubrics and feedback | advanced get where authorized | Summaries and submission comments |
-| Inbox | inbox, conversation (explicit no-read-state-change), advanced get with transport guard | Send/reply with previews |
+| Inbox | inbox, conversation (explicit no-read-state-change), inbox-reply (preview + matching digest required), advanced get with transport guard | New-message composition; live write validation only in a designated sandbox |
 | Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |
 | Quizzes / New Quizzes | Not a first-class workflow | Different APIs and permissions; no automated exam-taking |
 | Uploads | Not implemented | Multi-step upload handshake; separate credential-free storage transport |

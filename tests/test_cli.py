@@ -125,5 +125,36 @@ class CLITests(unittest.TestCase):
         self.assertEqual(client.return_value.list.call_args.args[0],
                          '/api/v1/users/self/favorites/courses?per_page=100')
 
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
+    def test_inbox_reply_requires_preview_digest_and_stable_audience(self, client):
+        thread = {'id': 9, 'subject': 'Synthetic thread',
+                  'participants': [{'id': 7, 'name': 'Recipient'}], 'audience': [7]}
+        client.return_value.request.return_value = (thread, '')
+        with tempfile.TemporaryDirectory() as folder:
+            message = Path(folder) / 'reply.txt'
+            message.write_text('Synthetic response')
+            command = ['inbox-reply', '9', '--message-file', str(message)]
+            preview = run(parser().parse_args(command))
+            self.assertTrue(preview['dry_run'])
+            self.assertEqual(preview['body'], {'body': 'Synthetic response'})
+            client.return_value.request.assert_called_once_with(
+                '/api/v1/conversations/9?auto_mark_as_read=false')
+            with self.assertRaisesRegex(CanvasError, 'both --yes and --confirm'):
+                run(parser().parse_args(command + ['--yes']))
+            client.return_value.request.reset_mock()
+            changed = {**thread, 'audience': [7, 8]}
+            client.return_value.request.return_value = (changed, '')
+            with self.assertRaisesRegex(CanvasError, 'Preview changed'):
+                run(parser().parse_args(command + ['--yes', '--confirm', preview['confirm']]))
+            client.return_value.request.assert_called_once_with(
+                '/api/v1/conversations/9?auto_mark_as_read=false')
+            client.return_value.request.side_effect = [(thread, ''), ({'id': 9}, '')]
+            sent = run(parser().parse_args(command + ['--yes', '--confirm', preview['confirm']]))
+            self.assertEqual(sent['id'], 9)
+            self.assertEqual(client.return_value.request.call_args.args,
+                             ('/api/v1/conversations/9/add_message', 'POST',
+                              {'body': 'Synthetic response'}))
+
 
 if __name__ == '__main__': unittest.main()
