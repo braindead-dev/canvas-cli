@@ -31,8 +31,6 @@ def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
         raise CanvasError('Batch file and byte limits must be positive')
     discovered = linked_files(client, course_id, max_pages, resolve=True, all_pages=all_pages)
     selected = [file for file in discovered['files'] if file.get('downloadable')]
-    if len(selected) > max_files:
-        raise CanvasError(f'{len(selected)} downloadable files exceed --max-files {max_files}; no files downloaded')
     planned = []
     for file in selected:
         filename = safe_filename(file['id'], file.get('display_name'))
@@ -41,16 +39,24 @@ def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
             raise CanvasError(f'Destination already exists for file {file["id"]}; no files downloaded')
         planned.append({'id': file['id'], 'name': filename, 'size': file.get('size')})
     known_bytes = sum(item['size'] for item in planned if isinstance(item['size'], int))
+    limit_issues = []
+    if len(planned) > max_files:
+        limit_issues.append(f'{len(planned)} downloadable files exceed --max-files {max_files}')
     if known_bytes > max_bytes:
-        raise CanvasError('Known file sizes exceed --max-bytes; no files downloaded')
+        limit_issues.append(f'{known_bytes} known bytes exceed --max-bytes {max_bytes}')
     preview = {'dry_run': not yes, 'course_id': int(course_id), 'destination': str(target),
                'files': planned, 'known_bytes': known_bytes,
                'skipped_unavailable': len(discovered['files']) - len(selected),
                'skipped_sources': discovered['skipped_sources'],
-               'max_bytes': max_bytes}
+               'max_files': max_files, 'max_bytes': max_bytes,
+               'within_limits': not limit_issues, 'limit_issues': limit_issues}
     if not yes:
-        preview['next'] = 'Review filenames and limits, then repeat with --yes to download.'
+        preview['next'] = ('Increase the listed limits and review a fresh preview before --yes.'
+                           if limit_issues else
+                           'Review filenames and limits, then repeat with --yes to download.')
         return preview
+    if limit_issues:
+        raise CanvasError('; '.join(limit_issues) + '; no files downloaded')
     saved, used = [], 0
     for item in planned:
         try:

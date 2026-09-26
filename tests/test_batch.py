@@ -27,6 +27,7 @@ class BatchTests(unittest.TestCase):
             self.assertTrue(preview['dry_run'])
             self.assertEqual(preview['skipped_unavailable'], 1)
             self.assertEqual(preview['files'][0]['name'], '7-Read-me.pdf')
+            self.assertTrue(preview['within_limits'])
             client.request.assert_not_called()
             download.assert_not_called()
             result = batch_download(client, '12', folder, 100, 2, 100, yes=True)
@@ -40,12 +41,32 @@ class BatchTests(unittest.TestCase):
                                           'downloadable': True}], 'skipped_sources': []}
         with tempfile.TemporaryDirectory() as folder:
             client = Mock()
+            preview = batch_download(client, '12', folder, 100, 1, 100)
+            self.assertFalse(preview['within_limits'])
+            self.assertEqual(len(preview['files']), 1)
+            self.assertIn('--max-bytes', preview['limit_issues'][0])
             with self.assertRaises(CanvasError):
                 batch_download(client, '12', folder, 100, 1, 100, yes=True)
             client.request.assert_not_called()
             (Path(folder) / '.git').mkdir()
             with self.assertRaises(CanvasError):
                 directory(folder)
+
+    @patch('canvas_pocket.batch.linked_files')
+    def test_preview_can_show_more_files_than_execution_limit(self, linked):
+        linked.return_value = {'files': [
+            {'id': 1, 'display_name': 'one.pdf', 'size': 10, 'downloadable': True},
+            {'id': 2, 'display_name': 'two.pdf', 'size': 10, 'downloadable': True}],
+            'skipped_sources': []}
+        with tempfile.TemporaryDirectory() as folder:
+            client = Mock()
+            preview = batch_download(client, '12', folder, 100, 1, 100)
+            self.assertFalse(preview['within_limits'])
+            self.assertEqual(len(preview['files']), 2)
+            self.assertIn('--max-files', preview['limit_issues'][0])
+            with self.assertRaises(CanvasError):
+                batch_download(client, '12', folder, 100, 1, 100, yes=True)
+            client.request.assert_not_called()
 
 
 if __name__ == '__main__':
