@@ -7,12 +7,21 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 from canvas_pocket.client import CanvasError
-from canvas_pocket.snapshot import capture, save_private, validate_destination
+from canvas_pocket.snapshot import capture, redact, save_private, validate_destination
 from canvas_pocket.snapshot_diff import compare, read
 from canvas_pocket.cli import parser, run
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_secret_fields_and_signed_queries_are_removed(self):
+        source = {'secure_params': 'jwt-secret', 'nested': [
+            {'access_token': 'private',
+             'url': 'https://files.example.edu/item?wrap=1&verifier=secret&X-Amz-Signature=private'}]}
+        result = redact(source)
+        self.assertNotIn('secure_params', result)
+        self.assertNotIn('access_token', result['nested'][0])
+        self.assertEqual(result['nested'][0]['url'], 'https://files.example.edu/item?wrap=1')
+
     def test_capture_records_partial_access_and_skips_unpublished_pages(self):
         client = Mock(host='https://canvas.example.edu')
         def request(route):

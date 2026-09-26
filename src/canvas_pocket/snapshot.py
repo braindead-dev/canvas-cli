@@ -4,9 +4,35 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from .client import CanvasError
+
+
+SECRET_FIELDS = {'secure_params', 'access_token', 'refresh_token', 'client_secret',
+                 'api_key', 'authorization', 'auth_token'}
+SECRET_QUERY = {'access_token', 'token', 'auth_token', 'verifier', 'signature',
+                'key-pair-id', 'policy'}
+
+
+def redact(value):
+    """Remove token-shaped fields and URL query secrets before disk export."""
+    if isinstance(value, dict):
+        return {key: redact(item) for key, item in value.items()
+                if key.lower() not in SECRET_FIELDS}
+    if isinstance(value, list):
+        return [redact(item) for item in value]
+    if isinstance(value, str) and value.startswith(('https://', 'http://')) and not any(c.isspace() for c in value):
+        parsed = urlsplit(value)
+        if parsed.query:
+            pairs = parse_qsl(parsed.query, keep_blank_values=True)
+            if any(key.lower() in SECRET_QUERY or key.lower().startswith(('x-amz-', 'x-goog-'))
+                   for key, _ in pairs):
+                safe = [(key, item) for key, item in pairs
+                        if key.lower() not in SECRET_QUERY and
+                        not key.lower().startswith(('x-amz-', 'x-goog-'))]
+                return urlunsplit(parsed._replace(query=urlencode(safe)))
+    return value
 
 
 def capture(client, course_id, max_pages):
@@ -57,7 +83,7 @@ def capture(client, course_id, max_pages):
         except CanvasError as error:
             unavailable[f'page {slug}'] = str(error)
     announcements = listing('announcements', base + '/discussion_topics?per_page=100&only_announcements=true')
-    return {
+    return redact({
         'schema_version': 1,
         'captured_at': datetime.now(timezone.utc).isoformat(),
         'origin': client.host,
@@ -70,7 +96,7 @@ def capture(client, course_id, max_pages):
         'modules': modules,
         'pages': pages,
         'announcements': announcements,
-    }
+    })
 
 
 def validate_destination(path):
