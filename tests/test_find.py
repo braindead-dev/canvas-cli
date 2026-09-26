@@ -39,7 +39,7 @@ class FindTests(unittest.TestCase):
         self.assertEqual(result['coverage']['modules'],
                          'searched_module_names_items_may_be_omitted')
         self.assertEqual(result['coverage']['files'], 'linked_files_only')
-        self.assertEqual([row['id'] for row in result['results']], [1, 3, 4])
+        self.assertEqual([row['id'] for row in result['results']], [1, 3])
         self.assertNotIn('private details', str(result))
         self.assertEqual(len(client.calls), 7)
 
@@ -66,6 +66,24 @@ class FindTests(unittest.TestCase):
         for query in ('', 'x' * 201):
             with self.assertRaises(CanvasError):
                 find(client, '101', query)
+
+    def test_server_ignoring_search_term_does_not_return_unrelated_titles(self):
+        class Unfiltered:
+            def list(self, route, _max_pages):
+                if '/assignments?' in route:
+                    return [{'id': 1, 'name': 'Completely unrelated'},
+                            {'id': 2, 'name': 'Synthetic paper'},
+                            {'id': 3, 'name': 'Synthetic draft', 'published': False}]
+                if '/modules?' in route:
+                    return [{'id': 4, 'name': 'Week one', 'items': [
+                        {'id': 5, 'title': 'Synthetic worksheet'},
+                        {'id': 6, 'title': 'Unrelated item'}]}]
+                raise AssertionError(route)
+
+        assignment = find(Unfiltered(), '101', 'synthetic', selected='assignments')
+        self.assertEqual([row['id'] for row in assignment['results']], [2])
+        module = find(Unfiltered(), '101', 'synthetic', selected='modules')
+        self.assertEqual([row['id'] for row in module['results']], [5])
 
     def test_rate_limit_stops_later_probes(self):
         class Limited:

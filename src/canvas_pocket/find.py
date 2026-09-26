@@ -104,8 +104,9 @@ def find(client, course_id, query, max_pages=100, selected=None):
                 continue
             title = row.get('display_name') or row.get('name') or row.get('title') or row.get('url') or ''
             kind = area[:-1] if area != 'discussions' else 'discussion'
-            results.append({'area': kind, 'id': row.get('id') or row.get('url'),
-                            'title': title, 'due_at': row.get('due_at')})
+            if query.casefold() in str(title).casefold():
+                results.append({'area': kind, 'id': row.get('id') or row.get('url'),
+                                'title': title, 'due_at': row.get('due_at')})
             if area == 'modules':
                 if row.get('items') is None:
                     coverage[area] = 'searched_module_names_items_may_be_omitted'
