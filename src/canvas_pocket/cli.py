@@ -156,6 +156,8 @@ def parser():
     batch.add_argument('course', type=identifier)
     batch.add_argument('--directory', required=True, type=Path)
     batch.add_argument('--all-pages', action='store_true')
+    batch.add_argument('--file', type=identifier, action='append', default=[],
+                       help='Download only this discovered file ID; repeatable')
     batch.add_argument('--max-files', type=int, default=20)
     batch.add_argument('--max-bytes', type=int, default=250 * 1024 * 1024)
     batch.add_argument('--confirm', help='Digest returned by the preview')
@@ -302,7 +304,7 @@ def run(args):
         from .batch import batch_download
         return batch_download(client, args.course, args.directory, args.max_pages,
                               args.max_files, args.max_bytes, args.all_pages, args.yes,
-                              args.confirm)
+                              args.confirm, args.file)
     if args.command == 'snapshot':
         from .snapshot import capture, save_private, validate_destination
         output = validate_destination(args.output)

@@ -107,6 +107,39 @@ class BatchTests(unittest.TestCase):
                                yes=True, confirm=preview['confirm'])
             download.assert_not_called()
 
+    @patch('canvas_pocket.batch.download')
+    @patch('canvas_pocket.batch.linked_files')
+    def test_select_specific_discovered_files_without_expanding_batch_limits(self, linked, download):
+        linked.return_value = {'files': [
+            {'id': 1, 'display_name': 'one.pdf', 'size': 10, 'downloadable': True},
+            {'id': 2, 'display_name': 'two.pdf', 'size': 10, 'downloadable': True},
+            {'id': 3, 'display_name': 'locked.pdf', 'downloadable': False}],
+            'skipped_sources': []}
+        client = Mock()
+        client.request.return_value = ({'url': 'https://files.example.edu/signed',
+                                        'display_name': 'two.pdf', 'size': 10}, '')
+        download.return_value = {'bytes': 10}
+        with tempfile.TemporaryDirectory() as folder:
+            all_files = batch_download(client, '12', folder, 100, 1, 100)
+            self.assertFalse(all_files['within_limits'])
+            selected = batch_download(client, '12', folder, 100, 1, 100, file_ids=['2'])
+            self.assertTrue(selected['within_limits'])
+            self.assertEqual([item['id'] for item in selected['files']], [2])
+            self.assertEqual(selected['skipped_unavailable'], 1)
+            self.assertEqual(selected['not_selected'], 1)
+            self.assertNotEqual(all_files['confirm'], selected['confirm'])
+            with self.assertRaisesRegex(CanvasError, 'not discovered'):
+                batch_download(client, '12', folder, 100, 1, 100, file_ids=['999'])
+            with self.assertRaisesRegex(CanvasError, 'not downloadable'):
+                batch_download(client, '12', folder, 100, 1, 100, file_ids=['3'])
+            with self.assertRaisesRegex(CanvasError, 'preview changed'):
+                batch_download(client, '12', folder, 100, 1, 100, file_ids=['1'],
+                               yes=True, confirm=selected['confirm'])
+            result = batch_download(client, '12', folder, 100, 1, 100, file_ids=['2'],
+                                    yes=True, confirm=selected['confirm'])
+            self.assertEqual(result['saved'][0]['id'], 2)
+            download.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main()

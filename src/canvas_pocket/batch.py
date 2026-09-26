@@ -27,14 +27,25 @@ def directory(path):
 
 
 def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
-                   all_pages=False, yes=False, confirm=None):
+                   all_pages=False, yes=False, confirm=None, file_ids=None):
     if bool(yes) != bool(confirm):
         raise CanvasError('Batch download requires both --yes and --confirm from a prior preview')
     target = directory(target)
     if max_files < 1 or max_bytes < 1:
         raise CanvasError('Batch file and byte limits must be positive')
     discovered = linked_files(client, course_id, max_pages, resolve=True, all_pages=all_pages)
-    selected = [file for file in discovered['files'] if file.get('downloadable')]
+    requested = sorted({str(file_id) for file_id in (file_ids or [])}, key=int)
+    if requested:
+        found = {str(file['id']): file for file in discovered['files']}
+        missing = [file_id for file_id in requested if file_id not in found]
+        if missing:
+            raise CanvasError(f'Selected file ID(s) not discovered: {", ".join(missing)}')
+        unavailable = [file_id for file_id in requested if not found[file_id].get('downloadable')]
+        if unavailable:
+            raise CanvasError(f'Selected file ID(s) not downloadable: {", ".join(unavailable)}')
+        selected = [found[file_id] for file_id in requested]
+    else:
+        selected = [file for file in discovered['files'] if file.get('downloadable')]
     planned = []
     for file in selected:
         filename = safe_filename(file['id'], file.get('display_name'))
@@ -52,7 +63,11 @@ def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
         limit_issues.append(f'{known_bytes} known bytes exceed --max-bytes {max_bytes}')
     plan = {'course_id': int(course_id), 'destination': str(target),
             'files': planned, 'known_bytes': known_bytes,
-            'skipped_unavailable': len(discovered['files']) - len(selected),
+            'skipped_unavailable': sum(not file.get('downloadable') for file in discovered['files']),
+            'not_selected': (sum(bool(file.get('downloadable')) for file in discovered['files'])
+                             - len(selected)),
+            'selected_file_ids': requested,
+            'discovered_file_count': len(discovered['files']),
             'skipped_sources': discovered['skipped_sources'],
             'max_files': max_files, 'max_bytes': max_bytes,
             'max_pages': max_pages, 'all_pages': all_pages,
