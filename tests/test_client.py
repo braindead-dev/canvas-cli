@@ -53,6 +53,18 @@ class Tests(unittest.TestCase):
         self.assertEqual(data['id'], 2)
         self.assertEqual(len(calls), 1)
 
+    def test_submission_read_status_include_is_blocked_before_transport(self):
+        calls = []
+        def send(req, **kw):
+            calls.append(req)
+            return Response(b'{}')
+        client = Client('https://canvas.example.edu', 'fake', send)
+        for route in ('/api/v1/courses/1/assignments/2/submissions/self?include[]=read_status',
+                      '/api/v1/courses/1/students/submissions?include%5B%5D=read_status'):
+            with self.assertRaisesRegex(CanvasError, 'marks submissions read'):
+                client.request(route)
+        self.assertEqual(calls, [])
+
     def test_new_quiz_namespace_stays_on_canvas_origin(self):
         calls = []
         def send(req, **kw):

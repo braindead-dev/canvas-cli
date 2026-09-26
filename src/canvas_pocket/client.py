@@ -40,8 +40,11 @@ class Client:
             raise CanvasError('Refusing request outside the configured Canvas API origin')
         if method not in ('GET', 'POST'):
             raise CanvasError('Unsupported method')
+        parameters = parse_qs(u.query)
+        if method == 'GET' and 'read_status' in parameters.get('include[]', []):
+            raise CanvasError('Refusing include[]=read_status because Canvas marks submissions read')
         if (method == 'GET' and re.fullmatch(r'/api/v1/conversations/\d+', u.path)
-                and parse_qs(u.query).get('auto_mark_as_read') != ['false']):
+                and parameters.get('auto_mark_as_read') != ['false']):
             raise CanvasError('Conversation reads require auto_mark_as_read=false to avoid changing Inbox state')
         req = Request(url, method=method, headers={
             'Authorization': f'Bearer {self.token}', 'Accept': 'application/json',
