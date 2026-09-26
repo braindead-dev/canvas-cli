@@ -142,6 +142,18 @@ def parser():
     batch.add_argument('--max-files', type=int, default=20)
     batch.add_argument('--max-bytes', type=int, default=250 * 1024 * 1024)
     batch.add_argument('--yes', action='store_true', help='Download after reviewing a preview')
+    personal_upload = sub.add_parser('upload-personal', help='Preview uploading a file to your Canvas Files')
+    personal_upload.add_argument('--file', required=True, type=Path)
+    personal_upload.add_argument('--max-bytes', type=int, default=25 * 1024 * 1024)
+    personal_upload.add_argument('--confirm', help='Digest returned by the preview')
+    personal_upload.add_argument('--yes', action='store_true', help='Upload only with a matching preview digest')
+    assignment_upload = sub.add_parser('upload-assignment-file', help='Upload a file for an assignment without submitting it')
+    assignment_upload.add_argument('course', type=identifier)
+    assignment_upload.add_argument('assignment', type=identifier)
+    assignment_upload.add_argument('--file', required=True, type=Path)
+    assignment_upload.add_argument('--max-bytes', type=int, default=25 * 1024 * 1024)
+    assignment_upload.add_argument('--confirm', help='Digest returned by the preview')
+    assignment_upload.add_argument('--yes', action='store_true', help='Upload only with a matching preview digest')
     for name in ('assignment', 'page', 'module-items'):
         s = sub.add_parser(name, help='Read one resource or list module items')
         s.add_argument('course', type=identifier)
@@ -196,7 +208,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'recipients', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'snapshot-markdown (private local file, offline)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'inbox-compose (one person, preview and matching digest required)', 'submit-url/submit-text (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'recipients', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'snapshot-markdown (private local file, offline)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'inbox-compose (one person, preview and matching digest required)', 'submit-url/submit-text (preview and matching digest required)', 'upload-personal/upload-assignment-file (preview and matching digest required; assignment upload does not submit)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No OAuth browser consent yet', 'Live upload not yet validated']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -243,6 +255,12 @@ def run(args):
         from .snapshot import capture, save_private, validate_destination
         output = validate_destination(args.output)
         return save_private(output, capture(client, args.course, args.max_pages))
+    if args.command in ('upload-personal', 'upload-assignment-file'):
+        from .upload import upload
+        return upload(client, args.file, args.max_bytes,
+                      args.course if args.command == 'upload-assignment-file' else None,
+                      args.assignment if args.command == 'upload-assignment-file' else None,
+                      args.yes, args.confirm)
     if args.command in ('submit-url', 'submit-text'):
         from .submit import submit
         source = args.url_file if args.command == 'submit-url' else args.text_file

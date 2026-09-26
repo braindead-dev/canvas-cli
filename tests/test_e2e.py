@@ -73,6 +73,13 @@ class E2E(unittest.TestCase):
                             'published': True, 'locked_for_user': False,
                             'submission_types': ['online_url', 'online_text_entry'],
                             'due_at': '2026-10-01T00:00:00Z'}
+                elif self.path == '/api/v1/courses/101/assignments/89':
+                    data = {'id': 89, 'course_id': 101, 'name': 'Synthetic upload',
+                            'published': True, 'locked_for_user': False,
+                            'submission_types': ['online_upload'],
+                            'allowed_extensions': ['txt']}
+                elif self.path == '/api/v1/files/777/create_success':
+                    data = {'id': 777, 'display_name': 'synthetic.txt'}
                 elif self.path == '/api/v1/users/self/profile':
                     data = {'id': 7, 'name': 'Synthetic Student'}
                 elif self.path == '/api/v1/courses/101/enrollments?user_id=7&per_page=100':
@@ -128,7 +135,25 @@ class E2E(unittest.TestCase):
                 self.end_headers(); self.wfile.write(json.dumps(data).encode())
             def do_POST(self):
                 cls.calls.append((self.command, self.path))
-                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                raw = self.rfile.read(int(self.headers['Content-Length']))
+                if self.path == '/storage/upload':
+                    cls.storage_auth = self.headers.get('Authorization')
+                    cls.storage_body = raw
+                    cls.storage_type = self.headers.get('Content-Type')
+                    self.send_response(303)
+                    self.send_header('Location', f'https://localhost:{cls.server.server_port}/api/v1/files/777/create_success')
+                    self.end_headers(); return
+                if self.headers.get('Authorization') != 'Bearer synthetic-token':
+                    self.send_response(401); self.end_headers(); return
+                body = json.loads(raw)
+                if self.path in ('/api/v1/users/self/files',
+                                 '/api/v1/courses/101/assignments/89/submissions/self/files'):
+                    cls.upload_initial = body
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'upload_url': f'https://localhost:{cls.server.server_port}/storage/upload',
+                        'upload_params': {'key': 'synthetic-key'},
+                    }).encode()); return
                 self.send_response(200); self.end_headers()
                 self.wfile.write(json.dumps({'id': 999, **body}).encode())
         cls.server = ThreadingHTTPServer(('localhost', 0), Handler)
@@ -368,3 +393,42 @@ class E2E(unittest.TestCase):
         self.assertEqual(self.calls[-2:], [
             ('GET', '/api/v1/search/recipients?type=user&per_page=100&user_id=7'),
             ('POST', '/api/v1/conversations')])
+
+    def test_personal_upload_three_step_tls_and_no_storage_token(self):
+        source = Path(self.tmp.name) / 'synthetic.txt'
+        source.write_text('Synthetic upload bytes')
+        command = ('upload-personal', '--file', str(source))
+        before = len(self.calls)
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertTrue(data['dry_run'])
+        self.assertEqual(len(self.calls), before)
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(json.loads(sent.stdout)['uploaded_file_id'], 777)
+        self.assertEqual(self.upload_initial['on_duplicate'], 'rename')
+        self.assertIsNone(self.storage_auth)
+        self.assertIn('multipart/form-data', self.storage_type)
+        self.assertIn(b'synthetic-key', self.storage_body)
+        self.assertIn(b'Synthetic upload bytes', self.storage_body)
+        self.assertLess(self.storage_body.index(b'synthetic-key'),
+                        self.storage_body.index(b'Synthetic upload bytes'))
+        self.assertEqual(self.calls[-3:], [
+            ('POST', '/api/v1/users/self/files'), ('POST', '/storage/upload'),
+            ('GET', '/api/v1/files/777/create_success')])
+
+    def test_assignment_upload_is_not_assignment_submission(self):
+        source = Path(self.tmp.name) / 'synthetic.txt'
+        source.write_text('Synthetic upload bytes')
+        command = ('upload-assignment-file', '101', '89', '--file', str(source))
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertTrue(data['dry_run'])
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertIn('not submitted', json.loads(sent.stdout)['note'])
+        self.assertNotIn('on_duplicate', self.upload_initial)
+        self.assertNotIn(('POST', '/api/v1/courses/101/assignments/89/submissions'),
+                         self.calls)

@@ -57,6 +57,8 @@ canvas-pocket new-quiz 123 456  # 456 is the assignment ID for a New Quiz
 canvas-pocket submission 123 456
 canvas-pocket submit-url 123 456 --url-file project-url.txt
 canvas-pocket submit-text 123 456 --text-file response.txt
+canvas-pocket upload-personal --file ./notes.pdf
+canvas-pocket upload-assignment-file 123 456 --file ./paper.pdf
 canvas-pocket grades 123
 canvas-pocket syllabus 123
 canvas-pocket modules 123
@@ -110,6 +112,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 
 `download-linked` previews a batch of downloadable files referenced by readable content, then writes only with `--yes`. It requires an existing destination outside Git, refuses filename collisions, limits file count and total bytes, and sanitizes server filenames. Hidden or locked files are skipped. Successful earlier files remain if a later download fails, and the error reports that partial batch progress. It never sends the Canvas API token to storage URLs. It does not promise a complete course file inventory or access beyond your account's permissions.
 
+`upload-personal` and `upload-assignment-file` follow [Canvas's three-step upload protocol](https://developerdocs.instructure.com/services/canvas/basics/file.file_uploads). They preview the source path, size, SHA-256 hash and destination, then require `--yes --confirm DIGEST`. Personal uploads request rename-on-duplicate because Canvas otherwise overwrites a same-named file. Assignment uploads check that the current assignment permits file submissions and any listed extension, but **do not submit the assignment**. The CLI sends your token only to Canvas for initiation and confirmation; its separate storage request has no token, cookies or redirects. A failed/ambiguous upload is not retried automatically. Default maximum file size is 25 MiB; use `--max-bytes` deliberately if needed. These writes have synthetic HTTPS tests but no live-upload validation. Do not assume a successful upload means your work was turned in.
+
 See [the capability map](CAPABILITIES.md) for implemented features, permission boundaries and the broader roadmap. The expert `get` command extends read coverage without exposing arbitrary write methods.
 
 ### Posting deliberately
@@ -132,9 +136,15 @@ canvas-pocket submit-url 123 456 --url-file project-url.txt
 # Read the assignment, due date and exact URL in the preview, then use its digest.
 canvas-pocket submit-url 123 456 --url-file project-url.txt --yes --confirm DIGEST
 # submit-text uses the same two-step flow with --text-file.
+
+canvas-pocket upload-personal --file ./notes.pdf
+canvas-pocket upload-personal --file ./notes.pdf --yes --confirm DIGEST
+canvas-pocket upload-assignment-file 123 456 --file ./paper.pdf
+canvas-pocket upload-assignment-file 123 456 --file ./paper.pdf --yes --confirm DIGEST
+# This only stages a file; it does not submit the assignment.
 ```
 
-Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, upload files, change grades, or bypass initial-post restrictions.
+Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
 
 ## Privacy and security
 
