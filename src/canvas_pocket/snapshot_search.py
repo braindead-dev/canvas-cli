@@ -13,6 +13,7 @@ def _documents(snapshot):
     for kind, title_key, body_key, id_key in (
             ('assignment', 'name', 'description', 'id'),
             ('announcement', 'title', 'message', 'id'),
+            ('discussion', 'title', 'message', 'id'),
             ('page', 'title', 'body', 'url')):
         for item in snapshot.get(kind + 's', []):
             if isinstance(item, dict):
@@ -37,6 +38,8 @@ def search(snapshot, query, limit=20):
     for name in ('assignments', 'announcements', 'pages', 'modules'):
         if not isinstance(snapshot.get(name), list):
             raise CanvasError('Malformed snapshot content')
+    if 'discussions' in snapshot and not isinstance(snapshot['discussions'], list):
+        raise CanvasError('Malformed snapshot content')
     hits = []
     for kind, identity, title, body in _documents(snapshot):
         title = str(title)
@@ -59,7 +62,8 @@ def search(snapshot, query, limit=20):
         del item['title_matches']
     return {'query': query, 'course_id': snapshot.get('course_id'),
             'snapshot_captured_at': snapshot.get('captured_at'),
-            'snapshot_complete': bool(snapshot.get('complete')),
+            'snapshot_complete': bool(snapshot.get('complete')) and 'discussions' in snapshot,
             'total_matches': len(hits), 'shown': hits[:limit],
-            'note': ('Snapshot is incomplete; missing results are possible.'
-                     if not snapshot.get('complete') else 'Offline search only; newer Canvas content is not included.')}
+            'note': ('Snapshot is incomplete or predates discussion capture; missing results are possible.'
+                     if not snapshot.get('complete') or 'discussions' not in snapshot
+                     else 'Offline search only; newer Canvas content is not included.')}

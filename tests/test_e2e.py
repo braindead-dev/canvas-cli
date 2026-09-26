@@ -173,8 +173,12 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/discussion_topics?per_page=100':
                     data = [{'id': 23, 'title': 'Synthetic discussion prompt',
                              'message': '<a href="/courses/101/files/7">Prompt file</a>'}]
+                elif self.path == '/api/v1/courses/101/discussion_topics?per_page=100&only_announcements=false':
+                    data = [{'id': 23, 'title': 'Synthetic discussion prompt',
+                             'message': '<p>Discussion instructions</p>', 'published': True}]
                 elif self.path in ('/api/v1/courses/103/discussion_topics?per_page=100',
-                                   '/api/v1/courses/103/discussion_topics?per_page=100&only_announcements=true'):
+                                   '/api/v1/courses/103/discussion_topics?per_page=100&only_announcements=true',
+                                   '/api/v1/courses/103/discussion_topics?per_page=100&only_announcements=false'):
                     data = []
                 elif self.path.startswith('/api/v1/calendar_events?'):
                     data = [{'id': 10, 'title': 'Synthetic event'}]
@@ -445,6 +449,7 @@ class E2E(unittest.TestCase):
         snapshot = json.loads(destination.read_text())
         self.assertEqual(snapshot['pages'][0]['body'], '<p>Synthetic page</p>')
         self.assertEqual(snapshot['announcements'][0]['id'], 22)
+        self.assertEqual(snapshot['discussions'][0]['title'], 'Synthetic discussion prompt')
         self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
         self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         repeated = self.invoke('snapshot', '101', '--output', str(destination))

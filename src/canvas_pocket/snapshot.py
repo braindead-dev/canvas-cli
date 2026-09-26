@@ -98,6 +98,10 @@ def capture(client, course_id, max_pages):
                 raise
             unavailable[f'page {slug}'] = str(error)
     announcements = listing('announcements', base + '/discussion_topics?per_page=100&only_announcements=true')
+    listed_discussions = listing('discussions', base + '/discussion_topics?per_page=100&only_announcements=false')
+    discussions = [topic for topic in listed_discussions
+                   if topic.get('published') is not False and not topic.get('locked_for_user')
+                   and not topic.get('is_announcement')]
     return redact({
         'schema_version': 1,
         'captured_at': datetime.now(timezone.utc).isoformat(),
@@ -111,6 +115,7 @@ def capture(client, course_id, max_pages):
         'modules': modules,
         'pages': pages,
         'announcements': announcements,
+        'discussions': discussions,
     })
 
 
@@ -142,5 +147,7 @@ def save_private(path, data):
         path.unlink(missing_ok=True)
         raise
     return {'saved': str(path), 'complete': data['complete'],
-            'counts': {name: len(data[name]) for name in ('assignments', 'modules', 'pages', 'announcements')},
+            'counts': {name: len(data[name]) for name in
+                       ('assignments', 'modules', 'pages', 'announcements', 'discussions')
+                       if name in data},
             'unavailable': list(data['unavailable'])}

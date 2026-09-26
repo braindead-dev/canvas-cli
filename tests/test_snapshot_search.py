@@ -13,6 +13,8 @@ class SnapshotSearchTests(unittest.TestCase):
                              'description': '<script>injected hidden</script><p>Discuss mitochondria and cells.</p>'}],
             'announcements': [{'id': 2, 'title': 'Office hours',
                                'message': '<p>We discuss cells tomorrow.</p>'}],
+            'discussions': [{'id': 5, 'title': 'Synthetic research prompt',
+                             'message': '<p>Compare two methods.</p>'}],
             'pages': [{'url': 'cell-guide', 'title': 'Cell guide',
                        'body': '<p>Cells contain mitochondria.</p>'}],
             'modules': [{'id': 3, 'name': 'Cell module',
@@ -36,3 +38,16 @@ class SnapshotSearchTests(unittest.TestCase):
                 search(self.snapshot, query, limit)
         with self.assertRaises(CanvasError):
             search({**self.snapshot, 'pages': None}, 'cells')
+
+    def test_discussion_prompt_is_searchable_and_legacy_coverage_is_honest(self):
+        result = search(self.snapshot, 'methods')
+        self.assertEqual(result['shown'][0]['kind'], 'discussion')
+        self.assertEqual(result['shown'][0]['id'], 5)
+        older = dict(self.snapshot)
+        del older['discussions']
+        older['complete'] = True
+        legacy = search(older, 'methods')
+        self.assertFalse(legacy['snapshot_complete'])
+        self.assertIn('predates discussion capture', legacy['note'])
+        with self.assertRaises(CanvasError):
+            search({**self.snapshot, 'discussions': None}, 'methods')

@@ -74,9 +74,12 @@ def render(snapshot):
     if not isinstance(course, dict) or any(not isinstance(snapshot.get(kind), list)
                                           for kind in ('assignments', 'modules', 'pages', 'announcements')):
         raise CanvasError('Malformed snapshot content')
+    if 'discussions' in snapshot and not isinstance(snapshot['discussions'], list):
+        raise CanvasError('Malformed snapshot content')
     title = escaped(course.get('name') or course.get('course_code') or f"Course {snapshot.get('course_id', '')}")
+    complete = bool(snapshot.get('complete')) and 'discussions' in snapshot
     lines = [f'# {title}', '', f"Captured: {escaped(snapshot.get('captured_at') or 'unknown')}",
-             f"Snapshot complete: {'yes' if snapshot.get('complete') else 'no'}", '']
+             f"Snapshot complete: {'yes' if complete else 'no'}", '']
     unavailable = snapshot.get('unavailable') or {}
     if unavailable:
         lines += ['Some content could not be read from Canvas; this is not a complete course export.',
@@ -110,6 +113,17 @@ def render(snapshot):
         if not isinstance(item, dict):
             continue
         lines += [f"### {escaped(item.get('title') or item.get('id') or 'Untitled announcement')}", '']
+        if item.get('posted_at'):
+            lines += [f"Posted: {escaped(item['posted_at'])}", '']
+        add_body(item.get('message'))
+
+    lines += ['## Discussion prompts', '']
+    if 'discussions' not in snapshot:
+        lines += ['Not captured by this older snapshot.', '']
+    for item in snapshot.get('discussions', []):
+        if not isinstance(item, dict):
+            continue
+        lines += [f"### {escaped(item.get('title') or item.get('id') or 'Untitled discussion')}", '']
         if item.get('posted_at'):
             lines += [f"Posted: {escaped(item['posted_at'])}", '']
         add_body(item.get('message'))

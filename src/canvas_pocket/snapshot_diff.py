@@ -11,6 +11,8 @@ FIELDS = {
     'modules': ('name', 'position', 'unlock_at', 'state', 'published', 'items'),
     'pages': ('title', 'body', 'published', 'updated_at'),
     'announcements': ('title', 'message', 'updated_at', 'posted_at', 'published'),
+    'discussions': ('title', 'message', 'updated_at', 'posted_at', 'published',
+                    'assignment_id', 'lock_at', 'unlock_at'),
 }
 
 
@@ -51,8 +53,8 @@ def compare(old, new):
     observed_changes = {}
     skipped = {}
     for kind, fields in FIELDS.items():
-        missing_old = kind in old.get('unavailable', {})
-        missing_new = kind in new.get('unavailable', {})
+        missing_old = kind in old.get('unavailable', {}) or kind not in old
+        missing_new = kind in new.get('unavailable', {}) or kind not in new
         if kind == 'modules':
             missing_old |= any(name.startswith('module ') for name in old.get('unavailable', {}))
             missing_new |= any(name.startswith('module ') for name in new.get('unavailable', {}))

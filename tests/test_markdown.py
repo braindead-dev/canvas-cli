@@ -25,6 +25,8 @@ class MarkdownTests(unittest.TestCase):
             'announcements': [{'id': 4, 'title': 'Welcome',
                                'posted_at': '2026-09-25T00:00:00Z',
                                'message': '<p>Hello &amp; welcome.</p>'}],
+            'discussions': [{'id': 6, 'title': 'Synthetic prompt',
+                             'message': '<p>Explain your reasoning.</p>'}],
             'modules': [{'id': 5, 'name': 'Week 1', 'items': [{'title': 'Introduction'}]}],
             'pages': [{'url': 'intro', 'title': 'Start',
                        'body': '<style>.hidden{}</style><p>First page.</p>'}],
@@ -36,12 +38,19 @@ class MarkdownTests(unittest.TestCase):
         self.assertIn('Due: 2026-10-01T00:00:00Z', text)
         self.assertIn('[Open in Canvas](https://canvas.example.edu/courses/12/assignments/3)', text)
         self.assertIn('Hello & welcome', text)
+        self.assertIn('## Discussion prompts', text)
+        self.assertIn('Explain your reasoning.', text)
         self.assertIn('Some content could not be read', text)
         self.assertNotIn('do_not_render', text)
         self.assertNotIn('.hidden', text)
         self.assertNotIn('![image]', text)
         self.assertIn('\\!\\[image\\]', text)
         self.assertIn('- Introduction', text)
+
+    def test_older_snapshot_labels_missing_discussion_coverage(self):
+        source = self.fixture()
+        del source['discussions']
+        self.assertIn('Not captured by this older snapshot.', render(source))
 
     def test_malicious_or_signed_links_are_omitted(self):
         source = self.fixture()

@@ -48,6 +48,10 @@ class SnapshotTests(unittest.TestCase):
                         {'url': 'locked', 'locked_for_user': True}]
             if route.endswith('only_announcements=true'):
                 raise CanvasError('Canvas denied access', status=403)
+            if route.endswith('only_announcements=false'):
+                return [{'id': 8, 'title': 'Visible prompt', 'message': 'Discuss this', 'published': True},
+                        {'id': 9, 'title': 'Hidden prompt', 'published': False},
+                        {'id': 10, 'title': 'Locked prompt', 'locked_for_user': True}]
             raise AssertionError(route)
         client.request.side_effect = request
         client.list.side_effect = listing
@@ -56,6 +60,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn('announcements', result['unavailable'])
         self.assertEqual(result['excluded_unpublished_or_locked_pages'], 2)
         self.assertEqual(result['modules'][0]['items'][0]['title'], 'Welcome')
+        self.assertEqual([topic['id'] for topic in result['discussions']], [8])
         self.assertNotIn('draft', str(client.request.call_args_list))
 
     def test_private_save_refuses_git_and_overwrite(self):
@@ -126,6 +131,12 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn('pages', result['skipped'])
         self.assertNotIn('pages', result['changes'])
         self.assertEqual(result['observed_changes']['pages'], [])
+        self.assertIn('discussions', result['skipped'])
+        self.assertNotIn('discussions', result['changes'])
+        old['discussions'] = [{'id': 8, 'title': 'Prompt', 'message': 'Before'}]
+        new['discussions'] = [{'id': 8, 'title': 'Prompt', 'message': 'After'}]
+        self.assertEqual(compare(old, new)['changes']['discussions']['changed'][0]['fields'],
+                         ['message'])
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'old.json'
             path.write_text(json.dumps(old))
