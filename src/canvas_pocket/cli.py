@@ -132,6 +132,10 @@ def parser():
     difference = sub.add_parser('snapshot-diff', help='Compare two local snapshots without Canvas login')
     difference.add_argument('older', type=Path)
     difference.add_argument('newer', type=Path)
+    snapshot_search = sub.add_parser('snapshot-search', help='Search a local private course snapshot offline')
+    snapshot_search.add_argument('snapshot', type=Path)
+    snapshot_search.add_argument('--query', required=True)
+    snapshot_search.add_argument('--limit', type=int, default=20)
     markdown = sub.add_parser('snapshot-markdown', help='Render a private snapshot as readable Markdown, offline')
     markdown.add_argument('snapshot', type=Path)
     markdown.add_argument('--output', required=True, type=Path)
@@ -225,6 +229,10 @@ def run(args):
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
+    if args.command == 'snapshot-search':
+        from .snapshot_diff import read
+        from .snapshot_search import search
+        return search(read(args.snapshot), args.query, args.limit)
     if args.command == 'snapshot-markdown':
         from .markdown import render, save
         from .snapshot_diff import read
@@ -482,6 +490,15 @@ def run(args):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'shown' in data and 'total_matches' in data:
+        lines = [f"{data['total_matches']} match(es) in snapshot; showing {len(data['shown'])}."]
+        if not data.get('snapshot_complete'):
+            lines.append('Snapshot incomplete; more matches may exist in Canvas.')
+        for item in data['shown']:
+            lines.append(f"{item['kind']} {item['id']}: {item['title']}")
+            if item.get('snippet'):
+                lines.append(f"  {item['snippet']}")
+        return '\n'.join(lines)
     if isinstance(data, list):
         if not data:
             return 'No items.'

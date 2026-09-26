@@ -482,3 +482,17 @@ class E2E(unittest.TestCase):
         self.assertEqual(statuses['pages'], 'not_found_404')
         self.assertEqual(statuses['assignments'], 'readable')
         self.assertNotIn('Synthetic course', result.stdout)
+
+    def test_offline_snapshot_search_brief(self):
+        source = Path(self.tmp.name) / 'synthetic-search.json'
+        source.write_text(json.dumps({
+            'schema_version': 1, 'course_id': 101, 'complete': False,
+            'course': {'syllabus_body': '<p>Read about synthetic biology.</p>'},
+            'assignments': [], 'announcements': [], 'modules': [], 'pages': [],
+        }))
+        result = self.invoke('--format', 'brief', 'snapshot-search', str(source),
+                             '--query', 'synthetic biology')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('1 match(es)', result.stdout)
+        self.assertIn('Snapshot incomplete', result.stdout)
+        self.assertIn('Read about synthetic biology.', result.stdout)

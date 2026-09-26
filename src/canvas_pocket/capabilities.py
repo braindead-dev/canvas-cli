@@ -15,6 +15,7 @@ def describe():
             'replies', 'quizzes (metadata only)', 'quiz (metadata only)',
             'new-quizzes (metadata only)', 'new-quiz (metadata only)',
             'rubrics', 'rubric', 'get', 'snapshot-diff (offline)',
+            'snapshot-search (offline)',
         ],
         'local_write': [
             'snapshot (private local file)',

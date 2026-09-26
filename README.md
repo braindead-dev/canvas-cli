@@ -93,6 +93,7 @@ canvas-pocket download-linked 123 --directory /private/path/course-files
 canvas-pocket download-linked 123 --directory /private/path/course-files --max-files 100 --yes
 canvas-pocket snapshot 123 --output /private/path/course-123.json
 canvas-pocket snapshot-diff /private/path/older.json /private/path/newer.json
+canvas-pocket snapshot-search /private/path/course-123.json --query 'research paper'
 canvas-pocket snapshot-markdown /private/path/course-123.json --output /private/path/course-123.md
 ```
 
@@ -103,6 +104,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 `snapshot` reads the syllabus-bearing course record, assignments, module items, accessible published pages, and announcements into one local JSON file. It makes no quiz attempts or writes to Canvas. If an endpoint is unavailable, the snapshot says `complete: false` and records the missing resource. When the pages list is unavailable, it tries readable page links from modules but still marks the snapshot incomplete. It removes token-shaped JSON fields such as Canvas `secure_params` and credential-like URL query parameters before saving. The file is mode `0600`, cannot overwrite an existing file, and cannot be placed inside a Git checkout, including through a symlinked parent. It may still contain copyrighted course materials, private academic information or other expiring links; keep it local and do not post it to a public repo.
 
 `snapshot-diff` works offline and reports added/removed resources and which fields changed, without printing full assignment descriptions or page bodies. It skips categories that were incomplete in either snapshot, avoiding false “removed” claims. It does not need a Canvas credential.
+
+`snapshot-search` works offline over that same private JSON. It searches syllabus, assignment descriptions, announcements, pages and module titles, returning short plain-text snippets and ranking title matches first. It reports when the source snapshot was incomplete; no hits never proves the course contains no such material. Its output can contain private course information, so do not paste it into public issues or logs.
 
 `snapshot-markdown` also works offline. It turns a snapshot into one readable Markdown file with syllabus, assignments, announcements, modules and pages. It converts Canvas HTML to plain text rather than embedding active HTML or external images, marks incomplete snapshots, and includes only safe same-origin Canvas assignment links. Like raw snapshots, the output is mode `0600`, never overwrites and cannot be written inside a Git checkout. Review it before sharing; course content may be copyrighted or private. This is a readable projection, not a lossless Canvas backup.
 
