@@ -168,6 +168,8 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
             locked = bool(metadata.get('locked_for_user'))
             hidden = bool(metadata.get('hidden_for_user'))
             item.update({'display_name': metadata.get('display_name'), 'size': metadata.get('size'),
+                         'updated_at': metadata.get('updated_at'),
+                         'modified_at': metadata.get('modified_at'),
                          'locked_for_user': locked, 'hidden_for_user': hidden,
                          'downloadable': not (locked or hidden) and bool(metadata.get('url'))})
         except CanvasError as error:

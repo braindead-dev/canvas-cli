@@ -30,6 +30,13 @@ class E2E(unittest.TestCase):
             def log_message(self, *args): pass
             def do_GET(self):
                 cls.calls.append((self.command, self.path))
+                if self.path == '/storage/synthetic-file':
+                    cls.storage_download_auth = self.headers.get('Authorization')
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/octet-stream')
+                    self.end_headers()
+                    self.wfile.write(b'Synthetic file bytes')
+                    return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 if self.path == '/api/v1/redirect':
@@ -59,6 +66,8 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/assignments?per_page=100':
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()}]
+                elif self.path == '/api/v1/courses/103/assignments?per_page=100':
+                    data = []
                 elif self.path == '/api/v1/courses/101/assignments?per_page=100&search_term=Synthetic':
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': '2026-10-01T00:00:00Z'}]
@@ -68,11 +77,20 @@ class E2E(unittest.TestCase):
                              'submission': {'workflow_state': 'submitted', 'submitted_at': '2026-09-01T12:00:00Z'}}]
                 elif self.path == '/api/v1/courses/101?include[]=syllabus_body':
                     data = {'id': 101, 'syllabus_body': '<a href="/courses/101/files/7">Syllabus</a>'}
-                elif self.path == '/api/v1/courses/101/modules?include[]=items&per_page=100':
+                elif self.path == '/api/v1/courses/103?include[]=syllabus_body':
+                    data = {'id': 103, 'syllabus_body': '<a href="/courses/103/files/8">Reading</a>'}
+                elif self.path in (
+                    '/api/v1/courses/101/modules?include[]=items&per_page=100',
+                    '/api/v1/courses/103/modules?include[]=items&per_page=100',
+                ):
                     data = []
                 elif self.path == '/api/v1/courses/101/files/7':
                     data = {'display_name': 'synthetic-syllabus.pdf', 'size': 123,
                             'hidden_for_user': True, 'url': 'https://files.example.edu/item'}
+                elif self.path == '/api/v1/courses/103/files/8':
+                    data = {'id': 8, 'display_name': 'synthetic-reading.pdf', 'size': 20,
+                            'updated_at': '2026-09-25T00:00:00Z',
+                            'url': f'https://localhost:{cls.server.server_port}/storage/synthetic-file'}
                 elif self.path == '/api/v1/courses/101/assignments/88/submissions/self?include[]=submission_comments&include[]=rubric_assessment':
                     data = {'assignment_id': 88, 'workflow_state': 'submitted',
                             'submitted_at': '2026-09-01T12:00:00Z', 'grade': 'A',
@@ -155,6 +173,9 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/discussion_topics?per_page=100':
                     data = [{'id': 23, 'title': 'Synthetic discussion prompt',
                              'message': '<a href="/courses/101/files/7">Prompt file</a>'}]
+                elif self.path in ('/api/v1/courses/103/discussion_topics?per_page=100',
+                                   '/api/v1/courses/103/discussion_topics?per_page=100&only_announcements=true'):
+                    data = []
                 elif self.path.startswith('/api/v1/calendar_events?'):
                     data = [{'id': 10, 'title': 'Synthetic event'}]
                 elif self.path == '/api/v1/users/self/groups?per_page=100':
@@ -324,6 +345,32 @@ class E2E(unittest.TestCase):
         self.assertEqual(single.returncode, 0, single.stderr)
         self.assertEqual(json.loads(single.stdout)['title'], 'Synthetic New Quiz')
         self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_batch_download_needs_matching_preview_and_excludes_bearer_from_storage(self):
+        directory = Path(self.tmp.name) / 'synthetic-downloads'
+        directory.mkdir(exist_ok=True)
+        command = ('download-linked', '103', '--directory', str(directory))
+        before = len(self.calls)
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        plan = json.loads(preview.stdout)
+        self.assertTrue(plan['dry_run'])
+        self.assertEqual(len(plan['files']), 1)
+        self.assertFalse(list(directory.iterdir()))
+        missing = self.invoke(*command, '--yes')
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn('--confirm', missing.stderr)
+        wrong = self.invoke(*command, '--yes', '--confirm', 'wrong')
+        self.assertEqual(wrong.returncode, 1)
+        self.assertFalse(list(directory.iterdir()))
+        saved = self.invoke(*command, '--yes', '--confirm', plan['confirm'])
+        self.assertEqual(saved.returncode, 0, saved.stderr)
+        self.assertEqual((directory / '8-synthetic-reading.pdf').read_bytes(),
+                         b'Synthetic file bytes')
+        self.assertIsNone(self.storage_download_auth)
+        self.assertEqual([call for call in self.calls[before:]
+                          if call[1] == '/storage/synthetic-file'],
+                         [('GET', '/storage/synthetic-file')])
 
     def test_assignment_submission_preview_and_confirm_over_tls(self):
         source = Path(self.tmp.name) / 'project-url.txt'

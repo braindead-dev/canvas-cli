@@ -20,7 +20,8 @@ class BatchTests(unittest.TestCase):
                                          {'id': 8, 'downloadable': False}],
                                'skipped_sources': ['files tab']}
         client = Mock()
-        client.request.return_value = ({'url': 'https://files.example.edu/signed', 'size': 30}, '')
+        client.request.return_value = ({'url': 'https://files.example.edu/signed', 'size': 30,
+                                        'display_name': 'Read me.pdf'}, '')
         download.return_value = {'bytes': 30}
         with tempfile.TemporaryDirectory() as folder:
             preview = batch_download(client, '12', folder, 100, 2, 100)
@@ -30,7 +31,8 @@ class BatchTests(unittest.TestCase):
             self.assertTrue(preview['within_limits'])
             client.request.assert_not_called()
             download.assert_not_called()
-            result = batch_download(client, '12', folder, 100, 2, 100, yes=True)
+            result = batch_download(client, '12', folder, 100, 2, 100,
+                                    yes=True, confirm=preview['confirm'])
             self.assertEqual(result['bytes'], 30)
             download.assert_called_once_with('https://files.example.edu/signed',
                                              Path(folder).resolve() / '7-Read-me.pdf', 100)
@@ -46,7 +48,8 @@ class BatchTests(unittest.TestCase):
             self.assertEqual(len(preview['files']), 1)
             self.assertIn('--max-bytes', preview['limit_issues'][0])
             with self.assertRaises(CanvasError):
-                batch_download(client, '12', folder, 100, 1, 100, yes=True)
+                batch_download(client, '12', folder, 100, 1, 100,
+                               yes=True, confirm=preview['confirm'])
             client.request.assert_not_called()
             (Path(folder) / '.git').mkdir()
             with self.assertRaises(CanvasError):
@@ -65,8 +68,44 @@ class BatchTests(unittest.TestCase):
             self.assertEqual(len(preview['files']), 2)
             self.assertIn('--max-files', preview['limit_issues'][0])
             with self.assertRaises(CanvasError):
-                batch_download(client, '12', folder, 100, 1, 100, yes=True)
+                batch_download(client, '12', folder, 100, 1, 100,
+                               yes=True, confirm=preview['confirm'])
             client.request.assert_not_called()
+
+    @patch('canvas_pocket.batch.download')
+    @patch('canvas_pocket.batch.linked_files')
+    def test_download_requires_matching_unchanged_preview(self, linked, download):
+        linked.return_value = {'files': [{'id': 1, 'display_name': 'one.pdf',
+                                          'size': 10, 'downloadable': True}],
+                               'skipped_sources': []}
+        client = Mock()
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(CanvasError, 'both --yes and --confirm'):
+                batch_download(client, '12', folder, 100, 1, 100, yes=True)
+            linked.assert_not_called()
+            preview = batch_download(client, '12', folder, 100, 1, 100)
+            linked.return_value['files'][0]['size'] = 11
+            with self.assertRaisesRegex(CanvasError, 'preview changed'):
+                batch_download(client, '12', folder, 100, 1, 100,
+                               yes=True, confirm=preview['confirm'])
+            download.assert_not_called()
+
+    @patch('canvas_pocket.batch.download')
+    @patch('canvas_pocket.batch.linked_files')
+    def test_file_change_between_confirmation_and_transfer_is_refused(self, linked, download):
+        linked.return_value = {'files': [{'id': 1, 'display_name': 'one.pdf',
+                                          'size': 10, 'updated_at': 'before',
+                                          'downloadable': True}], 'skipped_sources': []}
+        client = Mock()
+        client.request.return_value = ({'url': 'https://files.example.edu/signed',
+                                        'display_name': 'one.pdf', 'size': 10,
+                                        'updated_at': 'after'}, '')
+        with tempfile.TemporaryDirectory() as folder:
+            preview = batch_download(client, '12', folder, 100, 1, 100)
+            with self.assertRaisesRegex(CanvasError, 'metadata changed'):
+                batch_download(client, '12', folder, 100, 1, 100,
+                               yes=True, confirm=preview['confirm'])
+            download.assert_not_called()
 
 
 if __name__ == '__main__':

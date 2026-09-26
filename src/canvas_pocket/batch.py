@@ -1,5 +1,7 @@
 """Preview-first downloads of files linked from readable course content."""
 
+import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -25,7 +27,9 @@ def directory(path):
 
 
 def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
-                   all_pages=False, yes=False):
+                   all_pages=False, yes=False, confirm=None):
+    if bool(yes) != bool(confirm):
+        raise CanvasError('Batch download requires both --yes and --confirm from a prior preview')
     target = directory(target)
     if max_files < 1 or max_bytes < 1:
         raise CanvasError('Batch file and byte limits must be positive')
@@ -37,24 +41,31 @@ def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
         destination = target / filename
         if destination.exists() or destination.is_symlink():
             raise CanvasError(f'Destination already exists for file {file["id"]}; no files downloaded')
-        planned.append({'id': file['id'], 'name': filename, 'size': file.get('size')})
+        planned.append({'id': file['id'], 'name': filename, 'size': file.get('size'),
+                        'updated_at': file.get('updated_at'),
+                        'modified_at': file.get('modified_at')})
     known_bytes = sum(item['size'] for item in planned if isinstance(item['size'], int))
     limit_issues = []
     if len(planned) > max_files:
         limit_issues.append(f'{len(planned)} downloadable files exceed --max-files {max_files}')
     if known_bytes > max_bytes:
         limit_issues.append(f'{known_bytes} known bytes exceed --max-bytes {max_bytes}')
-    preview = {'dry_run': not yes, 'course_id': int(course_id), 'destination': str(target),
-               'files': planned, 'known_bytes': known_bytes,
-               'skipped_unavailable': len(discovered['files']) - len(selected),
-               'skipped_sources': discovered['skipped_sources'],
-               'max_files': max_files, 'max_bytes': max_bytes,
-               'within_limits': not limit_issues, 'limit_issues': limit_issues}
+    plan = {'course_id': int(course_id), 'destination': str(target),
+            'files': planned, 'known_bytes': known_bytes,
+            'skipped_unavailable': len(discovered['files']) - len(selected),
+            'skipped_sources': discovered['skipped_sources'],
+            'max_files': max_files, 'max_bytes': max_bytes,
+            'max_pages': max_pages, 'all_pages': all_pages,
+            'within_limits': not limit_issues, 'limit_issues': limit_issues}
+    digest = hashlib.sha256(json.dumps(plan, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    preview = {'dry_run': not yes, **plan, 'confirm': digest}
     if not yes:
         preview['next'] = ('Increase the listed limits and review a fresh preview before --yes.'
                            if limit_issues else
-                           'Review filenames and limits, then repeat with --yes to download.')
+                           'Review filenames and limits, then repeat with --yes --confirm DIGEST to download.')
         return preview
+    if confirm != digest:
+        raise CanvasError('Download preview changed; review a fresh preview before downloading')
     if limit_issues:
         raise CanvasError('; '.join(limit_issues) + '; no files downloaded')
     saved, used = [], 0
@@ -64,6 +75,11 @@ def batch_download(client, course_id, target, max_pages, max_files, max_bytes,
             if (metadata.get('locked_for_user') or metadata.get('hidden_for_user') or
                     not metadata.get('url')):
                 raise CanvasError('File became unavailable')
+            if (safe_filename(item['id'], metadata.get('display_name')) != item['name'] or
+                    metadata.get('size') != item['size'] or
+                    metadata.get('updated_at') != item['updated_at'] or
+                    metadata.get('modified_at') != item['modified_at']):
+                raise CanvasError('File metadata changed after preview; no download attempted for this file')
             remaining = max_bytes - used
             if remaining < 1 or (isinstance(metadata.get('size'), int) and metadata['size'] > remaining):
                 raise CanvasError('Batch byte limit reached')

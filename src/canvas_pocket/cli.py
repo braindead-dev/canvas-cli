@@ -158,6 +158,7 @@ def parser():
     batch.add_argument('--all-pages', action='store_true')
     batch.add_argument('--max-files', type=int, default=20)
     batch.add_argument('--max-bytes', type=int, default=250 * 1024 * 1024)
+    batch.add_argument('--confirm', help='Digest returned by the preview')
     batch.add_argument('--yes', action='store_true', help='Download after reviewing a preview')
     personal_upload = sub.add_parser('upload-personal', help='Preview uploading a file to your Canvas Files')
     personal_upload.add_argument('--file', required=True, type=Path)
@@ -300,7 +301,8 @@ def run(args):
     if args.command == 'download-linked':
         from .batch import batch_download
         return batch_download(client, args.course, args.directory, args.max_pages,
-                              args.max_files, args.max_bytes, args.all_pages, args.yes)
+                              args.max_files, args.max_bytes, args.all_pages, args.yes,
+                              args.confirm)
     if args.command == 'snapshot':
         from .snapshot import capture, save_private, validate_destination
         output = validate_destination(args.output)
