@@ -8,7 +8,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Courses | courses, courses --active, favorites, syllabus, sections | Name lookup |
 | Assignments | assignments, assignment, assignment-groups, assignment-group, deadlines, work (own status and effective due date) | Richer planner views and local reminders |
 | Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
-| Pages | pages, page | Markdown rendering and incremental snapshots |
+| Pages | pages, page, offline snapshot-markdown projection | Incremental snapshots |
 | Files | files, folders, folder, folder-files, folder-folders, linked-files (optional all published pages), download, preview-first download-linked | Course Files list may be disabled while linked files remain accessible; discovered links are not a complete inventory |
 | Announcements | announcements, cross-course news | Incremental change detection; creation would be a write |
 | Discussions | discussions, topic, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
@@ -20,7 +20,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |
 | Quizzes / New Quizzes | Classic quizzes/quiz and New Quizzes new-quizzes/new-quiz metadata only | No question/attempt operations or automated exam-taking |
 | Uploads | Not implemented | Multi-step upload handshake; separate credential-free storage transport |
-| Local course snapshots | snapshot (private JSON, no Git checkout, explicit incomplete state), offline snapshot-diff | Incremental Markdown projection |
+| Local course snapshots | snapshot (private JSON, no Git checkout, explicit incomplete state), offline snapshot-diff and snapshot-markdown | Per-resource incremental sync and richer Markdown projection |
 | Canvas course exports | Not implemented | Separate asynchronous jobs and polling; role-dependent |
 | Account administration / SIS | Not implemented | Separate high-risk/admin surface, not student defaults |
 | Video, Zoom, publisher tools | Links only | Separate providers/auth; not covered by Canvas credentials |

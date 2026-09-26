@@ -115,6 +115,9 @@ def parser():
     difference = sub.add_parser('snapshot-diff', help='Compare two local snapshots without Canvas login')
     difference.add_argument('older', type=Path)
     difference.add_argument('newer', type=Path)
+    markdown = sub.add_parser('snapshot-markdown', help='Render a private snapshot as readable Markdown, offline')
+    markdown.add_argument('snapshot', type=Path)
+    markdown.add_argument('--output', required=True, type=Path)
     s = sub.add_parser('download', help='Download one accessible course file without overwriting')
     s.add_argument('course', type=identifier)
     s.add_argument('file', type=identifier)
@@ -181,10 +184,14 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'submit-url/submit-text (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'snapshot-markdown (private local file, offline)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'submit-url/submit-text (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
+    if args.command == 'snapshot-markdown':
+        from .markdown import render, save
+        from .snapshot_diff import read
+        return save(args.output, render(read(args.snapshot)))
     if args.command == 'auth' and args.action == 'login':
         host = origin(args.origin)
         if not sys.stdin.isatty():
