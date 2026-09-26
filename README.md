@@ -45,6 +45,10 @@ canvas-pocket upcoming
 canvas-pocket calendar --start 2026-09-25 --end 2026-10-09 --active --personal
 canvas-pocket calendar --type assignment --course 123
 canvas-pocket assignments 123
+canvas-pocket assignment-groups 123
+canvas-pocket rubrics 123
+canvas-pocket quizzes 123
+canvas-pocket quiz 123 456
 canvas-pocket submission 123 456
 canvas-pocket grades 123
 canvas-pocket syllabus 123
@@ -89,6 +93,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 `inbox` lists your Canvas conversations; `conversation` fetches one with `auto_mark_as_read=false`. The [Canvas Conversations API](https://developerdocs.instructure.com/services/canvas/resources/conversations) otherwise marks an unread thread read by default on a GET. The transport blocks that unsafe GET even through the expert `get` command unless the query explicitly sets `auto_mark_as_read=false`. These reads do not send or alter messages. `inbox-reply` previews the current participants and exact message and also uses the safe GET. It only sends with both `--yes` and a matching `--confirm` digest from that preview, and refuses to send if the message or thread audience changes between preview and execution. This send route has synthetic TLS tests but has not been exercised against a live account. `groups` returns only your active groups; `course-groups` returns only groups visible to your Canvas role.
 
 `news` lists recently posted announcements across active or selected courses using Canvas's dedicated [Announcements API](https://developerdocs.instructure.com/services/canvas/resources/announcements). It fetches each course separately so one inaccessible course does not hide all the others, and reports any unavailable course. JSON includes the full visible announcement body; brief output is a title/date index. The date window is based on posting time, not subsequent edits, so older edited announcements need a longer `--days` window.
+
+`assignment-groups` shows Canvas's group weights and grading rules. `rubrics`/`rubric` read visible criteria. `quizzes`/`quiz` read metadata for Classic Quizzes only, including dates, attempt limits and time limits; they never list quiz questions or create an attempt. New Quizzes use a separate API and are not yet covered by these commands. Availability depends on Canvas permissions.
 
 `download-linked` previews a batch of downloadable files referenced by readable content, then writes only with `--yes`. It requires an existing destination outside Git, refuses filename collisions, limits file count and total bytes, and sanitizes server filenames. Hidden or locked files are skipped. Successful earlier files remain if a later download fails, and the error reports that partial batch progress. It never sends the Canvas API token to storage URLs. It does not promise a complete course file inventory or access beyond your account's permissions.
 

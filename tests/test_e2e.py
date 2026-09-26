@@ -79,6 +79,12 @@ class E2E(unittest.TestCase):
                     data = [{'id': 4, 'display_name': 'Synthetic file.pdf'}]
                 elif self.path == '/api/v1/courses/101/sections?per_page=100':
                     data = [{'id': 5, 'name': 'Synthetic section'}]
+                elif self.path == '/api/v1/courses/101/assignment_groups?per_page=100':
+                    data = [{'id': 30, 'name': 'Projects', 'group_weight': 35}]
+                elif self.path == '/api/v1/courses/101/rubrics?per_page=100':
+                    data = [{'id': 31, 'title': 'Project rubric'}]
+                elif self.path == '/api/v1/courses/101/quizzes?per_page=100':
+                    data = [{'id': 32, 'title': 'Week 1 metadata', 'due_at': '2026-10-01T00:00:00Z'}]
                 elif self.path == '/api/v1/courses/101/modules?per_page=100':
                     data = [{'id': 6, 'name': 'Week 1'}]
                 elif self.path == '/api/v1/courses/101/modules/6/items?per_page=100':
@@ -205,6 +211,19 @@ class E2E(unittest.TestCase):
         self.assertIn('context_codes%5B%5D=course_101', self.calls[before][1])
         brief = self.invoke('--format', 'brief', 'news', '--course', '101')
         self.assertIn('Synthetic announcement', brief.stdout)
+
+    def test_grading_and_quiz_metadata_over_tls(self):
+        before = len(self.calls)
+        commands = [('assignment-groups', 'group_weight', 35),
+                    ('rubrics', 'title', 'Project rubric'),
+                    ('quizzes', 'title', 'Week 1 metadata')]
+        for command, key, expected in commands:
+            with self.subTest(command=command):
+                result = self.invoke(command, '101')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)[0][key], expected)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        self.assertFalse(any('/submissions' in route for _, route in self.calls[before:]))
 
     def test_redirect_refused(self):
         before = len(self.calls)

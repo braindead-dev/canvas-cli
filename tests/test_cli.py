@@ -109,6 +109,25 @@ class CLITests(unittest.TestCase):
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
+    def test_grading_and_quiz_metadata_routes_are_get_only(self, client):
+        client.return_value.list.return_value = [{'id': 3}]
+        client.return_value.request.return_value = ({'id': 3}, '')
+        for name, route in (
+            ('assignment-groups', 'assignment_groups'), ('rubrics', 'rubrics'),
+            ('quizzes', 'quizzes')):
+            with self.subTest(name=name):
+                self.assertEqual(run(parser().parse_args([name, '8'])), [{'id': 3}])
+                self.assertEqual(client.return_value.list.call_args.args,
+                                 (f'/api/v1/courses/8/{route}?per_page=100', 100))
+        for name, route in (
+            ('assignment-group', 'assignment_groups'), ('rubric', 'rubrics'),
+            ('quiz', 'quizzes')):
+            with self.subTest(name=name):
+                self.assertEqual(run(parser().parse_args([name, '8', '3'])), {'id': 3})
+                client.return_value.request.assert_called_with(f'/api/v1/courses/8/{route}/3')
+
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
     def test_inbox_and_group_routes(self, client):
         client.return_value.list.return_value = []
         client.return_value.request.return_value = ({'id': 9}, '')

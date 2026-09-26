@@ -6,7 +6,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
 | Courses | courses, courses --active, favorites, syllabus, sections | Name lookup |
-| Assignments | assignments, assignment, deadlines, work (own status and effective due date) | Richer planner views and local reminders |
+| Assignments | assignments, assignment, assignment-groups, assignment-group, deadlines, work (own status and effective due date) | Richer planner views and local reminders |
 | Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
 | Pages | pages, page | Markdown rendering and incremental snapshots |
 | Files | files, folders, folder, folder-files, folder-folders, linked-files (optional all published pages), download, preview-first download-linked | Course Files list may be disabled while linked files remain accessible; discovered links are not a complete inventory |
@@ -15,10 +15,10 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
 | Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
 | Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), advanced get where authorized | Aggregate student views and upload/submit workflow with destination review |
-| Rubrics and feedback | advanced get where authorized | Summaries and submission comments |
+| Rubrics and feedback | rubrics, rubric, submission, advanced get where authorized | Summaries and submission comments |
 | Inbox | inbox, conversation (explicit no-read-state-change), inbox-reply (preview + matching digest required), advanced get with transport guard | New-message composition; live write validation only in a designated sandbox |
 | Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |
-| Quizzes / New Quizzes | Not a first-class workflow | Different APIs and permissions; no automated exam-taking |
+| Quizzes / New Quizzes | Classic quizzes/quiz metadata only | New Quizzes use a separate API; no automated exam-taking |
 | Uploads | Not implemented | Multi-step upload handshake; separate credential-free storage transport |
 | Local course snapshots | snapshot (private JSON, no Git checkout, explicit incomplete state), offline snapshot-diff | Incremental Markdown projection |
 | Canvas course exports | Not implemented | Separate asynchronous jobs and polling; role-dependent |
@@ -40,3 +40,5 @@ The generic `get` command is an expert escape hatch for documented read endpoint
 5. Write integration tests only against an explicitly designated sandbox course.
 
 Current live-test gap: write actions have not been exercised against a real account. Personal-token login, calendar, own grades, folders, sections, outline, linked-file discovery, local snapshots, selected other read commands and one temporary file download have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. In a live course, the token received 404 for the pages list; module-page fallback recovered 27 readable pages and correctly left the snapshot marked incomplete. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
+
+In one live course, assignment groups were visible, while rubric listing returned 403 and Classic Quiz listing returned 404. Those results reflect this account/course configuration, not a claim that either resource is globally unavailable.

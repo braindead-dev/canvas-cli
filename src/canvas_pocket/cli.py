@@ -143,10 +143,15 @@ def parser():
     topic = sub.add_parser('topic', help='Read one discussion topic')
     topic.add_argument('course', type=identifier)
     topic.add_argument('topic', type=identifier)
+    for name in ('quiz', 'rubric', 'assignment-group'):
+        resource = sub.add_parser(name, help=f'Read one {name} without starting or changing it')
+        resource.add_argument('course', type=identifier)
+        resource.add_argument('item', type=identifier)
     s = sub.add_parser('get', help='Advanced read-only Canvas API request')
     s.add_argument('path', help='An /api/v1/ path, including optional query parameters')
     s.add_argument('--paginate', action='store_true')
-    for name in ('assignments', 'modules', 'pages', 'files', 'discussions', 'announcements', 'syllabus'):
+    for name in ('assignments', 'assignment-groups', 'modules', 'pages', 'files',
+                 'discussions', 'announcements', 'syllabus', 'quizzes', 'rubrics'):
         sub.add_parser(name).add_argument('course', type=identifier)
     for name in ('entries', 'replies', 'post'):
         s = sub.add_parser(name)
@@ -165,7 +170,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -337,6 +342,10 @@ def run(args):
                 for module in modules]
     if args.command == 'topic':
         return client.request(base + f'/discussion_topics/{args.topic}')[0]
+    if args.command in ('quiz', 'rubric', 'assignment-group'):
+        resource = {'quiz': 'quizzes', 'rubric': 'rubrics',
+                    'assignment-group': 'assignment_groups'}[args.command]
+        return client.request(base + f'/{resource}/{args.item}')[0]
     if args.command == 'submission':
         return client.request(base + f'/assignments/{args.assignment}/submissions/self?include[]=submission_comments&include[]=rubric_assessment')[0]
     if args.command == 'download':
@@ -372,7 +381,8 @@ def run(args):
                         'next': 'Review the exact destination and body, then repeat with --yes to publish.'}
             return client.request(route, 'POST', body)[0]
         return client.list(route + '?per_page=100', args.max_pages)
-    resource = {'discussions': 'discussion_topics', 'announcements': 'discussion_topics'}.get(args.command, args.command)
+    resource = {'discussions': 'discussion_topics', 'announcements': 'discussion_topics',
+                'assignment-groups': 'assignment_groups'}.get(args.command, args.command)
     route = base + '/' + resource + '?per_page=100'
     if args.command == 'announcements':
         route += '&only_announcements=true'
