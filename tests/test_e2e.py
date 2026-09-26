@@ -150,7 +150,11 @@ class E2E(unittest.TestCase):
                     data = {'url': 'welcome', 'title': 'Welcome', 'published': True,
                             'body': '<p>Should not be printed in page index</p>'}
                 elif self.path == '/api/v1/courses/101/discussion_topics?per_page=100&only_announcements=true':
-                    data = [{'id': 22, 'title': 'Synthetic announcement'}]
+                    data = [{'id': 22, 'title': 'Synthetic announcement',
+                             'message': '<a href="/courses/101/files/7">Reading</a>'}]
+                elif self.path == '/api/v1/courses/101/discussion_topics?per_page=100':
+                    data = [{'id': 23, 'title': 'Synthetic discussion prompt',
+                             'message': '<a href="/courses/101/files/7">Prompt file</a>'}]
                 elif self.path.startswith('/api/v1/calendar_events?'):
                     data = [{'id': 10, 'title': 'Synthetic event'}]
                 elif self.path == '/api/v1/users/self/groups?per_page=100':
@@ -249,10 +253,19 @@ class E2E(unittest.TestCase):
         self.assertNotIn('unavailable', due.stdout)
         listing = self.invoke('files', '101')
         self.assertEqual(listing.returncode, 1)
+        fallback = self.invoke('files', '101', '--best-effort', '--quick')
+        self.assertEqual(fallback.returncode, 0, fallback.stderr)
+        self.assertFalse(json.loads(fallback.stdout)['complete'])
+        self.assertEqual(json.loads(fallback.stdout)['source'], 'linked-content')
+        self.assertEqual(json.loads(fallback.stdout)['files'][0]['id'], 7)
         linked = self.invoke('linked-files', '101')
         self.assertEqual(linked.returncode, 0, linked.stderr)
         self.assertEqual(json.loads(linked.stdout)['files'][0]['display_name'], 'synthetic-syllabus.pdf')
         self.assertFalse(json.loads(linked.stdout)['files'][0]['downloadable'])
+        self.assertIn('announcement: Synthetic announcement',
+                      json.loads(linked.stdout)['files'][0]['sources'])
+        self.assertIn('discussion prompt: Synthetic discussion prompt',
+                      json.loads(linked.stdout)['files'][0]['sources'])
         brief = self.invoke('--format', 'brief', 'linked-files', '101')
         self.assertIn('not downloadable', brief.stdout)
         quick = self.invoke('linked-files', '101', '--quick')

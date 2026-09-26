@@ -6,6 +6,34 @@ from urllib.parse import quote, urljoin, urlsplit
 from .client import CanvasError
 
 
+def restricted(error):
+    """Only permission/not-found failures may be skipped as partial coverage."""
+    return error.status in (403, 404)
+
+
+def file_index(client, course_id, max_pages, resolve=True, all_pages=False):
+    """Use the Files API when available; label linked-content fallback incomplete."""
+    base = f'/api/v1/courses/{course_id}'
+    try:
+        files = client.list(base + '/files?per_page=100', max_pages)
+    except CanvasError as error:
+        if error.status not in (403, 404):
+            raise
+        discovered = linked_files(client, course_id, max_pages, resolve, all_pages)
+        return {
+            'course_id': int(course_id), 'complete': False, 'source': 'linked-content',
+            'files': discovered['files'], 'unavailable': [{'resource': 'files', 'status': error.status}],
+            'skipped_sources': discovered['skipped_sources'], 'note': discovered['note'],
+        }
+    return {
+        'course_id': int(course_id), 'complete': True, 'source': 'files-api',
+        'files': [item for item in files if isinstance(item, dict) and not item.get('hidden_for_user')
+                  and not item.get('locked_for_user')],
+        'unavailable': [], 'skipped_sources': [],
+        'note': 'Files visible through the course Files API to this user.',
+    }
+
+
 class Links(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -48,11 +76,15 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
     try:
         syllabus, _ = client.request(base + '?include[]=syllabus_body')
         add(referenced_ids(syllabus.get('syllabus_body'), client.host, course_id), 'syllabus')
-    except CanvasError:
+    except CanvasError as error:
+        if not restricted(error):
+            raise
         skipped.append('syllabus')
     try:
         modules = client.list(base + '/modules?include[]=items&per_page=100', max_pages)
-    except CanvasError:
+    except CanvasError as error:
+        if not restricted(error):
+            raise
         skipped.append('modules')
         modules = []
     page_slugs = set()
@@ -61,7 +93,9 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
         if len(parts) < (module.get('items_count') or 0):
             try:
                 parts = client.list(base + f"/modules/{module['id']}/items?per_page=100", max_pages)
-            except CanvasError:
+            except CanvasError as error:
+                if not restricted(error):
+                    raise
                 skipped.append(f"module: {module.get('name', module.get('id'))}")
                 continue
         for item in parts:
@@ -78,22 +112,48 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
                     slug = page.get('url')
                     if slug:
                         page_slugs.add((slug, page.get('title') or slug))
-        except CanvasError:
+        except CanvasError as error:
+            if not restricted(error):
+                raise
             skipped.append('all pages')
     try:
         assignments = client.list(base + '/assignments?per_page=100', max_pages)
-    except CanvasError:
+    except CanvasError as error:
+        if not restricted(error):
+            raise
         skipped.append('assignments')
         assignments = []
     for assignment in assignments:
         add(referenced_ids(assignment.get('description'), client.host, course_id),
             f"assignment: {assignment.get('name', assignment.get('id'))}")
+    for kind, route in (
+        ('announcements', base + '/discussion_topics?per_page=100&only_announcements=true'),
+        ('discussions', base + '/discussion_topics?per_page=100'),
+    ):
+        try:
+            topics = client.list(route, max_pages)
+        except CanvasError as error:
+            if not restricted(error):
+                raise
+            skipped.append(kind)
+            continue
+        for topic in topics:
+            # A locked announcement can still be readable because replies are
+            # closed. A locked discussion prompt may have an availability rule.
+            if (not isinstance(topic, dict) or topic.get('published') is False or
+                    (kind == 'discussions' and topic.get('locked_for_user'))):
+                continue
+            label = 'announcement' if kind == 'announcements' else 'discussion prompt'
+            add(referenced_ids(topic.get('message'), client.host, course_id),
+                f"{label}: {topic.get('title', topic.get('id'))}")
     for slug, title in sorted(page_slugs):
         try:
             page, _ = client.request(base + '/pages/' + quote(slug, safe=''))
             if page.get('published') is not False and not page.get('locked_for_user'):
                 add(referenced_ids(page.get('body'), client.host, course_id), f'page: {title}')
-        except CanvasError:
+        except CanvasError as error:
+            if not restricted(error):
+                raise
             skipped.append(f'page: {title}')
 
     files = []
@@ -110,10 +170,12 @@ def linked_files(client, course_id, max_pages, resolve=True, all_pages=False):
             item.update({'display_name': metadata.get('display_name'), 'size': metadata.get('size'),
                          'locked_for_user': locked, 'hidden_for_user': hidden,
                          'downloadable': not (locked or hidden) and bool(metadata.get('url'))})
-        except CanvasError:
+        except CanvasError as error:
+            if not restricted(error):
+                raise
             item['metadata_unavailable'] = True
         files.append(item)
     return {'files': files, 'skipped_sources': skipped,
-            'note': 'References from readable syllabus, modules, assignments, and ' +
+            'note': 'References from readable syllabus, modules, assignments, announcements, discussion prompts, and ' +
                     ('all listed published pages' if all_pages else 'module pages') +
                     ' only. This is not a complete course file listing.'}

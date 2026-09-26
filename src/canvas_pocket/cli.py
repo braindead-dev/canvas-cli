@@ -221,6 +221,13 @@ def parser():
         if name == 'pages':
             listing.add_argument('--best-effort', action='store_true',
                                  help='Show readable module pages when Canvas denies the pages list; reports incomplete coverage')
+        if name == 'files':
+            listing.add_argument('--best-effort', action='store_true',
+                                 help='Use linked course content when Canvas denies the Files list; reports incomplete coverage')
+            listing.add_argument('--quick', action='store_true',
+                                 help='Skip file metadata checks in best-effort fallback')
+            listing.add_argument('--all-pages', action='store_true',
+                                 help='Scan listed published pages in best-effort fallback')
     for name in ('entries', 'replies', 'post'):
         s = sub.add_parser(name)
         s.add_argument('course', type=identifier)
@@ -473,6 +480,13 @@ def run(args):
     if args.command == 'pages' and args.best_effort:
         from .pages import page_index
         return page_index(client, args.course, args.max_pages)
+    if args.command == 'files':
+        if (args.quick or args.all_pages) and not args.best_effort:
+            raise CanvasError('--quick and --all-pages require --best-effort')
+        if args.best_effort:
+            from .discovery import file_index
+            return file_index(client, args.course, args.max_pages,
+                              resolve=not args.quick, all_pages=args.all_pages)
     if args.command == 'outline':
         modules = client.list(base + '/modules?per_page=100', args.max_pages)
         return [{'id': module.get('id'), 'name': module.get('name'),
@@ -556,6 +570,13 @@ def brief(data):
         lines.extend(f"{page.get('url')}: {page.get('title') or 'Untitled'}" for page in data['pages'])
         if not data['complete']:
             lines.append('Partial coverage: only pages linked from visible modules. See JSON for unavailable resources.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'files' in data and 'source' in data and 'complete' in data:
+        lines = [f"{len(data['files'])} file(s) in course {data['course_id']}", brief(data['files'])]
+        if not data['complete']:
+            lines.append('Partial coverage: files linked from readable course content only.')
+        if data['skipped_sources']:
+            lines.append(f"Skipped {len(data['skipped_sources'])} source(s); see JSON for details.")
         return '\n'.join(lines)
     if isinstance(data, dict) and 'coverage' in data and 'results' in data:
         lines = [f"{len(data['results'])} result(s) in course {data['course_id']}."]
