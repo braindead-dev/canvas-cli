@@ -73,6 +73,8 @@ def parser():
     group.add_argument('group', type=identifier)
     course_groups = sub.add_parser('course-groups', help='Visible groups in a course')
     course_groups.add_argument('course', type=identifier)
+    doctor = sub.add_parser('doctor', help='Read-only course API reachability check without content output')
+    doctor.add_argument('course', type=identifier)
     my_files = sub.add_parser('my-files', help='List your personal Canvas files')
     my_files.add_argument('--search', help='Filter by partial filename')
     file_info = sub.add_parser('file-info', help='Get one accessible Canvas file record')
@@ -335,6 +337,9 @@ def run(args):
         return client.request(f'/api/v1/groups/{args.group}')[0]
     if args.command == 'course-groups':
         return client.list(f'/api/v1/courses/{args.course}/groups?per_page=100', args.max_pages)
+    if args.command == 'doctor':
+        from .doctor import course_doctor
+        return course_doctor(client, args.course)
     if args.command == 'my-files':
         route = '/api/v1/users/self/files?per_page=100'
         if args.search:

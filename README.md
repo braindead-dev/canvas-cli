@@ -26,6 +26,7 @@ For ephemeral/headless use, supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a 
 ```sh
 canvas-pocket courses
 canvas-pocket courses --active
+canvas-pocket doctor 123
 canvas-pocket favorites
 canvas-pocket groups
 canvas-pocket course-groups 123
@@ -118,6 +119,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 `upload-personal` and `upload-assignment-file` follow [Canvas's three-step upload protocol](https://developerdocs.instructure.com/services/canvas/basics/file.file_uploads). They preview the source path, size, SHA-256 hash and destination, then require `--yes --confirm DIGEST`. Personal uploads request rename-on-duplicate because Canvas otherwise overwrites a same-named file. Assignment uploads check that the current assignment permits file submissions and any listed extension, but **do not submit the assignment**. The CLI sends your token only to Canvas for initiation and confirmation; its separate storage request has no token, cookies or redirects. A failed/ambiguous upload is not retried automatically. Default maximum file size is 25 MiB; use `--max-bytes` deliberately if needed. These writes have synthetic HTTPS tests but no live-upload validation. Do not assume a successful upload means your work was turned in. To turn it in, separately preview `submit-file COURSE ASSIGNMENT FILE_ID` and confirm its digest. [Canvas documents this distinct file-ID submission step](https://developerdocs.instructure.com/services/canvas/resources/submissions).
 
 `my-files` and `file-info` use the [Files API](https://developerdocs.instructure.com/services/canvas/resources/files) to locate and verify an accessible uploaded file ID. `my-files --search` filters by partial filename and follows pagination; `file-info` requires an exact numeric ID. These are read-only and may show personal filenames in terminal output.
+
+`doctor COURSE` makes small, sequential GET requests to a visible course's major read APIs and reports only reachability states, not course content. A 403 or 404 may reflect role, publication, or institution configuration, and a readable endpoint does not guarantee every item is visible. It stops probing on a rate limit. This is a diagnostic map, not a way around access controls.
 
 See [the capability map](CAPABILITIES.md) for implemented features, permission boundaries and the broader roadmap. The expert `get` command extends read coverage without exposing arbitrary write methods.
 

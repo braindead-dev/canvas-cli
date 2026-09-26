@@ -4,7 +4,7 @@
 def describe():
     return {
         'read': [
-            'courses', 'me', 'favorites', 'groups', 'group', 'course-groups',
+            'courses', 'doctor', 'me', 'favorites', 'groups', 'group', 'course-groups',
             'inbox', 'conversation (no read-state change)', 'recipients',
             'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work',
             'news', 'linked-files', 'assignments', 'assignment',

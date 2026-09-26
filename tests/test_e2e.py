@@ -36,8 +36,10 @@ class E2E(unittest.TestCase):
                     self.send_response(302)
                     self.send_header('Location', '/api/v1/users/self/profile')
                     self.end_headers(); return
-                if self.path == '/api/v1/courses/101/files?per_page=100':
+                if self.path.startswith('/api/v1/courses/101/files?per_page='):
                     self.send_response(403); self.end_headers(); return
+                if self.path == '/api/v1/courses/101/pages?per_page=1':
+                    self.send_response(404); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 if self.path == '/api/v1/courses?per_page=100':
@@ -463,3 +465,13 @@ class E2E(unittest.TestCase):
         info = self.invoke('file-info', '777')
         self.assertEqual(info.returncode, 0, info.stderr)
         self.assertEqual(json.loads(info.stdout)['size'], 22)
+
+    def test_course_doctor_reports_reachability_without_content(self):
+        result = self.invoke('doctor', '101')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        statuses = {item['area']: item['status'] for item in data['probes']}
+        self.assertEqual(statuses['files'], 'denied_403')
+        self.assertEqual(statuses['pages'], 'not_found_404')
+        self.assertEqual(statuses['assignments'], 'readable')
+        self.assertNotIn('Synthetic course', result.stdout)

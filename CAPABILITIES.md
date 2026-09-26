@@ -5,7 +5,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Area | Current interface | Next implementation / constraint |
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
-| Courses | courses, courses --active, favorites, syllabus, sections | Name lookup |
+| Courses | courses, courses --active, favorites, syllabus, sections, content-free doctor probe | Name lookup; doctor reports reachability, not publication completeness |
 | Assignments | assignments, assignment, assignment-groups, assignment-group, deadlines, work (own status and effective due date) | Richer planner views and local reminders |
 | Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
 | Pages | pages, page, offline snapshot-markdown projection | Incremental snapshots |
