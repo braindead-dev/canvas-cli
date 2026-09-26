@@ -52,5 +52,19 @@ class Tests(unittest.TestCase):
         self.assertEqual(data['id'], 2)
         self.assertEqual(len(calls), 1)
 
+    def test_new_quiz_namespace_stays_on_canvas_origin(self):
+        calls = []
+        def send(req, **kw):
+            calls.append(req.full_url)
+            return Response(b'[]')
+        client = Client('https://canvas.example.edu', 'fake', send)
+        self.assertEqual(client.list('/api/quiz/v1/courses/1/quizzes'), [])
+        self.assertEqual(calls, ['https://canvas.example.edu/api/quiz/v1/courses/1/quizzes'])
+        with self.assertRaises(CanvasError):
+            client.request('https://other.example.edu/api/quiz/v1/courses/1/quizzes')
+        with self.assertRaises(CanvasError):
+            client.request('/api/quiz/v1/../users/1')
+        self.assertEqual(len(calls), 1)
+
 
 if __name__ == '__main__': unittest.main()

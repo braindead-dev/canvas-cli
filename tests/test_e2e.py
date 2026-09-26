@@ -85,6 +85,10 @@ class E2E(unittest.TestCase):
                     data = [{'id': 31, 'title': 'Project rubric'}]
                 elif self.path == '/api/v1/courses/101/quizzes?per_page=100':
                     data = [{'id': 32, 'title': 'Week 1 metadata', 'due_at': '2026-10-01T00:00:00Z'}]
+                elif self.path == '/api/quiz/v1/courses/101/quizzes?per_page=100':
+                    data = [{'id': 33, 'assignment_id': 34, 'title': 'Synthetic New Quiz'}]
+                elif self.path == '/api/quiz/v1/courses/101/quizzes/34':
+                    data = {'id': 33, 'assignment_id': 34, 'title': 'Synthetic New Quiz'}
                 elif self.path == '/api/v1/courses/101/modules?per_page=100':
                     data = [{'id': 6, 'name': 'Week 1'}]
                 elif self.path == '/api/v1/courses/101/modules/6/items?per_page=100':
@@ -224,6 +228,13 @@ class E2E(unittest.TestCase):
                 self.assertEqual(json.loads(result.stdout)[0][key], expected)
         self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         self.assertFalse(any('/submissions' in route for _, route in self.calls[before:]))
+        new = self.invoke('new-quizzes', '101')
+        self.assertEqual(new.returncode, 0, new.stderr)
+        self.assertEqual(json.loads(new.stdout)[0]['assignment_id'], 34)
+        single = self.invoke('new-quiz', '101', '34')
+        self.assertEqual(single.returncode, 0, single.stderr)
+        self.assertEqual(json.loads(single.stdout)['title'], 'Synthetic New Quiz')
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
 
     def test_redirect_refused(self):
         before = len(self.calls)

@@ -147,11 +147,15 @@ def parser():
         resource = sub.add_parser(name, help=f'Read one {name} without starting or changing it')
         resource.add_argument('course', type=identifier)
         resource.add_argument('item', type=identifier)
+    new_quiz = sub.add_parser('new-quiz', help='Read New Quiz metadata without starting an attempt')
+    new_quiz.add_argument('course', type=identifier)
+    new_quiz.add_argument('assignment', type=identifier)
     s = sub.add_parser('get', help='Advanced read-only Canvas API request')
     s.add_argument('path', help='An /api/v1/ path, including optional query parameters')
     s.add_argument('--paginate', action='store_true')
     for name in ('assignments', 'assignment-groups', 'modules', 'pages', 'files',
-                 'discussions', 'announcements', 'syllabus', 'quizzes', 'rubrics'):
+                 'discussions', 'announcements', 'syllabus', 'quizzes', 'rubrics',
+                 'new-quizzes'):
         sub.add_parser(name).add_argument('course', type=identifier)
     for name in ('entries', 'replies', 'post'):
         s = sub.add_parser(name)
@@ -170,7 +174,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -232,6 +236,11 @@ def run(args):
         if not args.path.startswith('/api/v1/'):
             raise CanvasError('get requires an /api/v1/ path')
         return client.list(args.path, args.max_pages) if args.paginate else client.request(args.path)[0]
+    if args.command in ('new-quizzes', 'new-quiz'):
+        route = f'/api/quiz/v1/courses/{args.course}/quizzes'
+        if args.command == 'new-quiz':
+            return client.request(route + f'/{args.assignment}')[0]
+        return client.list(route + '?per_page=100', args.max_pages)
     if args.command == 'calendar':
         start = args.start or date.today().isoformat()
         end = args.end or (date.fromisoformat(start) + timedelta(days=13)).isoformat()

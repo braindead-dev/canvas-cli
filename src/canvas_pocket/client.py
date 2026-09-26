@@ -33,7 +33,7 @@ class Client:
         u = urlsplit(url)
         decoded = unquote(u.path)
         if (f'{u.scheme}://{u.netloc}' != self.host or u.username or u.password
-                or not u.path.startswith('/api/v1/') or u.fragment
+                or not u.path.startswith(('/api/v1/', '/api/quiz/v1/')) or u.fragment
                 or any(p in ('.', '..') for p in decoded.split('/'))
                 or '\\' in decoded
                 or any(k.lower() in ('access_token', 'as_user_id') for k in parse_qs(u.query))):

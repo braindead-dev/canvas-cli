@@ -49,6 +49,8 @@ canvas-pocket assignment-groups 123
 canvas-pocket rubrics 123
 canvas-pocket quizzes 123
 canvas-pocket quiz 123 456
+canvas-pocket new-quizzes 123
+canvas-pocket new-quiz 123 456  # 456 is the assignment ID for a New Quiz
 canvas-pocket submission 123 456
 canvas-pocket grades 123
 canvas-pocket syllabus 123
@@ -94,7 +96,7 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 
 `news` lists recently posted announcements across active or selected courses using Canvas's dedicated [Announcements API](https://developerdocs.instructure.com/services/canvas/resources/announcements). It fetches each course separately so one inaccessible course does not hide all the others, and reports any unavailable course. JSON includes the full visible announcement body; brief output is a title/date index. The date window is based on posting time, not subsequent edits, so older edited announcements need a longer `--days` window.
 
-`assignment-groups` shows Canvas's group weights and grading rules. `rubrics`/`rubric` read visible criteria. `quizzes`/`quiz` read metadata for Classic Quizzes only, including dates, attempt limits and time limits; they never list quiz questions or create an attempt. New Quizzes use a separate API and are not yet covered by these commands. Availability depends on Canvas permissions.
+`assignment-groups` shows Canvas's group weights and grading rules. `rubrics`/`rubric` read visible criteria. `quizzes`/`quiz` read metadata for Classic Quizzes, including dates, attempt limits and time limits. `new-quizzes`/`new-quiz` read metadata from Canvas's separate [New Quizzes API](https://developerdocs.instructure.com/services/canvas/resources/new_quizzes); the single-item command takes its associated assignment ID. These commands never list quiz questions or create an attempt. Availability depends on Canvas permissions and which quiz engine a course uses.
 
 `download-linked` previews a batch of downloadable files referenced by readable content, then writes only with `--yes`. It requires an existing destination outside Git, refuses filename collisions, limits file count and total bytes, and sanitizes server filenames. Hidden or locked files are skipped. Successful earlier files remain if a later download fails, and the error reports that partial batch progress. It never sends the Canvas API token to storage URLs. It does not promise a complete course file inventory or access beyond your account's permissions.
 

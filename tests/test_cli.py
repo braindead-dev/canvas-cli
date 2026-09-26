@@ -125,6 +125,11 @@ class CLITests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(run(parser().parse_args([name, '8', '3'])), {'id': 3})
                 client.return_value.request.assert_called_with(f'/api/v1/courses/8/{route}/3')
+        self.assertEqual(run(parser().parse_args(['new-quizzes', '8'])), [{'id': 3}])
+        client.return_value.list.assert_called_with(
+            '/api/quiz/v1/courses/8/quizzes?per_page=100', 100)
+        self.assertEqual(run(parser().parse_args(['new-quiz', '8', '3'])), {'id': 3})
+        client.return_value.request.assert_called_with('/api/quiz/v1/courses/8/quizzes/3')
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')

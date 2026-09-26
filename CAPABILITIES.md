@@ -18,7 +18,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Rubrics and feedback | rubrics, rubric, submission, advanced get where authorized | Summaries and submission comments |
 | Inbox | inbox, conversation (explicit no-read-state-change), inbox-reply (preview + matching digest required), advanced get with transport guard | New-message composition; live write validation only in a designated sandbox |
 | Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |
-| Quizzes / New Quizzes | Classic quizzes/quiz metadata only | New Quizzes use a separate API; no automated exam-taking |
+| Quizzes / New Quizzes | Classic quizzes/quiz and New Quizzes new-quizzes/new-quiz metadata only | No question/attempt operations or automated exam-taking |
 | Uploads | Not implemented | Multi-step upload handshake; separate credential-free storage transport |
 | Local course snapshots | snapshot (private JSON, no Git checkout, explicit incomplete state), offline snapshot-diff | Incremental Markdown projection |
 | Canvas course exports | Not implemented | Separate asynchronous jobs and polling; role-dependent |
@@ -41,4 +41,4 @@ The generic `get` command is an expert escape hatch for documented read endpoint
 
 Current live-test gap: write actions have not been exercised against a real account. Personal-token login, calendar, own grades, folders, sections, outline, linked-file discovery, local snapshots, selected other read commands and one temporary file download have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. In a live course, the token received 404 for the pages list; module-page fallback recovered 27 readable pages and correctly left the snapshot marked incomplete. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
 
-In one live course, assignment groups were visible, while rubric listing returned 403 and Classic Quiz listing returned 404. Those results reflect this account/course configuration, not a claim that either resource is globally unavailable.
+In one live course, assignment groups were visible, while rubric listing and New Quizzes listing returned 403 and Classic Quiz listing returned 404. Those results reflect this account/course configuration, not a claim that these resources are globally unavailable.
