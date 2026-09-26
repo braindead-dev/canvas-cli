@@ -39,5 +39,18 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(CanvasError, 'auth login'):
             Client('https://canvas.example.edu', 'fake', send).request('/api/v1/courses')
 
+    def test_conversation_get_cannot_mark_inbox_read(self):
+        calls = []
+        def send(req, **kw):
+            calls.append(req)
+            return Response(b'{"id":2}')
+        client = Client('https://canvas.example.edu', 'fake', send)
+        with self.assertRaisesRegex(CanvasError, 'auto_mark_as_read=false'):
+            client.request('/api/v1/conversations/2')
+        self.assertEqual(calls, [])
+        data, _ = client.request('/api/v1/conversations/2?auto_mark_as_read=false')
+        self.assertEqual(data['id'], 2)
+        self.assertEqual(len(calls), 1)
+
 
 if __name__ == '__main__': unittest.main()

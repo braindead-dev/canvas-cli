@@ -88,6 +88,14 @@ class E2E(unittest.TestCase):
                     data = [{'id': 22, 'title': 'Synthetic announcement'}]
                 elif self.path.startswith('/api/v1/calendar_events?'):
                     data = [{'id': 10, 'title': 'Synthetic event'}]
+                elif self.path == '/api/v1/users/self/groups?per_page=100':
+                    data = [{'id': 11, 'name': 'Synthetic group'}]
+                elif self.path == '/api/v1/users/self/favorites/courses?per_page=100':
+                    data = [{'id': 101, 'name': 'Synthetic course'}]
+                elif self.path == '/api/v1/conversations?per_page=100&scope=unread':
+                    data = [{'id': 12, 'subject': 'Synthetic inbox thread'}]
+                elif self.path == '/api/v1/conversations/12?auto_mark_as_read=false':
+                    data = {'id': 12, 'messages': [{'body': 'Synthetic private message'}]}
                 else: data = {'id': 101, 'name': 'Synthetic resource'}
                 self.end_headers(); self.wfile.write(json.dumps(data).encode())
             def do_POST(self):
@@ -223,3 +231,16 @@ class E2E(unittest.TestCase):
         self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         repeated = self.invoke('snapshot', '101', '--output', str(destination))
         self.assertEqual(repeated.returncode, 1)
+
+    def test_inbox_read_does_not_change_read_state(self):
+        before = len(self.calls)
+        inbox = self.invoke('inbox', '--scope', 'unread')
+        self.assertEqual(inbox.returncode, 0, inbox.stderr)
+        self.assertEqual(json.loads(inbox.stdout)[0]['id'], 12)
+        thread = self.invoke('conversation', '12')
+        self.assertEqual(thread.returncode, 0, thread.stderr)
+        self.assertEqual(json.loads(thread.stdout)['messages'][0]['body'],
+                         'Synthetic private message')
+        self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/conversations?per_page=100&scope=unread'),
+            ('GET', '/api/v1/conversations/12?auto_mark_as_read=false')])

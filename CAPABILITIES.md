@@ -5,7 +5,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Area | Current interface | Next implementation / constraint |
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
-| Courses | courses, courses --active, syllabus, sections | Favorites, name lookup |
+| Courses | courses, courses --active, favorites, syllabus, sections | Name lookup |
 | Assignments | assignments, assignment, deadlines | Date overrides and richer submission status |
 | Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
 | Pages | pages, page | Markdown rendering and incremental snapshots |
@@ -16,8 +16,8 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
 | Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), advanced get where authorized | Aggregate student views and upload/submit workflow with destination review |
 | Rubrics and feedback | advanced get where authorized | Summaries and submission comments |
-| Inbox | advanced get where authorized | Conversation commands; send/reply with previews |
-| Groups, sections, enrollments | advanced get where authorized | First-class discovery, no administrative privileges assumed |
+| Inbox | inbox, conversation (explicit no-read-state-change), advanced get with transport guard | Send/reply with previews |
+| Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |
 | Quizzes / New Quizzes | Not a first-class workflow | Different APIs and permissions; no automated exam-taking |
 | Uploads | Not implemented | Multi-step upload handshake; separate credential-free storage transport |
 | Local course snapshots | snapshot (private JSON, no Git checkout, explicit incomplete state), offline snapshot-diff | Incremental Markdown projection |

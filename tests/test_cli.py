@@ -94,5 +94,23 @@ class CLITests(unittest.TestCase):
                          '/api/v1/folders/2/files?per_page=100')
         client.return_value.request.assert_not_called()
 
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
+    def test_inbox_and_group_routes(self, client):
+        client.return_value.list.return_value = []
+        client.return_value.request.return_value = ({'id': 9}, '')
+        run(parser().parse_args(['inbox', '--scope', 'unread', '--course', '8']))
+        self.assertEqual(client.return_value.list.call_args.args[0],
+                         '/api/v1/conversations?per_page=100&scope=unread&filter%5B%5D=course_8')
+        run(parser().parse_args(['conversation', '9']))
+        client.return_value.request.assert_called_with(
+            '/api/v1/conversations/9?auto_mark_as_read=false')
+        run(parser().parse_args(['groups']))
+        self.assertEqual(client.return_value.list.call_args.args[0],
+                         '/api/v1/users/self/groups?per_page=100')
+        run(parser().parse_args(['favorites']))
+        self.assertEqual(client.return_value.list.call_args.args[0],
+                         '/api/v1/users/self/favorites/courses?per_page=100')
+
 
 if __name__ == '__main__': unittest.main()

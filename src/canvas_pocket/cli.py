@@ -66,6 +66,17 @@ def parser():
     courses = sub.add_parser('courses')
     courses.add_argument('--active', action='store_true', help='Only current active enrollments')
     sub.add_parser('me')
+    sub.add_parser('favorites', help='Your favorite courses')
+    sub.add_parser('groups', help='Your active Canvas groups')
+    group = sub.add_parser('group', help='One visible group')
+    group.add_argument('group', type=identifier)
+    course_groups = sub.add_parser('course-groups', help='Visible groups in a course')
+    course_groups.add_argument('course', type=identifier)
+    inbox = sub.add_parser('inbox', help='List Canvas Inbox conversations')
+    inbox.add_argument('--scope', choices=('unread', 'starred', 'archived', 'sent'))
+    inbox.add_argument('--course', type=identifier, help='Filter to a course context')
+    conversation = sub.add_parser('conversation', help='Read one Inbox thread without marking it read')
+    conversation.add_argument('conversation', type=identifier)
     sub.add_parser('todo', help='Your Canvas to-do items')
     sub.add_parser('upcoming', help='Upcoming assignments and events')
     calendar = sub.add_parser('calendar', help='Events or assignments in a date window')
@@ -140,7 +151,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'linked-files', 'assignments', 'assignment', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'folder-folders', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'linked-files', 'assignments', 'assignment', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'folder-folders', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -212,6 +223,23 @@ def run(args):
         return client.list('/api/v1/calendar_events?' + urlencode(query), args.max_pages)
     if args.command == 'todo':
         return client.list('/api/v1/users/self/todo?per_page=100', args.max_pages)
+    if args.command == 'favorites':
+        return client.list('/api/v1/users/self/favorites/courses?per_page=100', args.max_pages)
+    if args.command == 'groups':
+        return client.list('/api/v1/users/self/groups?per_page=100', args.max_pages)
+    if args.command == 'group':
+        return client.request(f'/api/v1/groups/{args.group}')[0]
+    if args.command == 'course-groups':
+        return client.list(f'/api/v1/courses/{args.course}/groups?per_page=100', args.max_pages)
+    if args.command == 'inbox':
+        query = [('per_page', '100')]
+        if args.scope:
+            query.append(('scope', args.scope))
+        if args.course:
+            query.append(('filter[]', f'course_{args.course}'))
+        return client.list('/api/v1/conversations?' + urlencode(query), args.max_pages)
+    if args.command == 'conversation':
+        return client.request(f'/api/v1/conversations/{args.conversation}?auto_mark_as_read=false')[0]
     if args.command == 'upcoming':
         return client.list('/api/v1/users/self/upcoming_events?per_page=100', args.max_pages)
     if args.command == 'overview':

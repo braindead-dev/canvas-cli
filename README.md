@@ -26,6 +26,11 @@ For ephemeral/headless use, supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a 
 ```sh
 canvas-pocket courses
 canvas-pocket courses --active
+canvas-pocket favorites
+canvas-pocket groups
+canvas-pocket course-groups 123
+canvas-pocket inbox --scope unread --course 123
+canvas-pocket conversation 456
 canvas-pocket overview
 canvas-pocket --format brief overview
 canvas-pocket deadlines --days 30
@@ -75,6 +80,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 `snapshot` reads the syllabus-bearing course record, assignments, module items, accessible published pages, and announcements into one local JSON file. It makes no quiz attempts or writes to Canvas. If an endpoint is unavailable, the snapshot says `complete: false` and records the missing resource. When the pages list is unavailable, it tries readable page links from modules but still marks the snapshot incomplete. The file is mode `0600`, cannot overwrite an existing file, and cannot be placed inside a Git checkout, including through a symlinked parent. It may contain copyrighted course materials, private academic information or expiring links; keep it local and do not post it to a public repo.
 
 `snapshot-diff` works offline and reports added/removed resources and which fields changed, without printing full assignment descriptions or page bodies. It skips categories that were incomplete in either snapshot, avoiding false “removed” claims. It does not need a Canvas credential.
+
+`inbox` lists your Canvas conversations; `conversation` fetches one with `auto_mark_as_read=false`. The [Canvas Conversations API](https://developerdocs.instructure.com/services/canvas/resources/conversations) otherwise marks an unread thread read by default on a GET. The transport blocks that unsafe GET even through the expert `get` command unless the query explicitly sets `auto_mark_as_read=false`. These commands do not send or alter messages. `groups` returns only your active groups; `course-groups` returns only groups visible to your Canvas role.
 
 `download-linked` previews a batch of downloadable files referenced by readable content, then writes only with `--yes`. It requires an existing destination outside Git, refuses filename collisions, limits file count and total bytes, and sanitizes server filenames. Hidden or locked files are skipped. Successful earlier files remain if a later download fails, and the error reports that partial batch progress. It never sends the Canvas API token to storage URLs. It does not promise a complete course file inventory or access beyond your account's permissions.
 
