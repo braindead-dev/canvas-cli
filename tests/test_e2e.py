@@ -80,6 +80,9 @@ class E2E(unittest.TestCase):
                             'published': True, 'locked_for_user': False,
                             'submission_types': ['online_upload'],
                             'allowed_extensions': ['txt']}
+                elif self.path == '/api/v1/courses/101/discussion_topics/202':
+                    data = {'id': 202, 'context_id': 101, 'title': 'Synthetic discussion',
+                            'published': True, 'locked_for_user': False}
                 elif self.path == '/api/v1/files/777/create_success':
                     data = {'id': 777, 'display_name': 'synthetic.txt'}
                 elif self.path == '/api/v1/files/777':
@@ -306,12 +309,16 @@ class E2E(unittest.TestCase):
         message.write_text('Synthetic message')
         before = len(self.calls)
         r = self.invoke('post', '101', '202', '--message-file', str(message))
-        self.assertTrue(json.loads(r.stdout)['dry_run'])
-        self.assertEqual(len(self.calls), before)
-        r = self.invoke('post', '101', '202', '--message-file', str(message), '--yes')
+        preview = json.loads(r.stdout)
+        self.assertTrue(preview['dry_run'])
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/courses/101/discussion_topics/202')])
+        r = self.invoke('post', '101', '202', '--message-file', str(message), '--yes',
+                        '--confirm', preview['confirm'])
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout)['id'], 999)
-        self.assertEqual(len(self.calls), before + 1)
+        self.assertEqual(self.calls[-2:], [
+            ('GET', '/api/v1/courses/101/discussion_topics/202'),
+            ('POST', '/api/v1/courses/101/discussion_topics/202/entries')])
 
     def test_capabilities_without_credentials(self):
         r = self.invoke('capabilities')

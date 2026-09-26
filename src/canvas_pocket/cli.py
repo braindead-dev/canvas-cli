@@ -1,7 +1,6 @@
 import argparse
 import getpass
 import hashlib
-import html
 import json
 import os
 import re
@@ -212,7 +211,8 @@ def parser():
         if name == 'post':
             s.add_argument('--reply-to', type=identifier)
             s.add_argument('--message-file', required=True, type=Path)
-            s.add_argument('--yes', action='store_true', help='Explicitly authorize this post')
+            s.add_argument('--confirm', help='Digest returned by the preview')
+            s.add_argument('--yes', action='store_true', help='Post only if the fresh preview matches --confirm')
     return p
 
 
@@ -467,17 +467,10 @@ def run(args):
         if args.command == 'replies':
             route += f'/{args.entry}/replies'
         if args.command == 'post':
-            if args.reply_to:
-                route += f'/{args.reply_to}/replies'
+            from .discussion import post
             message = args.message_file.read_text(encoding='utf-8')
-            if not message.strip():
-                raise CanvasError('Empty message refused')
-            # Plain text input, escaped before Canvas renders it as HTML.
-            body = {'message': '<p>' + html.escape(message).replace('\n', '<br>') + '</p>'}
-            if not args.yes:
-                return {'dry_run': True, 'method': 'POST', 'origin': host, 'path': route, 'body': body,
-                        'next': 'Review the exact destination and body, then repeat with --yes to publish.'}
-            return client.request(route, 'POST', body)[0]
+            return post(client, args.course, args.topic, args.reply_to, message,
+                        args.yes, args.confirm)
         return client.list(route + '?per_page=100', args.max_pages)
     resource = {'discussions': 'discussion_topics', 'announcements': 'discussion_topics',
                 'assignment-groups': 'assignment_groups'}.get(args.command, args.command)

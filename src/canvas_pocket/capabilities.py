@@ -22,7 +22,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)',
         ],
         'canvas_write': [
-            'post (preview unless --yes)',
+            'post (preview and matching digest required)',
             'inbox-reply/inbox-compose (preview and matching digest required)',
             'submit-url/submit-text/submit-file (preview and matching digest required)',
             'upload-personal/upload-assignment-file (preview and matching digest required; assignment upload does not submit)',

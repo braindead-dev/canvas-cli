@@ -11,7 +11,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Pages | pages, page, offline snapshot-markdown projection | Incremental snapshots |
 | Files | files, my-files (optional filename search), file-info, folders, folder, folder-files, folder-folders, linked-files (optional all published pages), download, preview-first download-linked | Course Files list may be disabled while linked files remain accessible; discovered links are not a complete inventory |
 | Announcements | announcements, cross-course news | Incremental change detection; creation would be a write |
-| Discussions | discussions, topic, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
+| Discussions | discussions, topic, entries, replies, post (preview + matching digest) | Topic creation/edit/delete needs preview and explicit confirmation |
 | Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
 | Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
 | Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), submit-url/submit-text/submit-file (preview + matching digest), upload-assignment-file (file stage only), advanced get where authorized | Live write validation only in a designated sandbox; multi-file submission |
