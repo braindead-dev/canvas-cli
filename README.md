@@ -90,7 +90,7 @@ canvas-pocket assignment 123 456
 canvas-pocket page 123 introduction
 canvas-pocket module-items 123 456
 canvas-pocket todo
-canvas-pocket download 123 456 --output ./syllabus.pdf
+canvas-pocket download 123 456 --output /private/path/syllabus.pdf
 canvas-pocket capabilities
 canvas-pocket get '/api/v1/courses/123/tabs' --paginate
 canvas-pocket --max-pages 200 assignments 123
@@ -117,7 +117,7 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 
 `tabs COURSE` lists visible course navigation labels and Canvas paths, including external-tool tabs, without launching those tools. `front-page COURSE` reads the published course home page where Canvas provides one. External tools such as Zoom or Piazza need their own authorization and are not controlled through these commands.
 
-`linked-files` discovers links in readable syllabus, modules, module pages, assignments, announcements and discussion prompts, useful when a course's Files tab is hidden. It skips explicitly unpublished, hidden or locked sources; it does not read student discussion entries, is not a complete inventory, and reports when a linked file is hidden or locked for the user. `--all-pages` adds accessible published pages outside modules. `--quick` skips per-file metadata requests, so availability is unknown, but is substantially faster for courses with many files. Requests remain sequential to avoid Canvas's [parallel-request throttling penalty](https://developerdocs.instructure.com/services/canvas/basics/file.throttling). Downloads use an explicit output path, refuse overwrites, remove failed partial files, compare received bytes with Canvas's advertised file size when available, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
+`linked-files` discovers links in readable syllabus, modules, module pages, assignments, announcements and discussion prompts, useful when a course's Files tab is hidden. It skips explicitly unpublished, hidden or locked sources; it does not read student discussion entries, is not a complete inventory, and reports when a linked file is hidden or locked for the user. `--all-pages` adds accessible published pages outside modules. `--quick` skips per-file metadata requests, so availability is unknown, but is substantially faster for courses with many files. Requests remain sequential to avoid Canvas's [parallel-request throttling penalty](https://developerdocs.instructure.com/services/canvas/basics/file.throttling). Downloads use an explicit output path, refuse overwrites and Git-checkout destinations, remove failed partial files, compare received bytes with Canvas's advertised file size when available, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
 
 `files COURSE` preserves Canvas's raw Files list. If that list is denied, `files COURSE --best-effort` falls back to `linked-files` and returns an explicit `complete: false` envelope. It never claims that linked files are every file in the course. `--quick` and `--all-pages` work with the fallback option.
 

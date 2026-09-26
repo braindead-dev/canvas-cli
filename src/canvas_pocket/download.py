@@ -11,8 +11,12 @@ from .client import CanvasError, NoRedirect
 def download(url, destination, max_bytes=100 * 1024 * 1024, transport=None,
              expected_bytes=None):
     transport = transport or build_opener(NoRedirect()).open
-    target = Path(destination)
+    target = Path(destination).expanduser().resolve(strict=False)
     # Never infer output paths from untrusted server filenames.
+    if any((parent / '.git').exists() for parent in target.parents):
+        raise CanvasError('Course files cannot be downloaded inside a Git checkout')
+    if not target.parent.is_dir():
+        raise CanvasError('Download parent directory does not exist')
     if max_bytes < 1:
         raise CanvasError('Download byte limit must be positive')
     if expected_bytes is not None:

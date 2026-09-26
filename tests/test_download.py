@@ -48,5 +48,19 @@ class DownloadTests(unittest.TestCase):
     def test_redirect_cannot_downgrade(self):
         def send(req, **kw):
             raise HTTPError(req.full_url, 302, '', {'Location': 'http://files.example/file'}, None)
-        with self.assertRaises(CanvasError):
-            download('https://files.example/file', 'unused', transport=send)
+        with (tempfile.TemporaryDirectory() as folder,
+              self.assertRaisesRegex(CanvasError, 'non-HTTPS')):
+            download('https://files.example/file', Path(folder) / 'unused', transport=send)
+
+    def test_refuses_download_inside_git_checkout_before_transport(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / '.git').mkdir()
+            target = root / 'course.pdf'
+
+            def unexpected(*args, **kwargs):
+                self.fail('Transport should not be used')
+
+            with self.assertRaisesRegex(CanvasError, 'Git checkout'):
+                download('https://files.example/file', target, transport=unexpected)
+            self.assertFalse(target.exists())
