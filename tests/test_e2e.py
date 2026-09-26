@@ -147,12 +147,15 @@ class E2E(unittest.TestCase):
             def do_POST(self):
                 cls.calls.append((self.command, self.path))
                 raw = self.rfile.read(int(self.headers['Content-Length']))
-                if self.path == '/storage/upload':
+                if self.path.startswith('/storage/upload'):
                     cls.storage_auth = self.headers.get('Authorization')
                     cls.storage_body = raw
                     cls.storage_type = self.headers.get('Content-Type')
-                    self.send_response(303)
-                    self.send_header('Location', f'https://localhost:{cls.server.server_port}/api/v1/files/777/create_success')
+                    self.send_response(201 if self.path.endswith('-created') else 303)
+                    location = ('https://untrusted.example.org/api/v1/files/777/create_success'
+                                if self.path.endswith('-foreign') else
+                                f'https://localhost:{cls.server.server_port}/api/v1/files/777/create_success')
+                    self.send_header('Location', location)
                     self.end_headers(); return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
@@ -160,9 +163,11 @@ class E2E(unittest.TestCase):
                 if self.path in ('/api/v1/users/self/files',
                                  '/api/v1/courses/101/assignments/89/submissions/self/files'):
                     cls.upload_initial = body
+                    suffix = ('-created' if body['name'] == 'created.txt' else
+                              '-foreign' if body['name'] == 'foreign.txt' else '')
                     self.send_response(200); self.end_headers()
                     self.wfile.write(json.dumps({
-                        'upload_url': f'https://localhost:{cls.server.server_port}/storage/upload',
+                        'upload_url': f'https://localhost:{cls.server.server_port}/storage/upload{suffix}',
                         'upload_params': {'key': 'synthetic-key'},
                     }).encode()); return
                 self.send_response(200); self.end_headers()
@@ -447,6 +452,31 @@ class E2E(unittest.TestCase):
         self.assertNotIn('on_duplicate', self.upload_initial)
         self.assertNotIn(('POST', '/api/v1/courses/101/assignments/89/submissions'),
                          self.calls)
+
+    def test_storage_201_location_is_confirmed(self):
+        source = Path(self.tmp.name) / 'created.txt'
+        source.write_text('Synthetic 201 upload')
+        command = ('upload-personal', '--file', str(source))
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        sent = self.invoke(*command, '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(json.loads(sent.stdout)['uploaded_file_id'], 777)
+
+    def test_foreign_confirmation_refused_without_token_leak(self):
+        source = Path(self.tmp.name) / 'foreign.txt'
+        source.write_text('Synthetic hostile redirect')
+        command = ('upload-personal', '--file', str(source))
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        before = len(self.calls)
+        sent = self.invoke(*command, '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+        self.assertEqual(sent.returncode, 1)
+        self.assertIn('confirmation failed', sent.stderr)
+        self.assertEqual(self.calls[before:], [
+            ('POST', '/api/v1/users/self/files'), ('POST', '/storage/upload-foreign')])
+        self.assertIsNone(self.storage_auth)
+        self.assertNotIn('untrusted.example.org', sent.stderr)
 
     def test_submit_uploaded_file_preview_and_confirm(self):
         command = ('submit-file', '101', '89', '777')
