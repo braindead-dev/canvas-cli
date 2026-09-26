@@ -49,7 +49,31 @@ class FindTests(unittest.TestCase):
     def test_rate_limit_stops_later_probes(self):
         class Limited:
             def list(self, route, max_pages):
-                raise CanvasError('Canvas rate limit reached')
+                raise CanvasError('Canvas rate limit reached', status=429)
         result = find(Limited(), '101', 'paper')
         self.assertEqual(result['coverage']['assignments'], 'unavailable')
         self.assertEqual(result['coverage']['discussions'], 'not_checked_after_rate_limit')
+
+    def test_page_search_falls_back_to_module_titles_with_partial_coverage(self):
+        class ModulePages:
+            def list(self, route, _max_pages):
+                if '/pages?' in route:
+                    raise CanvasError('Canvas HTTP 404', status=404)
+                if '/modules?' in route:
+                    return [{'id': 6, 'published': True}]
+                if '/modules/6/items?' in route:
+                    return [{'type': 'Page', 'page_url': 'project-guide'},
+                            {'type': 'Page', 'page_url': 'other'}]
+                raise AssertionError(route)
+
+            def request(self, route):
+                slug = route.rsplit('/', 1)[1]
+                return {'url': slug, 'title': 'Project guide' if slug == 'project-guide'
+                        else 'Other page', 'published': True, 'body': 'private'}, ''
+
+        result = find(ModulePages(), '101', 'project', selected='pages')
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['coverage']['pages'], 'module_pages_only')
+        self.assertEqual(result['results'], [
+            {'area': 'page', 'id': 'project-guide', 'title': 'Project guide', 'due_at': None}])
+        self.assertNotIn('private', str(result))

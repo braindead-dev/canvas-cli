@@ -133,6 +133,10 @@ def parser():
     snap = sub.add_parser('snapshot', help='Save a private, read-only course snapshot outside Git')
     snap.add_argument('course', type=identifier)
     snap.add_argument('--output', required=True, type=Path)
+    sync = sub.add_parser('sync', help='Save a private course snapshot and compare with the previous one')
+    sync.add_argument('course', type=identifier)
+    sync.add_argument('--directory', type=Path,
+                      help='Private snapshot directory; defaults to the app config directory')
     difference = sub.add_parser('snapshot-diff', help='Compare two local snapshots without Canvas login')
     difference.add_argument('older', type=Path)
     difference.add_argument('newer', type=Path)
@@ -189,7 +193,7 @@ def parser():
     file_submit.add_argument('--yes', action='store_true', help='Submit only if the fresh preview matches --confirm')
     grades = sub.add_parser('grades', help='Read only your own course enrollment and visible grade')
     grades.add_argument('course', type=identifier)
-    for name in ('folders', 'sections', 'outline'):
+    for name in ('folders', 'sections', 'outline', 'tabs', 'front-page'):
         sub.add_parser(name).add_argument('course', type=identifier)
     for name in ('folder', 'folder-files', 'folder-folders'):
         sub.add_parser(name).add_argument('folder', type=identifier)
@@ -209,7 +213,11 @@ def parser():
     for name in ('assignments', 'assignment-groups', 'modules', 'pages', 'files',
                  'discussions', 'announcements', 'syllabus', 'quizzes', 'rubrics',
                  'new-quizzes'):
-        sub.add_parser(name).add_argument('course', type=identifier)
+        listing = sub.add_parser(name)
+        listing.add_argument('course', type=identifier)
+        if name == 'pages':
+            listing.add_argument('--best-effort', action='store_true',
+                                 help='Show readable module pages when Canvas denies the pages list; reports incomplete coverage')
     for name in ('entries', 'replies', 'post'):
         s = sub.add_parser(name)
         s.add_argument('course', type=identifier)
@@ -280,6 +288,10 @@ def run(args):
         from .snapshot import capture, save_private, validate_destination
         output = validate_destination(args.output)
         return save_private(output, capture(client, args.course, args.max_pages))
+    if args.command == 'sync':
+        from .sync import sync_course
+        directory = args.directory or config_path().parent / 'snapshots'
+        return sync_course(client, args.course, args.max_pages, directory)
     if args.command in ('upload-personal', 'upload-assignment-file'):
         from .upload import upload
         return upload(client, args.file, args.max_bytes,
@@ -446,6 +458,18 @@ def run(args):
         return client.list(base + '/folders?per_page=100', args.max_pages)
     if args.command == 'sections':
         return client.list(base + '/sections?per_page=100', args.max_pages)
+    if args.command == 'tabs':
+        tabs = client.list(base + '/tabs?per_page=100', args.max_pages)
+        return [{key: tab.get(key) for key in ('id', 'label', 'html_url', 'position', 'visibility')}
+                for tab in tabs if isinstance(tab, dict) and not tab.get('hidden')]
+    if args.command == 'front-page':
+        page = client.request(base + '/front_page')[0]
+        if not isinstance(page, dict) or page.get('published') is False or page.get('locked_for_user'):
+            raise CanvasError('Course front page is not readable to this user')
+        return page
+    if args.command == 'pages' and args.best_effort:
+        from .pages import page_index
+        return page_index(client, args.course, args.max_pages)
     if args.command == 'outline':
         modules = client.list(base + '/modules?per_page=100', args.max_pages)
         return [{'id': module.get('id'), 'name': module.get('name'),
@@ -497,6 +521,27 @@ def run(args):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'baseline' in data and 'saved' in data and 'counts' in data:
+        lines = [f"Saved private snapshot: {data['saved']}"]
+        if data['baseline']:
+            lines.append('Baseline created; no earlier snapshot to compare.')
+        else:
+            diff = data['diff']
+            count = len(diff['course_changed_fields']) + sum(
+                len(group[key]) for group in diff['changes'].values()
+                for key in ('added', 'removed', 'changed'))
+            observed = sum(len(items) for items in diff['observed_changes'].values())
+            lines.append(f'{count} change(s) in fully covered resources; '
+                         f'{observed} change(s) observed in partial resources.')
+            if diff['skipped']:
+                lines.append('Some resource inventories were incomplete; see JSON for details.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'pages' in data and 'source' in data and 'complete' in data:
+        lines = [f"{len(data['pages'])} readable page(s) in course {data['course_id']}."]
+        lines.extend(f"{page.get('url')}: {page.get('title') or 'Untitled'}" for page in data['pages'])
+        if not data['complete']:
+            lines.append('Partial coverage: only pages linked from visible modules. See JSON for unavailable resources.')
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'coverage' in data and 'results' in data:
         lines = [f"{len(data['results'])} result(s) in course {data['course_id']}."]
         for item in data['results']:
@@ -519,6 +564,9 @@ def brief(data):
     if isinstance(data, list):
         if not data:
             return 'No items.'
+        if all(isinstance(item, dict) and 'label' in item and 'html_url' in item for item in data):
+            return '\n'.join(f"{item.get('label') or item.get('id') or 'Untitled'}  "
+                             f"{item.get('html_url') or ''}" for item in data)
         if all(isinstance(item, dict) and 'items' in item and 'name' in item for item in data):
             return '\n\n'.join(
                 f"{module['name']}" +

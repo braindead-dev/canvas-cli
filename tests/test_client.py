@@ -37,8 +37,17 @@ class Tests(unittest.TestCase):
     def test_auth_error_is_safe(self):
         def send(req, **kw):
             raise HTTPError(req.full_url, 401, 'private response', {}, None)
-        with self.assertRaisesRegex(CanvasError, 'auth login'):
+        with self.assertRaisesRegex(CanvasError, 'auth login') as caught:
             Client('https://canvas.example.edu', 'fake', send).request('/api/v1/courses')
+        self.assertEqual(caught.exception.status, 401)
+
+    def test_http_status_is_structured_without_exposing_response(self):
+        def send(req, **kw):
+            raise HTTPError(req.full_url, 404, 'private response', {}, None)
+        with self.assertRaises(CanvasError) as caught:
+            Client('https://canvas.example.edu', 'fake', send).request('/api/v1/courses/1/pages')
+        self.assertEqual(caught.exception.status, 404)
+        self.assertNotIn('private response', str(caught.exception))
 
     def test_conversation_get_cannot_mark_inbox_read(self):
         calls = []

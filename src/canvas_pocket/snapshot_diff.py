@@ -48,6 +48,7 @@ def compare(old, new):
     course_changes = [field for field in course_fields
                       if old.get('course', {}).get(field) != new.get('course', {}).get(field)]
     changes = {}
+    observed_changes = {}
     skipped = {}
     for kind, fields in FIELDS.items():
         missing_old = kind in old.get('unavailable', {})
@@ -57,6 +58,16 @@ def compare(old, new):
             missing_new |= any(name.startswith('module ') for name in new.get('unavailable', {}))
         if missing_old or missing_new:
             skipped[kind] = 'incomplete in older or newer snapshot'
+            if kind == 'pages':
+                before = {key(kind, item): item for item in old.get(kind, []) if key(kind, item) is not None}
+                after = {key(kind, item): item for item in new.get(kind, []) if key(kind, item) is not None}
+                observed_changes[kind] = [
+                    {'id': identity, 'title': visible_label(kind, after[identity]),
+                     'fields': [field for field in fields
+                                if content(kind, before[identity])[field] != content(kind, after[identity])[field]]}
+                    for identity in sorted(before.keys() & after.keys(), key=str)
+                    if content(kind, before[identity]) != content(kind, after[identity])
+                ]
             continue
         before = {key(kind, item): item for item in old.get(kind, []) if key(kind, item) is not None}
         after = {key(kind, item): item for item in new.get(kind, []) if key(kind, item) is not None}
@@ -74,4 +85,5 @@ def compare(old, new):
         }
     return {'origin': new['origin'], 'course_id': new['course_id'],
             'older_captured_at': old.get('captured_at'), 'newer_captured_at': new.get('captured_at'),
-            'course_changed_fields': course_changes, 'changes': changes, 'skipped': skipped}
+            'course_changed_fields': course_changes, 'changes': changes,
+            'observed_changes': observed_changes, 'skipped': skipped}

@@ -6,7 +6,9 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 class CanvasError(Exception):
-    pass
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
 
 
 def origin(value):
@@ -56,12 +58,12 @@ class Client:
         except HTTPError as e:
             e.close()
             if e.code == 401:
-                raise CanvasError('Authentication expired or revoked. Run auth login again.') from None
+                raise CanvasError('Authentication expired or revoked. Run auth login again.', status=401) from None
             if e.code == 403:
-                raise CanvasError('Canvas denied access. Check permissions/publication; this is not necessarily expired auth.') from None
+                raise CanvasError('Canvas denied access. Check permissions/publication; this is not necessarily expired auth.', status=403) from None
             if e.code == 429:
-                raise CanvasError('Canvas rate limit reached. Wait before retrying; no automatic write retries.') from None
-            raise CanvasError(f'Canvas HTTP {e.code}. No automatic retries; verify a write in Canvas before repeating it.') from None
+                raise CanvasError('Canvas rate limit reached. Wait before retrying; no automatic write retries.', status=429) from None
+            raise CanvasError(f'Canvas HTTP {e.code}. No automatic retries; verify a write in Canvas before repeating it.', status=e.code) from None
         except (URLError, TimeoutError, OSError):
             raise CanvasError('Network failure. If posting, verify in Canvas before retrying to avoid duplicates.') from None
         except (ValueError, UnicodeError):

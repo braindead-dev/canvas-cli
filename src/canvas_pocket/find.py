@@ -29,9 +29,33 @@ def find(client, course_id, query, max_pages=100, selected=None):
         try:
             rows = client.list(route, max_pages)
         except CanvasError as error:
+            if area == 'pages' and error.status in (403, 404):
+                from .pages import module_page_index
+                try:
+                    index = module_page_index(client, course_id, max_pages, error.status)
+                except CanvasError as fallback_error:
+                    if fallback_error.status == 429:
+                        unavailable[area] = str(fallback_error)
+                        coverage[area] = 'unavailable'
+                        for remaining, _ in choices[choices.index((area, resource)) + 1:]:
+                            coverage[remaining] = 'not_checked_after_rate_limit'
+                        break
+                    unavailable[area] = f'{error}; module fallback: {fallback_error}'
+                    coverage[area] = 'unavailable'
+                    continue
+                else:
+                    coverage[area] = 'module_pages_only' if not index['complete'] else 'searched'
+                    if not index['complete']:
+                        unavailable[area] = 'Canvas pages list unavailable; only visible module pages searched'
+                    for page in index['pages']:
+                        title = page.get('title') or page.get('url') or ''
+                        if query.casefold() in title.casefold():
+                            results.append({'area': 'page', 'id': page.get('url'),
+                                            'title': title, 'due_at': None})
+                    continue
             unavailable[area] = str(error)
             coverage[area] = 'unavailable'
-            if 'Canvas rate limit' in str(error):
+            if error.status == 429:
                 for remaining, _ in choices[choices.index((area, resource)) + 1:]:
                     coverage[remaining] = 'not_checked_after_rate_limit'
                 break

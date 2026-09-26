@@ -7,7 +7,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from canvas_pocket.cli import parser, run
+from canvas_pocket.cli import brief, parser, run
 from canvas_pocket.client import CanvasError
 
 
@@ -115,6 +115,27 @@ class CLITests(unittest.TestCase):
         self.assertEqual(client.return_value.list.call_args_list[2].args[0],
                          '/api/v1/folders/2/files?per_page=100')
         client.return_value.request.assert_not_called()
+
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
+    def test_tabs_and_front_page_are_read_only_and_filtered(self, client):
+        client.return_value.list.return_value = [
+            {'id': 'home', 'label': 'Home', 'html_url': '/courses/8',
+             'visibility': 'public', 'position': 1, 'secret': 'not returned'},
+            {'id': 'hidden', 'label': 'Hidden', 'hidden': True},
+        ]
+        tabs = run(parser().parse_args(['tabs', '8']))
+        self.assertEqual(tabs, [{'id': 'home', 'label': 'Home',
+                                 'html_url': '/courses/8', 'position': 1,
+                                 'visibility': 'public'}])
+        self.assertEqual(brief(tabs), 'Home  /courses/8')
+        client.return_value.list.assert_called_once_with('/api/v1/courses/8/tabs?per_page=100', 100)
+        client.return_value.request.return_value = ({'url': 'welcome', 'published': True}, '')
+        self.assertEqual(run(parser().parse_args(['front-page', '8']))['url'], 'welcome')
+        client.return_value.request.assert_called_once_with('/api/v1/courses/8/front_page')
+        client.return_value.request.return_value = ({'url': 'draft', 'published': False}, '')
+        with self.assertRaises(CanvasError):
+            run(parser().parse_args(['front-page', '8']))
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')

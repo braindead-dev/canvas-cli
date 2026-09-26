@@ -9,7 +9,7 @@ def describe():
             'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work',
             'news', 'linked-files', 'assignments', 'assignment',
             'assignment-groups', 'assignment-group', 'submission', 'grades',
-            'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page',
+            'syllabus', 'tabs', 'front-page', 'modules', 'module-items', 'outline', 'pages', 'page',
             'files', 'my-files', 'file-info', 'folders', 'folder-files',
             'sections', 'announcements', 'discussions', 'topic', 'entries',
             'replies', 'quizzes (metadata only)', 'quiz (metadata only)',
@@ -19,6 +19,7 @@ def describe():
         ],
         'local_write': [
             'snapshot (private local file)',
+            'sync (private local snapshot and change summary)',
             'snapshot-markdown (private local file, offline)',
             'download', 'download-linked (preview unless --yes)',
         ],

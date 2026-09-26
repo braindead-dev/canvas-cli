@@ -5,10 +5,10 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Area | Current interface | Next implementation / constraint |
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
-| Courses | courses, courses --active, favorites, syllabus, sections, content-free doctor probe, multi-area title finder | Finder only searches visible titles/names; doctor reports reachability, not publication completeness |
+| Courses | courses, courses --active, favorites, syllabus, tabs, front-page, sections, content-free doctor probe, multi-area title finder | External-tool tabs are paths only; finder only searches visible titles/names, module-page fallback is partial, and doctor reports reachability, not publication completeness |
 | Assignments | assignments, assignment, assignment-groups, assignment-group, deadlines, work (own status and effective due date) | Richer planner views and local reminders |
 | Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
-| Pages | pages, page, offline snapshot-markdown projection | Incremental snapshots |
+| Pages | pages, page, `pages --best-effort` module fallback with explicit partial coverage, offline snapshot-markdown projection | Incremental snapshots; pages outside modules remain undiscoverable when Canvas denies the list |
 | Files | files, my-files (optional filename search), file-info, folders, folder, folder-files, folder-folders, linked-files (optional all published pages), download, preview-first download-linked | Course Files list may be disabled while linked files remain accessible; discovered links are not a complete inventory |
 | Announcements | announcements, cross-course news | Incremental change detection; creation would be a write |
 | Discussions | discussions, topic, entries, replies, post (preview + matching digest) | Topic creation/edit/delete needs preview and explicit confirmation |
@@ -20,7 +20,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |
 | Quizzes / New Quizzes | Classic quizzes/quiz and New Quizzes new-quizzes/new-quiz metadata only | No question/attempt operations or automated exam-taking |
 | Uploads | Personal and assignment-file three-step uploads, preview + file hash + matching digest; separate credential-free storage transport | Live write validation only in a designated sandbox; larger files and richer destinations |
-| Local course snapshots | snapshot (private JSON, no Git checkout, explicit incomplete state), offline snapshot-diff, snapshot-search and snapshot-markdown | Per-resource incremental sync and richer Markdown projection |
+| Local course snapshots | snapshot, one-command private sync, offline snapshot-diff, snapshot-search and snapshot-markdown; explicit incomplete state | Efficient per-resource incremental sync and richer Markdown projection |
 | Canvas course exports | Not implemented | Separate asynchronous jobs and polling; role-dependent |
 | Account administration / SIS | Not implemented | Separate high-risk/admin surface, not student defaults |
 | Video, Zoom, publisher tools | Links only | Separate providers/auth; not covered by Canvas credentials |
@@ -39,6 +39,6 @@ The generic `get` command is an expert escape hatch for documented read endpoint
 4. Opt-in live read-only smoke tests after user authentication.
 5. Write integration tests only against an explicitly designated sandbox course.
 
-Current live-test gap: write actions have not been exercised against a real account. Personal-token login, calendar, own grades, folders, sections, outline, linked-file discovery, local snapshots, selected other read commands, one temporary file download and a URL submission preview have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. In a live course, the token received 404 for the pages list; module-page fallback recovered 27 readable pages and correctly left the snapshot marked incomplete. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
+Current live-test gap: write actions have not been exercised against a real account. Personal-token login, calendar, own grades, folders, sections, outline, linked-file discovery, local snapshots and repeated `sync` runs, selected other read commands, one temporary file download and a URL submission preview have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. In a live course, the token received 404 for the pages list; both snapshot fallback and `pages --best-effort` recovered 27 readable module pages while reporting incomplete coverage. A live page-title search used the same partial fallback. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
 
 In one live course, assignment groups were visible, while rubric listing and New Quizzes listing returned 403 and Classic Quiz listing returned 404. Those results reflect this account/course configuration, not a claim that these resources are globally unavailable.

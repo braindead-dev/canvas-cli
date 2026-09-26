@@ -117,6 +117,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(result['course_changed_fields'], ['syllabus_body'])
         self.assertIn('pages', result['skipped'])
         self.assertNotIn('pages', result['changes'])
+        self.assertEqual(result['observed_changes']['pages'], [])
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'old.json'
             path.write_text(json.dumps(old))

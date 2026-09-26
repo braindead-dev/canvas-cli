@@ -40,6 +40,10 @@ class E2E(unittest.TestCase):
                     self.send_response(403); self.end_headers(); return
                 if self.path == '/api/v1/courses/101/pages?per_page=1':
                     self.send_response(404); self.end_headers(); return
+                if self.path == '/api/v1/courses/102/pages?per_page=100':
+                    self.send_response(404); self.end_headers(); return
+                if self.path.startswith('/api/v1/courses/102/pages?per_page=100&search_term='):
+                    self.send_response(404); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 if self.path == '/api/v1/courses?per_page=100':
@@ -116,13 +120,28 @@ class E2E(unittest.TestCase):
                     data = {'id': 33, 'assignment_id': 34, 'title': 'Synthetic New Quiz'}
                 elif self.path == '/api/v1/courses/101/modules?per_page=100':
                     data = [{'id': 6, 'name': 'Week 1'}]
+                elif self.path == '/api/v1/courses/102/modules?per_page=100':
+                    data = [{'id': 7, 'name': 'Week 1', 'published': True}]
                 elif self.path == '/api/v1/courses/101/modules/6/items?per_page=100':
                     data = [{'id': 9, 'title': 'Welcome', 'type': 'Page'}]
+                elif self.path == '/api/v1/courses/102/modules/7/items?per_page=100':
+                    data = [{'id': 10, 'title': 'Welcome', 'type': 'Page', 'page_url': 'welcome'},
+                            {'id': 11, 'title': 'Hidden', 'type': 'Page', 'page_url': 'hidden',
+                             'published': False}]
                 elif self.path == '/api/v1/courses/101/pages?per_page=100':
                     data = [{'url': 'welcome', 'title': 'Welcome', 'published': True}]
                 elif self.path == '/api/v1/courses/101/pages/welcome':
                     data = {'url': 'welcome', 'title': 'Welcome', 'published': True,
                             'body': '<p>Synthetic page</p>'}
+                elif self.path == '/api/v1/courses/101/front_page':
+                    data = {'url': 'welcome', 'title': 'Welcome', 'published': True,
+                            'body': '<p>Synthetic front page</p>'}
+                elif self.path == '/api/v1/courses/101/tabs?per_page=100':
+                    data = [{'id': 'home', 'label': 'Home', 'html_url': '/courses/101',
+                             'visibility': 'public', 'position': 1}]
+                elif self.path == '/api/v1/courses/102/pages/welcome':
+                    data = {'url': 'welcome', 'title': 'Welcome', 'published': True,
+                            'body': '<p>Should not be printed in page index</p>'}
                 elif self.path == '/api/v1/courses/101/discussion_topics?per_page=100&only_announcements=true':
                     data = [{'id': 22, 'title': 'Synthetic announcement'}]
                 elif self.path.startswith('/api/v1/calendar_events?'):
@@ -363,6 +382,57 @@ class E2E(unittest.TestCase):
         self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         repeated = self.invoke('snapshot', '101', '--output', str(destination))
         self.assertEqual(repeated.returncode, 1)
+
+    def test_page_index_fallback_over_tls_is_explicitly_partial(self):
+        before = len(self.calls)
+        raw = self.invoke('pages', '102')
+        self.assertEqual(raw.returncode, 1)
+        fallback = self.invoke('pages', '102', '--best-effort')
+        self.assertEqual(fallback.returncode, 0, fallback.stderr)
+        result = json.loads(fallback.stdout)
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['source'], 'module-pages')
+        self.assertEqual([page['url'] for page in result['pages']], ['welcome'])
+        self.assertNotIn('Should not be printed', fallback.stdout)
+        self.assertNotIn('/pages/hidden', str(self.calls[before:]))
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_page_title_search_falls_back_over_tls(self):
+        before = len(self.calls)
+        result = self.invoke('find', '102', '--query', 'welcome', '--area', 'pages')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertFalse(data['complete'])
+        self.assertEqual(data['coverage']['pages'], 'module_pages_only')
+        self.assertEqual([row['id'] for row in data['results']], ['welcome'])
+        self.assertNotIn('Should not be printed', result.stdout)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_course_navigation_over_tls(self):
+        before = len(self.calls)
+        tabs = self.invoke('tabs', '101')
+        self.assertEqual(tabs.returncode, 0, tabs.stderr)
+        self.assertEqual(json.loads(tabs.stdout)[0]['id'], 'home')
+        front = self.invoke('front-page', '101')
+        self.assertEqual(front.returncode, 0, front.stderr)
+        self.assertEqual(json.loads(front.stdout)['url'], 'welcome')
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_private_sync_over_tls_keeps_snapshots_out_of_stdout(self):
+        directory = Path(self.tmp.name) / 'private-sync'
+        before = len(self.calls)
+        first = self.invoke('sync', '101', '--directory', str(directory))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        baseline = json.loads(first.stdout)
+        self.assertTrue(baseline['baseline'])
+        second = self.invoke('sync', '101', '--directory', str(directory))
+        self.assertEqual(second.returncode, 0, second.stderr)
+        changed = json.loads(second.stdout)
+        self.assertFalse(changed['baseline'])
+        self.assertEqual(changed['previous'], baseline['saved'])
+        self.assertNotIn('<p>Synthetic page</p>', second.stdout)
+        self.assertEqual(len(list(directory.glob('*.json'))), 2)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
 
     def test_inbox_read_does_not_change_read_state(self):
         before = len(self.calls)

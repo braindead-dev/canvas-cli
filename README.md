@@ -67,9 +67,12 @@ canvas-pocket upload-assignment-file 123 456 --file ./paper.pdf
 canvas-pocket submit-file 123 456 789  # 789 is the resulting uploaded file ID
 canvas-pocket grades 123
 canvas-pocket syllabus 123
+canvas-pocket tabs 123
+canvas-pocket front-page 123
 canvas-pocket modules 123
 canvas-pocket outline 123
 canvas-pocket pages 123
+canvas-pocket pages 123 --best-effort
 canvas-pocket files 123
 canvas-pocket folders 123
 canvas-pocket folder 456
@@ -94,6 +97,8 @@ canvas-pocket download-linked 123 --directory /private/path/course-files
 # Review the preview, then repeat with --yes and suitable limits.
 canvas-pocket download-linked 123 --directory /private/path/course-files --max-files 100 --yes
 canvas-pocket snapshot 123 --output /private/path/course-123.json
+canvas-pocket sync 123  # private baseline, then field-level changes on later runs
+canvas-pocket sync 123 --directory /private/path/snapshots
 canvas-pocket snapshot-diff /private/path/older.json /private/path/newer.json
 canvas-pocket snapshot-search /private/path/course-123.json --query 'research paper'
 canvas-pocket snapshot-markdown /private/path/course-123.json --output /private/path/course-123.md
@@ -101,11 +106,17 @@ canvas-pocket snapshot-markdown /private/path/course-123.json --output /private/
 
 List commands follow Canvas Link pagination, including empty pages. A page limit fails explicitly, never silently truncates. JSON is the complete output; `--format brief` gives a compact human index. `overview` adds deadlines derived from active course assignments because Canvas's upcoming feed may be empty. `deadlines` lists due dates over a chosen window and reports courses whose assignments could not be read. `work` lists assignments with the current user's Canvas submission status and effective due date (including individual overrides). It shows all dated and undated work by default, or only upcoming dated work with `--days`; missing submission data is labeled `unknown`, never assumed unsubmitted. It reports unavailable courses without hiding other results. [Canvas documents `include[]=submission` for the current user](https://developerdocs.instructure.com/services/canvas/resources/assignments). `calendar` defaults to your personal calendar; use `--active` or repeated `--course` for course calendars, and `--personal` to include your own calendar alongside them. The [Canvas calendar API](https://developerdocs.instructure.com/services/canvas/resources/calendar_events) allows at most ten contexts, so the CLI fails instead of silently dropping extras. `grades` requests the signed-in user's numeric ID and rejects any enrollment returned for another user or course. It reports only grades Canvas makes visible. `submission` reads only your own status, grade, comments and rubric feedback; it issues no submission or read-status mutation. `outline` fetches each module's items separately because Canvas may omit them from the module listing. Use `page` for a page body and `module-items` for paginated module contents. `folders` lists a course's flat folder inventory; `folder-files` and `folder-folders` browse one folder. These may be unavailable when the course Files tab is disabled.
 
+`pages COURSE` retains the raw Canvas list response. Some courses return 403/404 for that list even while individual module pages are readable. `pages COURSE --best-effort` returns an explicit coverage envelope: it uses the normal page list if available, otherwise fetches only readable pages linked from visible modules. A fallback result is always marked incomplete, because pages outside modules may exist. It does not return page bodies. `page COURSE SLUG` reads one known accessible page.
+
+`tabs COURSE` lists visible course navigation labels and Canvas paths, including external-tool tabs, without launching those tools. `front-page COURSE` reads the published course home page where Canvas provides one. External tools such as Zoom or Piazza need their own authorization and are not controlled through these commands.
+
 `linked-files` discovers links in readable syllabus, modules, module pages, and assignments, useful when a course's Files tab is hidden; it is not a complete inventory and reports when a linked file is hidden or locked for the user. `--all-pages` adds accessible published pages outside modules. `--quick` skips per-file metadata requests, so availability is unknown, but is substantially faster for courses with many files. Requests remain sequential to avoid Canvas's [parallel-request throttling penalty](https://developerdocs.instructure.com/services/canvas/basics/file.throttling). Downloads use an explicit output path, refuse overwrites, remove failed partial files, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
 
 `snapshot` reads the syllabus-bearing course record, assignments, module items, accessible published pages, and announcements into one local JSON file. It makes no quiz attempts or writes to Canvas. If an endpoint is unavailable, the snapshot says `complete: false` and records the missing resource. When the pages list is unavailable, it tries readable page links from modules but still marks the snapshot incomplete. It removes token-shaped JSON fields such as Canvas `secure_params` and credential-like URL query parameters before saving. The file is mode `0600`, cannot overwrite an existing file, and cannot be placed inside a Git checkout, including through a symlinked parent. It may still contain copyrighted course materials, private academic information or other expiring links; keep it local and do not post it to a public repo.
 
-`snapshot-diff` works offline and reports added/removed resources and which fields changed, without printing full assignment descriptions or page bodies. It skips categories that were incomplete in either snapshot, avoiding false “removed” claims. It does not need a Canvas credential.
+`sync COURSE` does the private capture-and-diff cycle in one read-only Canvas command. It defaults to a private snapshots directory under the app config folder, or accepts `--directory`. The first run creates a baseline; later runs compare with the latest same-origin/course snapshot and return field names and visible titles, never full bodies. Raw snapshots are immutable mode-`0600` files outside Git and accumulate until you remove ones you no longer need. A failed capture or comparison does not overwrite the previous snapshot.
+
+`snapshot-diff` works offline and reports added/removed resources and which fields changed, without printing full assignment descriptions or page bodies. It skips full inventories for categories incomplete in either snapshot, avoiding false “removed” claims. For pages already observed in both partial snapshots, it separately reports changed fields under `observed_changes` without claiming that no other pages exist. It does not need a Canvas credential.
 
 `snapshot-search` works offline over that same private JSON. It searches syllabus, assignment descriptions, announcements, pages and module titles, returning short plain-text snippets and ranking title matches first. It reports when the source snapshot was incomplete; no hits never proves the course contains no such material. Its output can contain private course information, so do not paste it into public issues or logs.
 
@@ -127,7 +138,7 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 
 `doctor COURSE` makes small, sequential GET requests to a visible course's major read APIs and reports only reachability states, not course content. A 403 or 404 may reflect role, publication, or institution configuration, and a readable endpoint does not guarantee every item is visible. It stops probing on a rate limit. This is a diagnostic map, not a way around access controls.
 
-`find COURSE --query TEXT` searches visible titles/names through the documented assignment, discussion, page, file and module filters. It returns IDs, titles and due dates, not bodies, and reports endpoints that were restricted or not found. Use `--area` to search one area faster. Canvas can omit module items from a module response; the result flags that incomplete coverage rather than claiming there were no matches. For body-text searches, first create a private snapshot and use `snapshot-search` offline.
+`find COURSE --query TEXT` searches visible titles/names through the documented assignment, discussion, page, file and module filters. It returns IDs, titles and due dates, not bodies, and reports endpoints that were restricted or not found. Use `--area` to search one area faster. If Canvas denies the pages search, it searches readable pages linked from visible modules and labels page coverage incomplete; it does not claim to have searched pages outside modules. Canvas can omit module items from a module response; the result flags that incomplete coverage rather than claiming there were no matches. For body-text searches, first create a private snapshot and use `snapshot-search` offline.
 
 See [the capability map](CAPABILITIES.md) for implemented features, permission boundaries and the broader roadmap. The expert `get` command extends read coverage without exposing arbitrary write methods.
 
