@@ -21,6 +21,12 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn('secure_params', result)
         self.assertNotIn('access_token', result['nested'][0])
         self.assertEqual(result['nested'][0]['url'], 'https://files.example.edu/item?wrap=1')
+        html = '<a href="https://files.example.edu/item?wrap=1&amp;X-Amz-Signature=private">Open</a>'
+        self.assertNotIn('private', redact(html))
+        self.assertNotIn('X-Amz-Signature', redact(html))
+        self.assertIn('href="https://files.example.edu/item"', redact(html))
+        self.assertEqual(redact('https://example.edu/page?visible=1'),
+                         'https://example.edu/page?visible=1')
 
     def test_capture_records_partial_access_and_skips_unpublished_pages(self):
         client = Mock(host='https://canvas.example.edu')
@@ -83,6 +89,7 @@ class SnapshotTests(unittest.TestCase):
             if route.endswith('/modules/4/items?per_page=100'):
                 return [{'type': 'Page', 'page_url': 'week-one'},
                         {'type': 'Page', 'page_url': 'week-one'},
+                        {'type': 'Page', 'page_url': 'unpublished', 'published': False},
                         {'type': 'Page', 'page_url': 'locked', 'locked_for_user': True}]
             if route.endswith('/pages?per_page=100'):
                 raise CanvasError('Canvas HTTP 404')
@@ -93,6 +100,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse(result['complete'])
         self.assertEqual([page['url'] for page in result['pages']], ['week-one'])
         self.assertNotIn('locked', str(client.request.call_args_list))
+        self.assertNotIn('unpublished', str(client.request.call_args_list))
 
     def test_diff_reports_only_changed_fields_and_skips_incomplete_categories(self):
         old = {'schema_version': 1, 'origin': 'https://canvas.example.edu', 'course_id': 12,

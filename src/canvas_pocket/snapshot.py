@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from .client import CanvasError
@@ -22,22 +23,33 @@ def redact(value):
                 if key.lower() not in SECRET_FIELDS}
     if isinstance(value, list):
         return [redact(item) for item in value]
-    if isinstance(value, str) and value.startswith(('https://', 'http://')) and not any(c.isspace() for c in value):
-        parsed = urlsplit(value)
-        if parsed.query:
-            pairs = parse_qsl(parsed.query, keep_blank_values=True)
-            if any(key.lower() in SECRET_QUERY or key.lower().startswith(('x-amz-', 'x-goog-'))
-                   for key, _ in pairs):
-                safe = [(key, item) for key, item in pairs
-                        if key.lower() not in SECRET_QUERY and
-                        not key.lower().startswith(('x-amz-', 'x-goog-'))]
-                return urlunsplit(parsed._replace(query=urlencode(safe)))
+    if isinstance(value, str):
+        if value.startswith(('https://', 'http://')) and not any(c.isspace() for c in value):
+            parsed = urlsplit(value)
+            if parsed.query:
+                pairs = parse_qsl(parsed.query, keep_blank_values=True)
+                if any(key.lower() in SECRET_QUERY or key.lower().startswith(('x-amz-', 'x-goog-'))
+                       for key, _ in pairs):
+                    safe = [(key, item) for key, item in pairs
+                            if key.lower() not in SECRET_QUERY and
+                            not key.lower().startswith(('x-amz-', 'x-goog-'))]
+                    return urlunsplit(parsed._replace(query=urlencode(safe)))
+            return value
+        # HTML attributes and prose can contain signed URLs too. Unlike a standalone
+        # URL, an embedded query may be HTML-escaped or use an unknown signature key.
+        # Drop its entire query and fragment rather than trying to parse a secret list.
+        def strip_embedded_url(match):
+            url = urlsplit(match.group())
+            return urlunsplit(url._replace(query='', fragment=''))
+        return re.sub(r"https?://[^\s\"'<>()]+", strip_embedded_url, value)
     return value
 
 
 def capture(client, course_id, max_pages):
     base = f'/api/v1/courses/{course_id}'
     course, _ = client.request(base + '?include[]=syllabus_body')
+    if not isinstance(course, dict) or str(course.get('id')) != course_id:
+        raise CanvasError('Canvas returned a different course; refusing snapshot')
     unavailable = {}
 
     def listing(name, route):
@@ -58,7 +70,7 @@ def capture(client, course_id, max_pages):
             {'url': item['page_url'], 'title': item.get('title')}
             for module in modules for item in module.get('items', [])
             if item.get('type') == 'Page' and item.get('page_url') and
-            not item.get('locked_for_user')
+            item.get('published') is not False and not item.get('locked_for_user')
         ]
     pages = []
     excluded_pages = 0

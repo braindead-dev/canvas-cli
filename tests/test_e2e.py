@@ -60,7 +60,7 @@ class E2E(unittest.TestCase):
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
                              'submission': {'workflow_state': 'submitted', 'submitted_at': '2026-09-01T12:00:00Z'}}]
                 elif self.path == '/api/v1/courses/101?include[]=syllabus_body':
-                    data = {'syllabus_body': '<a href="/courses/101/files/7">Syllabus</a>'}
+                    data = {'id': 101, 'syllabus_body': '<a href="/courses/101/files/7">Syllabus</a>'}
                 elif self.path == '/api/v1/courses/101/modules?include[]=items&per_page=100':
                     data = []
                 elif self.path == '/api/v1/courses/101/files/7':
