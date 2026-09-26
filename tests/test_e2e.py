@@ -68,6 +68,11 @@ class E2E(unittest.TestCase):
                     data = {'assignment_id': 88, 'workflow_state': 'submitted',
                             'submitted_at': '2026-09-01T12:00:00Z', 'grade': 'A',
                             'submission_comments': [{'comment': 'Synthetic feedback'}]}
+                elif self.path == '/api/v1/courses/101/assignments/88':
+                    data = {'id': 88, 'course_id': 101, 'name': 'Synthetic paper',
+                            'published': True, 'locked_for_user': False,
+                            'submission_types': ['online_url', 'online_text_entry'],
+                            'due_at': '2026-10-01T00:00:00Z'}
                 elif self.path == '/api/v1/users/self/profile':
                     data = {'id': 7, 'name': 'Synthetic Student'}
                 elif self.path == '/api/v1/courses/101/enrollments?user_id=7&per_page=100':
@@ -235,6 +240,22 @@ class E2E(unittest.TestCase):
         self.assertEqual(single.returncode, 0, single.stderr)
         self.assertEqual(json.loads(single.stdout)['title'], 'Synthetic New Quiz')
         self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_assignment_submission_preview_and_confirm_over_tls(self):
+        source = Path(self.tmp.name) / 'project-url.txt'
+        source.write_text('https://example.edu/synthetic-project')
+        before = len(self.calls)
+        command = ('submit-url', '101', '88', '--url-file', str(source))
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertTrue(data['dry_run'])
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/courses/101/assignments/88')])
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(self.calls[-2:], [
+            ('GET', '/api/v1/courses/101/assignments/88'),
+            ('POST', '/api/v1/courses/101/assignments/88/submissions')])
 
     def test_redirect_refused(self):
         before = len(self.calls)

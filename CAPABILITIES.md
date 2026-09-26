@@ -14,7 +14,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Discussions | discussions, topic, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
 | Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
 | Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
-| Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), advanced get where authorized | Aggregate student views and upload/submit workflow with destination review |
+| Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), submit-url/submit-text (preview + matching digest), advanced get where authorized | File upload/submit workflow with destination review; live send validation only in a sandbox |
 | Rubrics and feedback | rubrics, rubric, submission, advanced get where authorized | Summaries and submission comments |
 | Inbox | inbox, conversation (explicit no-read-state-change), inbox-reply (preview + matching digest required), advanced get with transport guard | New-message composition; live write validation only in a designated sandbox |
 | Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |
@@ -39,6 +39,6 @@ The generic `get` command is an expert escape hatch for documented read endpoint
 4. Opt-in live read-only smoke tests after user authentication.
 5. Write integration tests only against an explicitly designated sandbox course.
 
-Current live-test gap: write actions have not been exercised against a real account. Personal-token login, calendar, own grades, folders, sections, outline, linked-file discovery, local snapshots, selected other read commands and one temporary file download have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. In a live course, the token received 404 for the pages list; module-page fallback recovered 27 readable pages and correctly left the snapshot marked incomplete. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
+Current live-test gap: write actions have not been exercised against a real account. Personal-token login, calendar, own grades, folders, sections, outline, linked-file discovery, local snapshots, selected other read commands, one temporary file download and a URL submission preview have been tested against a live account, but synthetic E2E tests remain the repeatable regression suite. In a live course, the token received 404 for the pages list; module-page fallback recovered 27 readable pages and correctly left the snapshot marked incomplete. Manual personal tokens are for testing the owner's account only; multiuser release requires institution-approved OAuth.
 
 In one live course, assignment groups were visible, while rubric listing and New Quizzes listing returned 403 and Classic Quiz listing returned 404. Those results reflect this account/course configuration, not a claim that these resources are globally unavailable.

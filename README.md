@@ -52,6 +52,8 @@ canvas-pocket quiz 123 456
 canvas-pocket new-quizzes 123
 canvas-pocket new-quiz 123 456  # 456 is the assignment ID for a New Quiz
 canvas-pocket submission 123 456
+canvas-pocket submit-url 123 456 --url-file project-url.txt
+canvas-pocket submit-text 123 456 --text-file response.txt
 canvas-pocket grades 123
 canvas-pocket syllabus 123
 canvas-pocket modules 123
@@ -113,9 +115,14 @@ canvas-pocket post 123 456 --message-file reply.txt --yes
 canvas-pocket inbox-reply 456 --message-file reply.txt
 # Read the preview and copy its confirm digest.
 canvas-pocket inbox-reply 456 --message-file reply.txt --yes --confirm DIGEST
+
+canvas-pocket submit-url 123 456 --url-file project-url.txt
+# Read the assignment, due date and exact URL in the preview, then use its digest.
+canvas-pocket submit-url 123 456 --url-file project-url.txt --yes --confirm DIGEST
+# submit-text uses the same two-step flow with --text-file.
 ```
 
-Discussion-post input is plain UTF-8 text, safely escaped to HTML. Inbox replies use the plain UTF-8 body specified by the Canvas API. Both can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The CLI does not take quizzes, submit assignments, change grades, or bypass initial-post restrictions.
+Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, upload files, change grades, or bypass initial-post restrictions.
 
 ## Privacy and security
 

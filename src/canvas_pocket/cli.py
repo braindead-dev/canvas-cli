@@ -134,6 +134,13 @@ def parser():
     submission = sub.add_parser('submission', help='Read your own assignment submission and feedback')
     submission.add_argument('course', type=identifier)
     submission.add_argument('assignment', type=identifier)
+    for name, file_flag in (('submit-url', '--url-file'), ('submit-text', '--text-file')):
+        submit = sub.add_parser(name, help='Preview an assignment submission before explicit confirmation')
+        submit.add_argument('course', type=identifier)
+        submit.add_argument('assignment', type=identifier)
+        submit.add_argument(file_flag, required=True, type=Path)
+        submit.add_argument('--confirm', help='Digest returned by the preview')
+        submit.add_argument('--yes', action='store_true', help='Submit only if the fresh preview matches --confirm')
     grades = sub.add_parser('grades', help='Read only your own course enrollment and visible grade')
     grades.add_argument('course', type=identifier)
     for name in ('folders', 'sections', 'outline'):
@@ -174,7 +181,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts or coursework submissions', 'No file uploads', 'No OAuth browser consent yet']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'submit-url/submit-text (preview and matching digest required)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No file uploads', 'No OAuth browser consent yet']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -217,6 +224,13 @@ def run(args):
         from .snapshot import capture, save_private, validate_destination
         output = validate_destination(args.output)
         return save_private(output, capture(client, args.course, args.max_pages))
+    if args.command in ('submit-url', 'submit-text'):
+        from .submit import submit
+        source = args.url_file if args.command == 'submit-url' else args.text_file
+        content = source.read_text(encoding='utf-8')
+        submission_type = 'online_url' if args.command == 'submit-url' else 'online_text_entry'
+        return submit(client, args.course, args.assignment, submission_type, content,
+                      args.yes, args.confirm)
     if args.command == 'deadlines':
         from .planning import deadlines
         if args.days < 1:
