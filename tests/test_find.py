@@ -102,6 +102,20 @@ class FindTests(unittest.TestCase):
         with self.assertRaises(CanvasError):
             find(Offline(), '101', 'paper')
 
+    def test_rate_limit_during_linked_file_fallback_stops_later_areas(self):
+        class LimitedFiles:
+            def list(self, route, _max_pages):
+                if '/files?' in route:
+                    raise CanvasError('Files list denied', status=403)
+                return []
+
+        with patch('canvas_pocket.discovery.linked_files',
+                   side_effect=CanvasError('rate limit', status=429)):
+            result = find(LimitedFiles(), '101', 'paper')
+        self.assertEqual(result['coverage']['files'], 'unavailable')
+        self.assertEqual(result['coverage']['modules'], 'not_checked_after_rate_limit')
+        self.assertFalse(result['complete'])
+
     def test_page_search_falls_back_to_module_titles_with_partial_coverage(self):
         class ModulePages:
             def list(self, route, _max_pages):

@@ -149,6 +149,15 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse(result['complete'])
         self.assertIn('linked_files', result['unavailable'])
 
+    def test_rate_limit_during_opt_in_file_scan_aborts_snapshot(self):
+        client = Mock(host='https://canvas.example.edu')
+        client.request.return_value = ({'id': 12}, '')
+        client.list.return_value = []
+        with (patch('canvas_pocket.discovery.linked_files',
+                    side_effect=CanvasError('rate limit', status=429)),
+              self.assertRaisesRegex(CanvasError, 'rate limit')):
+            capture(client, '12', 100, include_linked_files=True)
+
     def test_diff_reports_only_changed_fields_and_skips_incomplete_categories(self):
         old = {'schema_version': 1, 'origin': 'https://canvas.example.edu', 'course_id': 12,
                'captured_at': 'yesterday', 'unavailable': {'pages': 'list denied'},
