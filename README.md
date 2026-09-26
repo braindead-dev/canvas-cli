@@ -29,6 +29,8 @@ canvas-pocket courses --active
 canvas-pocket favorites
 canvas-pocket groups
 canvas-pocket course-groups 123
+canvas-pocket my-files --search 'paper'
+canvas-pocket file-info 789
 canvas-pocket inbox --scope unread --course 123
 canvas-pocket conversation 456
 canvas-pocket recipients --search 'Example Name' --course 123
@@ -114,6 +116,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 `download-linked` previews a batch of downloadable files referenced by readable content, then writes only with `--yes`. It requires an existing destination outside Git, refuses filename collisions, limits file count and total bytes, and sanitizes server filenames. Hidden or locked files are skipped. Successful earlier files remain if a later download fails, and the error reports that partial batch progress. It never sends the Canvas API token to storage URLs. It does not promise a complete course file inventory or access beyond your account's permissions.
 
 `upload-personal` and `upload-assignment-file` follow [Canvas's three-step upload protocol](https://developerdocs.instructure.com/services/canvas/basics/file.file_uploads). They preview the source path, size, SHA-256 hash and destination, then require `--yes --confirm DIGEST`. Personal uploads request rename-on-duplicate because Canvas otherwise overwrites a same-named file. Assignment uploads check that the current assignment permits file submissions and any listed extension, but **do not submit the assignment**. The CLI sends your token only to Canvas for initiation and confirmation; its separate storage request has no token, cookies or redirects. A failed/ambiguous upload is not retried automatically. Default maximum file size is 25 MiB; use `--max-bytes` deliberately if needed. These writes have synthetic HTTPS tests but no live-upload validation. Do not assume a successful upload means your work was turned in. To turn it in, separately preview `submit-file COURSE ASSIGNMENT FILE_ID` and confirm its digest. [Canvas documents this distinct file-ID submission step](https://developerdocs.instructure.com/services/canvas/resources/submissions).
+
+`my-files` and `file-info` use the [Files API](https://developerdocs.instructure.com/services/canvas/resources/files) to locate and verify an accessible uploaded file ID. `my-files --search` filters by partial filename and follows pagination; `file-info` requires an exact numeric ID. These are read-only and may show personal filenames in terminal output.
 
 See [the capability map](CAPABILITIES.md) for implemented features, permission boundaries and the broader roadmap. The expert `get` command extends read coverage without exposing arbitrary write methods.
 

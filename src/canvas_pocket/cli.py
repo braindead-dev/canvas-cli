@@ -73,6 +73,10 @@ def parser():
     group.add_argument('group', type=identifier)
     course_groups = sub.add_parser('course-groups', help='Visible groups in a course')
     course_groups.add_argument('course', type=identifier)
+    my_files = sub.add_parser('my-files', help='List your personal Canvas files')
+    my_files.add_argument('--search', help='Filter by partial filename')
+    file_info = sub.add_parser('file-info', help='Get one accessible Canvas file record')
+    file_info.add_argument('file', type=identifier)
     inbox = sub.add_parser('inbox', help='List Canvas Inbox conversations')
     inbox.add_argument('--scope', choices=('unread', 'starred', 'archived', 'sent'))
     inbox.add_argument('--course', type=identifier, help='Filter to a course context')
@@ -214,7 +218,8 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'recipients', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'snapshot-markdown (private local file, offline)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'inbox-compose (one person, preview and matching digest required)', 'submit-url/submit-text/submit-file (preview and matching digest required)', 'upload-personal/upload-assignment-file (preview and matching digest required; assignment upload does not submit)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No OAuth browser consent yet', 'Live upload not yet validated']}
+        from .capabilities import describe
+        return describe()
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -330,6 +335,16 @@ def run(args):
         return client.request(f'/api/v1/groups/{args.group}')[0]
     if args.command == 'course-groups':
         return client.list(f'/api/v1/courses/{args.course}/groups?per_page=100', args.max_pages)
+    if args.command == 'my-files':
+        route = '/api/v1/users/self/files?per_page=100'
+        if args.search:
+            route += '&' + urlencode({'search_term': args.search})
+        return client.list(route, args.max_pages)
+    if args.command == 'file-info':
+        data = client.request(f'/api/v1/files/{args.file}')[0]
+        if not isinstance(data, dict) or str(data.get('id')) != args.file:
+            raise CanvasError('Canvas returned a different file; refusing output')
+        return data
     if args.command == 'inbox':
         query = [('per_page', '100')]
         if args.scope:

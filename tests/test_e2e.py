@@ -83,6 +83,10 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/files/777':
                     data = {'id': 777, 'display_name': 'synthetic.txt', 'size': 22,
                             'uuid': 'synthetic-uuid', 'locked_for_user': False}
+                elif self.path == '/api/v1/users/self/files?per_page=100':
+                    data = [{'id': 777, 'display_name': 'synthetic.txt', 'size': 22}]
+                elif self.path == '/api/v1/users/self/files?per_page=100&search_term=synthetic':
+                    data = [{'id': 777, 'display_name': 'synthetic.txt', 'size': 22}]
                 elif self.path == '/api/v1/users/self/profile':
                     data = {'id': 7, 'name': 'Synthetic Student'}
                 elif self.path == '/api/v1/courses/101/enrollments?user_id=7&per_page=100':
@@ -451,3 +455,11 @@ class E2E(unittest.TestCase):
         self.assertEqual(self.calls[-3:], [
             ('GET', '/api/v1/courses/101/assignments/89'), ('GET', '/api/v1/files/777'),
             ('POST', '/api/v1/courses/101/assignments/89/submissions')])
+
+    def test_personal_file_discovery_and_metadata(self):
+        found = self.invoke('my-files', '--search', 'synthetic')
+        self.assertEqual(found.returncode, 0, found.stderr)
+        self.assertEqual(json.loads(found.stdout)[0]['id'], 777)
+        info = self.invoke('file-info', '777')
+        self.assertEqual(info.returncode, 0, info.stderr)
+        self.assertEqual(json.loads(info.stdout)['size'], 22)
