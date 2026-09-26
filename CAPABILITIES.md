@@ -5,7 +5,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Area | Current interface | Next implementation / constraint |
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
-| Courses | courses, courses --active, favorites, syllabus, tabs, front-page, sections, content-free doctor probe, multi-area title finder | External-tool tabs are paths only; finder only searches visible titles/names, module-page fallback is partial, and doctor reports reachability, not publication completeness |
+| Courses | courses, courses --active, favorites, syllabus, tabs, front-page, sections, content-free doctor probe, multi-area title finder | External-tool tabs are paths only; finder only searches visible titles/names, module-page and linked-file fallbacks are partial, and doctor reports reachability, not publication completeness |
 | Assignments | assignments, assignment, assignment-groups, assignment-group, deadlines, work (own status and effective due date) | Richer planner views and local reminders |
 | Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
 | Pages | pages, page, `pages --best-effort` module fallback with explicit partial coverage, offline snapshot-markdown projection | Incremental snapshots; pages outside modules remain undiscoverable when Canvas denies the list |

@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from canvas_pocket.client import CanvasError
 from canvas_pocket.find import find
@@ -30,14 +31,32 @@ class FakeClient:
 class FindTests(unittest.TestCase):
     def test_reports_partial_coverage_without_private_bodies(self):
         client = FakeClient()
-        result = find(client, '101', 'Synthetic', 4)
+        with patch('canvas_pocket.discovery.linked_files', return_value={
+                'files': [], 'skipped_sources': []}):
+            result = find(client, '101', 'Synthetic', 4)
         self.assertFalse(result['complete'])
         self.assertEqual(result['coverage']['pages'], 'module_pages_partially_searched')
         self.assertEqual(result['coverage']['modules'],
                          'searched_module_names_items_may_be_omitted')
+        self.assertEqual(result['coverage']['files'], 'linked_files_only')
         self.assertEqual([row['id'] for row in result['results']], [1, 3, 4])
         self.assertNotIn('private details', str(result))
         self.assertEqual(len(client.calls), 7)
+
+    def test_file_search_falls_back_to_accessible_linked_names(self):
+        client = FakeClient()
+        with patch('canvas_pocket.discovery.linked_files', return_value={
+                'files': [{'id': 10, 'display_name': 'Synthetic reading.pdf', 'downloadable': True},
+                          {'id': 11, 'display_name': 'Other.pdf', 'downloadable': True},
+                          {'id': 12, 'display_name': 'Synthetic hidden.pdf', 'downloadable': False}],
+                'skipped_sources': ['unreadable page']}) as linked:
+            result = find(client, '101', 'synthetic', selected='files')
+        linked.assert_called_once_with(client, '101', 100)
+        self.assertEqual(result['coverage']['files'], 'linked_files_partially_searched')
+        self.assertEqual(result['results'], [
+            {'area': 'file', 'id': 10, 'title': 'Synthetic reading.pdf', 'due_at': None}])
+        self.assertFalse(result['complete'])
+        self.assertIn('linked files', result['unavailable']['files'])
 
     def test_area_selection_and_query_validation(self):
         client = FakeClient()

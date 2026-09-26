@@ -29,6 +29,35 @@ def find(client, course_id, query, max_pages=100, selected=None):
         try:
             rows = client.list(route, max_pages)
         except CanvasError as error:
+            if area == 'files' and error.status in (403, 404):
+                from .discovery import linked_files
+                try:
+                    index = linked_files(client, course_id, max_pages)
+                except CanvasError as fallback_error:
+                    if fallback_error.status == 429:
+                        unavailable[area] = str(fallback_error)
+                        coverage[area] = 'unavailable'
+                        for remaining, _ in choices[choices.index((area, resource)) + 1:]:
+                            coverage[remaining] = 'not_checked_after_rate_limit'
+                        break
+                    if fallback_error.status not in (403, 404):
+                        raise
+                    unavailable[area] = f'{error}; linked-file fallback: {fallback_error}'
+                    coverage[area] = 'unavailable'
+                    continue
+                coverage[area] = ('linked_files_partially_searched' if index['skipped_sources']
+                                  else 'linked_files_only')
+                unavailable[area] = ('Canvas Files list unavailable; only accessible linked files searched'
+                                     + (f'; {len(index["skipped_sources"])} source(s) also unavailable'
+                                        if index['skipped_sources'] else ''))
+                for file in index['files']:
+                    if not file.get('downloadable'):
+                        continue
+                    title = file.get('display_name') or ''
+                    if query.casefold() in title.casefold():
+                        results.append({'area': 'file', 'id': file['id'],
+                                        'title': title, 'due_at': None})
+                continue
             if area == 'pages' and error.status in (403, 404):
                 from .pages import module_page_index
                 try:

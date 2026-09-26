@@ -43,7 +43,8 @@ class E2E(unittest.TestCase):
                     self.send_response(302)
                     self.send_header('Location', '/api/v1/users/self/profile')
                     self.end_headers(); return
-                if self.path.startswith('/api/v1/courses/101/files?per_page='):
+                if self.path.startswith(('/api/v1/courses/101/files?per_page=',
+                                         '/api/v1/courses/103/files?per_page=')):
                     self.send_response(403); self.end_headers(); return
                 if self.path == '/api/v1/courses/101/pages?per_page=1':
                     self.send_response(404); self.end_headers(); return
@@ -384,6 +385,14 @@ class E2E(unittest.TestCase):
         self.assertEqual([call for call in self.calls[before:]
                           if call[1] == '/storage/synthetic-file'],
                          [('GET', '/storage/synthetic-file')])
+
+    def test_file_title_search_has_partial_linked_fallback(self):
+        result = self.invoke('find', '103', '--query', 'reading', '--area', 'files')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertFalse(data['complete'])
+        self.assertEqual(data['coverage']['files'], 'linked_files_only')
+        self.assertEqual(data['results'][0]['id'], 8)
 
     def test_single_download_refuses_short_success_response(self):
         destination = Path(self.tmp.name) / 'synthetic-truncated.pdf'
