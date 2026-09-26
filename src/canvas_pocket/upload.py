@@ -6,6 +6,7 @@ import mimetypes
 import os
 from pathlib import Path
 import stat
+import tempfile
 from urllib.parse import urlsplit
 
 import httpx
@@ -110,21 +111,27 @@ def upload(client, source, max_bytes=25 * 1024 * 1024, course_id=None,
     if not assignment_id:
         initial['on_duplicate'] = 'rename'
     try:
-        with Path(info['source']).open('rb') as stream:
+        with Path(info['source']).open('rb') as stream, tempfile.SpooledTemporaryFile(
+                max_size=8 * 1024 * 1024, mode='w+b') as staged:
             opened = os.fstat(stream.fileno())
             if not stat.S_ISREG(opened.st_mode) or opened.st_size != info['size']:
                 raise CanvasError('Upload file changed after preview')
             current = hashlib.sha256()
+            total = 0
             for chunk in iter(lambda: stream.read(1024 * 1024), b''):
                 current.update(chunk)
-            if current.hexdigest() != info['sha256']:
+                staged.write(chunk)
+                total += len(chunk)
+                if total > max_bytes:
+                    raise CanvasError('Upload file grew past --max-bytes')
+            if total != info['size'] or current.hexdigest() != info['sha256']:
                 raise CanvasError('Upload file changed after preview')
-            stream.seek(0)
+            staged.seek(0)
             response, _ = client.request(preview['init_route'], 'POST', initial)
             if not isinstance(response, dict) or not response.get('upload_url'):
                 raise CanvasError('Canvas did not provide a direct upload URL; verify in Canvas before retrying')
             location = _upload_to_storage(response['upload_url'], response.get('upload_params'),
-                                          stream, info['name'], info['content_type'])
+                                          staged, info['name'], info['content_type'])
     except OSError:
         raise CanvasError('Upload file became unreadable; verify in Canvas before retrying') from None
     # Only the normal Canvas API client can confirm, and it rejects other origins.

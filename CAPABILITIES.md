@@ -14,7 +14,7 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Discussions | discussions, topic, entries, replies, post | Topic creation/edit/delete needs preview and explicit confirmation |
 | Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
 | Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
-| Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), submit-url/submit-text (preview + matching digest), upload-assignment-file (file stage only), advanced get where authorized | Submit previously uploaded file ID with a separately guarded action; live write validation only in a sandbox |
+| Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), submit-url/submit-text/submit-file (preview + matching digest), upload-assignment-file (file stage only), advanced get where authorized | Live write validation only in a designated sandbox; multi-file submission |
 | Rubrics and feedback | rubrics, rubric, submission, advanced get where authorized | Summaries and submission comments |
 | Inbox | inbox, conversation (explicit no-read-state-change), recipients, inbox-reply and one-person inbox-compose (preview + matching digest required), advanced get with transport guard | Group/bulk composition; live write validation only in a designated sandbox |
 | Groups, sections, enrollments | groups, group, course-groups, sections, own grades | Roster views only where authorized; no administrative privileges assumed |

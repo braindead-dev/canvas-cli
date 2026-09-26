@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from canvas_pocket.client import CanvasError
-from canvas_pocket.submit import submit
+from canvas_pocket.submit import submit, submit_file
 
 
 class SubmitTests(unittest.TestCase):
@@ -55,6 +55,35 @@ class SubmitTests(unittest.TestCase):
                 self.client.request.return_value = ({**self.assignment, **changed}, '')
                 with self.assertRaises(CanvasError):
                     submit(self.client, '7', '8', 'online_url', 'https://example.edu/project')
+
+    def test_file_submission_preview_binds_file_and_assignment(self):
+        assignment = {**self.assignment, 'submission_types': ['online_upload'],
+                      'allowed_extensions': ['txt']}
+        file_record = {'id': 42, 'display_name': 'paper.txt', 'size': 12,
+                       'uuid': 'first-version'}
+        self.client.request.side_effect = [(assignment, ''), (file_record, '')]
+        preview = submit_file(self.client, '7', '8', '42')
+        self.assertTrue(preview['dry_run'])
+        self.assertEqual(preview['body']['submission'],
+                         {'submission_type': 'online_upload', 'file_ids': [42]})
+        self.client.request.reset_mock()
+        self.client.request.side_effect = [(assignment, ''),
+                                           ({**file_record, 'uuid': 'changed-version'}, '')]
+        with self.assertRaisesRegex(CanvasError, 'Preview changed'):
+            submit_file(self.client, '7', '8', '42', yes=True, confirm=preview['confirm'])
+        self.assertEqual(self.client.request.call_count, 2)
+
+    def test_file_submission_rejects_bad_file(self):
+        assignment = {**self.assignment, 'submission_types': ['online_upload'],
+                      'allowed_extensions': ['txt']}
+        for file_record in ({'id': 43, 'display_name': 'paper.txt', 'size': 12},
+                            {'id': 42, 'display_name': 'paper.pdf', 'size': 12},
+                            {'id': 42, 'display_name': 'paper.txt', 'size': 0},
+                            {'id': 42, 'display_name': 'paper.txt', 'size': 12,
+                             'locked_for_user': True}):
+            self.client.request.side_effect = [(assignment, ''), (file_record, '')]
+            with self.assertRaises(CanvasError):
+                submit_file(self.client, '7', '8', '42')
 
 
 if __name__ == '__main__': unittest.main()

@@ -168,6 +168,12 @@ def parser():
         submit.add_argument(file_flag, required=True, type=Path)
         submit.add_argument('--confirm', help='Digest returned by the preview')
         submit.add_argument('--yes', action='store_true', help='Submit only if the fresh preview matches --confirm')
+    file_submit = sub.add_parser('submit-file', help='Preview submitting one previously uploaded Canvas file ID')
+    file_submit.add_argument('course', type=identifier)
+    file_submit.add_argument('assignment', type=identifier)
+    file_submit.add_argument('file', type=identifier)
+    file_submit.add_argument('--confirm', help='Digest returned by the preview')
+    file_submit.add_argument('--yes', action='store_true', help='Submit only if the fresh preview matches --confirm')
     grades = sub.add_parser('grades', help='Read only your own course enrollment and visible grade')
     grades.add_argument('course', type=identifier)
     for name in ('folders', 'sections', 'outline'):
@@ -208,7 +214,7 @@ def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
     if args.command == 'capabilities':
-        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'recipients', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'snapshot-markdown (private local file, offline)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'inbox-compose (one person, preview and matching digest required)', 'submit-url/submit-text (preview and matching digest required)', 'upload-personal/upload-assignment-file (preview and matching digest required; assignment upload does not submit)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No OAuth browser consent yet', 'Live upload not yet validated']}
+        return {'read': ['courses', 'me', 'favorites', 'groups', 'group', 'course-groups', 'inbox', 'conversation (no read-state change)', 'recipients', 'todo', 'upcoming', 'calendar', 'overview', 'deadlines', 'work', 'news', 'linked-files', 'assignments', 'assignment', 'assignment-groups', 'assignment-group', 'submission', 'grades', 'syllabus', 'modules', 'module-items', 'outline', 'pages', 'page', 'files', 'folders', 'folder-files', 'sections', 'announcements', 'discussions', 'topic', 'entries', 'replies', 'quizzes (metadata only)', 'quiz (metadata only)', 'new-quizzes (metadata only)', 'new-quiz (metadata only)', 'rubrics', 'rubric', 'get', 'snapshot-diff (offline)'], 'local_write': ['snapshot (private local file)', 'snapshot-markdown (private local file, offline)', 'download', 'download-linked (preview unless --yes)'], 'canvas_write': ['post (preview unless --yes)', 'inbox-reply (preview and matching digest required)', 'inbox-compose (one person, preview and matching digest required)', 'submit-url/submit-text/submit-file (preview and matching digest required)', 'upload-personal/upload-assignment-file (preview and matching digest required; assignment upload does not submit)'], 'auth': ['login', 'status', 'logout'], 'format': 'JSON', 'limitations': ['No quiz attempts', 'No OAuth browser consent yet', 'Live upload not yet validated']}
     if args.command == 'snapshot-diff':
         from .snapshot_diff import compare, read
         return compare(read(args.older), read(args.newer))
@@ -268,6 +274,10 @@ def run(args):
         submission_type = 'online_url' if args.command == 'submit-url' else 'online_text_entry'
         return submit(client, args.course, args.assignment, submission_type, content,
                       args.yes, args.confirm)
+    if args.command == 'submit-file':
+        from .submit import submit_file
+        return submit_file(client, args.course, args.assignment, args.file,
+                           args.yes, args.confirm)
     if args.command == 'deadlines':
         from .planning import deadlines
         if args.days < 1:

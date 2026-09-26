@@ -80,6 +80,9 @@ class E2E(unittest.TestCase):
                             'allowed_extensions': ['txt']}
                 elif self.path == '/api/v1/files/777/create_success':
                     data = {'id': 777, 'display_name': 'synthetic.txt'}
+                elif self.path == '/api/v1/files/777':
+                    data = {'id': 777, 'display_name': 'synthetic.txt', 'size': 22,
+                            'uuid': 'synthetic-uuid', 'locked_for_user': False}
                 elif self.path == '/api/v1/users/self/profile':
                     data = {'id': 7, 'name': 'Synthetic Student'}
                 elif self.path == '/api/v1/courses/101/enrollments?user_id=7&per_page=100':
@@ -432,3 +435,19 @@ class E2E(unittest.TestCase):
         self.assertNotIn('on_duplicate', self.upload_initial)
         self.assertNotIn(('POST', '/api/v1/courses/101/assignments/89/submissions'),
                          self.calls)
+
+    def test_submit_uploaded_file_preview_and_confirm(self):
+        command = ('submit-file', '101', '89', '777')
+        before = len(self.calls)
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertTrue(data['dry_run'])
+        self.assertEqual(data['file']['name'], 'synthetic.txt')
+        self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/courses/101/assignments/89'), ('GET', '/api/v1/files/777')])
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(self.calls[-3:], [
+            ('GET', '/api/v1/courses/101/assignments/89'), ('GET', '/api/v1/files/777'),
+            ('POST', '/api/v1/courses/101/assignments/89/submissions')])
