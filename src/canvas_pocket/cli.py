@@ -200,6 +200,9 @@ def parser():
     topic = sub.add_parser('topic', help='Read one discussion topic')
     topic.add_argument('course', type=identifier)
     topic.add_argument('topic', type=identifier)
+    thread = sub.add_parser('thread', help='Read visible discussion entries and their paginated replies')
+    thread.add_argument('course', type=identifier)
+    thread.add_argument('topic', type=identifier)
     for name in ('quiz', 'rubric', 'assignment-group'):
         resource = sub.add_parser(name, help=f'Read one {name} without starting or changing it')
         resource.add_argument('course', type=identifier)
@@ -479,6 +482,9 @@ def run(args):
                 for module in modules]
     if args.command == 'topic':
         return client.request(base + f'/discussion_topics/{args.topic}')[0]
+    if args.command == 'thread':
+        from .thread import read_thread
+        return read_thread(client, args.course, args.topic, args.max_pages)
     if args.command in ('quiz', 'rubric', 'assignment-group'):
         resource = {'quiz': 'quizzes', 'rubric': 'rubrics',
                     'assignment-group': 'assignment_groups'}[args.command]
@@ -521,6 +527,15 @@ def run(args):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'topic_id' in data and 'entries' in data and 'unavailable' in data:
+        lines = [f"{data.get('title') or 'Discussion'}: {len(data['entries'])} top-level entry(s)."]
+        for entry in data['entries']:
+            lines.append(f"  {entry['id']}  {entry.get('user_name') or 'Unknown author'}  "
+                         f"{len(entry['replies'])} repl{'y' if len(entry['replies']) == 1 else 'ies'}"
+                         + (' (partial)' if not entry['replies_complete'] else ''))
+        if not data['complete']:
+            lines.append('Some replies were unavailable; see JSON for details.')
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'baseline' in data and 'saved' in data and 'counts' in data:
         lines = [f"Saved private snapshot: {data['saved']}"]
         if data['baseline']:

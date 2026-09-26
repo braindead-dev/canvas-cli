@@ -82,6 +82,7 @@ canvas-pocket sections 123
 canvas-pocket announcements 123
 canvas-pocket discussions 123
 canvas-pocket topic 123 456
+canvas-pocket --format brief thread 123 456
 canvas-pocket entries 123 456
 canvas-pocket replies 123 456 789
 canvas-pocket assignment 123 456
@@ -127,6 +128,8 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 `recipients` searches Canvas's [messageable-user directory](https://developerdocs.instructure.com/services/canvas/resources/search) or confirms one numeric user ID. Text search can be limited to a course; Canvas ignores course context in an ID lookup, so the CLI refuses that misleading combination. `inbox-compose` addresses exactly one verified individual, previews their identity and exact subject/body, then requires `--yes` and a matching digest to send. Canvas may reuse an existing private thread with that recipient. The lookup and preview were live-tested without sending; actual sends have synthetic TLS tests only. Do not use a course or group ID as a recipient.
 
 `news` lists recently posted announcements across active or selected courses using Canvas's dedicated [Announcements API](https://developerdocs.instructure.com/services/canvas/resources/announcements). It fetches each course separately so one inaccessible course does not hide all the others, and reports any unavailable course. JSON includes the full visible announcement body; brief output is a title/date index. The date window is based on posting time, not subsequent edits, so older edited announcements need a longer `--days` window.
+
+`thread COURSE TOPIC` reads a visible discussion's top-level entries and all replies. Canvas embeds only the ten most recent replies in each entry; the command follows the separate [paginated replies API](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics) when more exist. It refuses unpublished or locked topics and respects an initial-post requirement. If some replies are denied, the result is marked partial rather than silently claiming completeness. It sends only GET requests and never posts or invokes Canvas's mark-read endpoints. JSON may contain classmates' names and posts; keep it private.
 
 `assignment-groups` shows Canvas's group weights and grading rules. `rubrics`/`rubric` read visible criteria. `quizzes`/`quiz` read metadata for Classic Quizzes, including dates, attempt limits and time limits. `new-quizzes`/`new-quiz` read metadata from Canvas's separate [New Quizzes API](https://developerdocs.instructure.com/services/canvas/resources/new_quizzes); the single-item command takes its associated assignment ID. These commands never list quiz questions or create an attempt. Availability depends on Canvas permissions and which quiz engine a course uses.
 

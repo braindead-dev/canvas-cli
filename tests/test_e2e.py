@@ -90,6 +90,13 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/discussion_topics/202':
                     data = {'id': 202, 'context_id': 101, 'title': 'Synthetic discussion',
                             'published': True, 'locked_for_user': False}
+                elif self.path == '/api/v1/courses/101/discussion_topics/202/entries?per_page=100':
+                    data = [{'id': 301, 'user_name': 'Synthetic student',
+                             'message': '<p>Sample entry</p>', 'has_more_replies': True,
+                             'recent_replies': [{'id': 401, 'message': 'Newest'}]}]
+                elif self.path == '/api/v1/courses/101/discussion_topics/202/entries/301/replies?per_page=100':
+                    data = [{'id': 401, 'message': 'Newest'},
+                            {'id': 400, 'message': 'Older'}]
                 elif self.path == '/api/v1/files/777/create_success':
                     data = {'id': 777, 'display_name': 'synthetic.txt'}
                 elif self.path == '/api/v1/files/777':
@@ -417,6 +424,18 @@ class E2E(unittest.TestCase):
         self.assertEqual(front.returncode, 0, front.stderr)
         self.assertEqual(json.loads(front.stdout)['url'], 'welcome')
         self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_discussion_thread_over_tls_follows_reply_pagination(self):
+        before = len(self.calls)
+        result = self.invoke('thread', '101', '202')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data['complete'])
+        self.assertEqual([reply['id'] for reply in data['entries'][0]['replies']], [401, 400])
+        self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/courses/101/discussion_topics/202'),
+            ('GET', '/api/v1/courses/101/discussion_topics/202/entries?per_page=100'),
+            ('GET', '/api/v1/courses/101/discussion_topics/202/entries/301/replies?per_page=100')])
 
     def test_private_sync_over_tls_keeps_snapshots_out_of_stdout(self):
         directory = Path(self.tmp.name) / 'private-sync'

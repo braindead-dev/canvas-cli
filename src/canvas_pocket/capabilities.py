@@ -11,7 +11,7 @@ def describe():
             'assignment-groups', 'assignment-group', 'submission', 'grades',
             'syllabus', 'tabs', 'front-page', 'modules', 'module-items', 'outline', 'pages', 'page',
             'files', 'my-files', 'file-info', 'folders', 'folder-files',
-            'sections', 'announcements', 'discussions', 'topic', 'entries',
+            'sections', 'announcements', 'discussions', 'topic', 'thread', 'entries',
             'replies', 'quizzes (metadata only)', 'quiz (metadata only)',
             'new-quizzes (metadata only)', 'new-quiz (metadata only)',
             'rubrics', 'rubric', 'get', 'snapshot-diff (offline)',
