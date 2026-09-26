@@ -1,9 +1,10 @@
 """Download API-returned file URLs without ever sending the API bearer token."""
 import os
 from pathlib import Path
-from urllib.parse import urlsplit, urljoin
-from urllib.request import Request, build_opener
 from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin, urlsplit
+from urllib.request import Request, build_opener
+
 from .client import CanvasError, NoRedirect
 
 

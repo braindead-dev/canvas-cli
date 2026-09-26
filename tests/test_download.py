@@ -2,9 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from urllib.error import HTTPError
+
+from test_client import Response
+
 from canvas_pocket.client import CanvasError
 from canvas_pocket.download import download
-from test_client import Response
 
 
 class DownloadTests(unittest.TestCase):

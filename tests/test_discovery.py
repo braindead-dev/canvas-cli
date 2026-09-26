@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import Mock
+
 from canvas_pocket.client import CanvasError
 from canvas_pocket.discovery import linked_files, referenced_ids
 

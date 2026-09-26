@@ -1,7 +1,6 @@
 """Installed CLI subprocesses against a TLS mock server; synthetic data only."""
 import json
 import os
-from pathlib import Path
 import shutil
 import ssl
 import subprocess
@@ -11,6 +10,7 @@ import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 
 @unittest.skipUnless(shutil.which('openssl'), 'openssl required for local TLS fixture')
@@ -91,9 +91,7 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/files/777':
                     data = {'id': 777, 'display_name': 'synthetic.txt', 'size': 22,
                             'uuid': 'synthetic-uuid', 'locked_for_user': False}
-                elif self.path == '/api/v1/users/self/files?per_page=100':
-                    data = [{'id': 777, 'display_name': 'synthetic.txt', 'size': 22}]
-                elif self.path == '/api/v1/users/self/files?per_page=100&search_term=synthetic':
+                elif self.path == '/api/v1/users/self/files?per_page=100' or self.path == '/api/v1/users/self/files?per_page=100&search_term=synthetic':
                     data = [{'id': 777, 'display_name': 'synthetic.txt', 'size': 22}]
                 elif self.path == '/api/v1/users/self/profile':
                     data = {'id': 7, 'name': 'Synthetic Student'}
@@ -139,9 +137,7 @@ class E2E(unittest.TestCase):
                     data = {'id': 12, 'subject': 'Synthetic thread',
                             'participants': [{'id': 7, 'name': 'Synthetic recipient'}], 'audience': [7],
                             'messages': [{'body': 'Synthetic private message'}]}
-                elif self.path == '/api/v1/search/recipients?type=user&per_page=100&user_id=7':
-                    data = [{'id': 7, 'name': 'Synthetic recipient', 'type': 'user'}]
-                elif self.path.startswith('/api/v1/search/recipients?type=user&per_page=100&search='):
+                elif self.path == '/api/v1/search/recipients?type=user&per_page=100&user_id=7' or self.path.startswith('/api/v1/search/recipients?type=user&per_page=100&search='):
                     data = [{'id': 7, 'name': 'Synthetic recipient', 'type': 'user'}]
                 elif self.path.startswith('/api/v1/announcements?'):
                     data = [{'id': 60, 'title': 'Synthetic announcement',
@@ -186,7 +182,7 @@ class E2E(unittest.TestCase):
         env = {**os.environ, 'CANVAS_ORIGIN': f'https://localhost:{self.server.server_port}',
                'CANVAS_TOKEN': token, 'SSL_CERT_FILE': str(self.cert), 'NO_PROXY': 'localhost'}
         return subprocess.run([sys.executable, '-m', 'canvas_pocket.cli', *args], env=env,
-                              text=True, capture_output=True, timeout=10)
+                              text=True, capture_output=True, timeout=10, check=False)
 
     def test_courses_paginate_over_tls(self):
         r = self.invoke('courses')

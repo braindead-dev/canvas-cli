@@ -10,3 +10,5 @@ exports/
 credentials*
 cookies*
 .DS_Store
+.coverage
+htmlcov/

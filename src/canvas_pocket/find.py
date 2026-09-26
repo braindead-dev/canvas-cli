@@ -4,7 +4,6 @@ from urllib.parse import urlencode
 
 from .client import CanvasError
 
-
 AREAS = (
     ('assignments', 'assignments'),
     ('discussions', 'discussion_topics'),

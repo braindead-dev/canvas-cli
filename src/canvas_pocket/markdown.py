@@ -1,9 +1,8 @@
 """Offline, private Markdown projection of a Canvas course snapshot."""
 
-from html.parser import HTMLParser
 import os
-from pathlib import Path
 import re
+from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
 from .client import CanvasError
@@ -11,8 +10,8 @@ from .snapshot import validate_destination
 
 
 class PlainText(HTMLParser):
-    BLOCKS = {'address', 'article', 'blockquote', 'br', 'div', 'h1', 'h2', 'h3',
-              'h4', 'h5', 'h6', 'hr', 'li', 'ol', 'p', 'section', 'table', 'tr', 'ul'}
+    BLOCKS = frozenset({'address', 'article', 'blockquote', 'br', 'div', 'h1', 'h2', 'h3',
+                        'h4', 'h5', 'h6', 'hr', 'li', 'ol', 'p', 'section', 'table', 'tr', 'ul'})
 
     def __init__(self):
         super().__init__(convert_charrefs=True)

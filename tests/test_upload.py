@@ -1,11 +1,14 @@
 """Upload validation tests; no real Canvas or storage writes."""
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import httpx
 
 from canvas_pocket.client import CanvasError
-from canvas_pocket.upload import prepare, upload, _upload_to_storage
+from canvas_pocket.upload import _upload_to_storage, prepare, upload
 
 
 class FakeClient:
@@ -60,3 +63,51 @@ class UploadTest(unittest.TestCase):
                                 ('https://example.org/upload', ['not', 'a', 'dict'])):
                 with self.assertRaisesRegex(CanvasError, 'unsafe|unsupported'):
                     _upload_to_storage(url, params, stream, 'paper.txt', 'text/plain')
+
+    def test_staged_bytes_are_exactly_previewed_bytes(self):
+        _, digest = prepare(FakeClient(), self.source, 100)
+        client = Mock()
+        client.request.side_effect = [
+            ({'upload_url': 'https://storage.example.org/upload', 'upload_params': {}}, ''),
+            ({'id': 99}, ''),
+        ]
+        def inspect_storage(url, params, staged, name, content_type):
+            self.assertEqual(staged.read(), b'original')
+            self.assertEqual(name, 'paper.txt')
+            return '/api/v1/files/99/create_success'
+        with patch('canvas_pocket.upload._upload_to_storage', side_effect=inspect_storage):
+            result = upload(client, self.source, 100, yes=True, confirm=digest)
+        self.assertEqual(result['uploaded_file_id'], 99)
+        self.assertEqual(client.request.call_args_list[0].args[1], 'POST')
+        self.assertEqual(client.request.call_args_list[0].args[2]['on_duplicate'], 'rename')
+
+    def test_mutation_after_fresh_preview_is_caught_before_canvas_post(self):
+        from canvas_pocket.upload import prepare as real_prepare
+        _, digest = real_prepare(FakeClient(), self.source, 100)
+        def mutate_after_prepare(*args):
+            result = real_prepare(*args)
+            self.source.write_text('changed!')
+            return result
+        client = Mock()
+        with (patch('canvas_pocket.upload.prepare', side_effect=mutate_after_prepare),
+              self.assertRaisesRegex(CanvasError, 'Upload file changed')):
+            upload(client, self.source, 100, yes=True, confirm=digest)
+        client.request.assert_not_called()
+
+    def test_storage_failure_modes_do_not_log_signed_url(self):
+        signed = 'https://storage.example.org/upload?signature=private'
+        with self.source.open('rb') as stream:
+            for status, location in ((500, None), (201, None)):
+                response = Mock(status_code=status, headers={})
+                if location:
+                    response.headers['Location'] = location
+                with patch('canvas_pocket.upload.httpx.Client') as client:
+                    client.return_value.__enter__.return_value.post.return_value = response
+                    with self.assertRaises(CanvasError) as caught:
+                        _upload_to_storage(signed, {}, stream, 'paper.txt', 'text/plain')
+                self.assertNotIn('signature=private', str(caught.exception))
+            with patch('canvas_pocket.upload.httpx.Client') as client:
+                client.return_value.__enter__.return_value.post.side_effect = httpx.ConnectError('secret')
+                with self.assertRaisesRegex(CanvasError, 'outcome uncertain') as caught:
+                    _upload_to_storage(signed, {}, stream, 'paper.txt', 'text/plain')
+            self.assertNotIn('secret', str(caught.exception))

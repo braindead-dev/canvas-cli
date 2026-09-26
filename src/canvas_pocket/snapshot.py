@@ -1,14 +1,13 @@
 """Private, read-only course snapshots. Never write raw Canvas data into Git."""
 
-from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
 import re
+from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from .client import CanvasError
-
 
 SECRET_FIELDS = {'secure_params', 'access_token', 'refresh_token', 'client_secret',
                  'api_key', 'authorization', 'auth_token'}

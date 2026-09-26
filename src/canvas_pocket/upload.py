@@ -4,9 +4,9 @@ import hashlib
 import json
 import mimetypes
 import os
-from pathlib import Path
 import stat
 import tempfile
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx

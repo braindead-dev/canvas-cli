@@ -4,10 +4,10 @@ import hashlib
 import json
 import os
 import re
-from pathlib import Path
-from urllib.parse import quote, urlencode
 import sys
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import quote, urlencode
 
 from .client import CanvasError, Client, origin
 
@@ -322,7 +322,7 @@ def run(args):
             return client.request(route + f'/{args.assignment}')[0]
         return client.list(route + '?per_page=100', args.max_pages)
     if args.command == 'calendar':
-        start = args.start or date.today().isoformat()
+        start = args.start or datetime.now(timezone.utc).astimezone().date().isoformat()
         end = args.end or (date.fromisoformat(start) + timedelta(days=13)).isoformat()
         if end < start:
             raise CanvasError('--end must not precede --start')
@@ -607,7 +607,7 @@ def main():
     except (OSError, ValueError):
         print('Error: local file/configuration operation failed; no private contents logged.', file=sys.stderr)
         return 1
-    except Exception:
+    except Exception:  # noqa: BLE001 - suppress backend diagnostics that may contain credentials
         print('Error: credential backend or operation failed; no sensitive diagnostic output logged.', file=sys.stderr)
         return 1
     return 0

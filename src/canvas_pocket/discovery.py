@@ -1,7 +1,8 @@
 """Find file references in course content the logged-in user can already read."""
-from html.parser import HTMLParser
-from urllib.parse import quote, urlsplit, urljoin
 import re
+from html.parser import HTMLParser
+from urllib.parse import quote, urljoin, urlsplit
+
 from .client import CanvasError
 
 

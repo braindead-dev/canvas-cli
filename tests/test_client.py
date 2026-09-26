@@ -1,7 +1,8 @@
 import io
 import unittest
 from urllib.error import HTTPError
-from canvas_pocket.client import Client, CanvasError, origin
+
+from canvas_pocket.client import CanvasError, Client, origin
 
 
 class Response(io.BytesIO):

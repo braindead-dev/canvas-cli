@@ -5,7 +5,6 @@ from pathlib import Path
 
 from .client import CanvasError
 
-
 FIELDS = {
     'assignments': ('name', 'description', 'due_at', 'unlock_at', 'lock_at',
                     'points_possible', 'submission_types', 'published'),
@@ -50,7 +49,7 @@ def compare(old, new):
                       if old.get('course', {}).get(field) != new.get('course', {}).get(field)]
     changes = {}
     skipped = {}
-    for kind in FIELDS:
+    for kind, fields in FIELDS.items():
         missing_old = kind in old.get('unavailable', {})
         missing_new = kind in new.get('unavailable', {})
         if kind == 'modules':
@@ -69,7 +68,7 @@ def compare(old, new):
             'added': [{'id': identity, 'title': visible_label(kind, after[identity])} for identity in added],
             'removed': [{'id': identity, 'title': visible_label(kind, before[identity])} for identity in removed],
             'changed': [{'id': identity, 'title': visible_label(kind, after[identity]),
-                         'fields': [field for field in FIELDS[kind]
+                         'fields': [field for field in fields
                                     if content(kind, before[identity])[field] != content(kind, after[identity])[field]]}
                         for identity in changed],
         }

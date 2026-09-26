@@ -1,5 +1,6 @@
 """Build a deadline index from assignments rather than Canvas's short upcoming feed."""
 from datetime import datetime, timedelta, timezone
+
 from .client import CanvasError
 
 

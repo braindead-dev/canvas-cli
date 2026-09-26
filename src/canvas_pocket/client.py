@@ -1,8 +1,8 @@
 import json
 import re
-from urllib.parse import urljoin, urlsplit, unquote, parse_qs
-from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, unquote, urljoin, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 class CanvasError(Exception):

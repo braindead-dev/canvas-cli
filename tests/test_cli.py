@@ -1,11 +1,12 @@
-from contextlib import redirect_stderr
-from io import StringIO
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
+
 from canvas_pocket.cli import parser, run
 from canvas_pocket.client import CanvasError
 

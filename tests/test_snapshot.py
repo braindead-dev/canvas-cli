@@ -3,13 +3,12 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from canvas_pocket.cli import parser, run
 from canvas_pocket.client import CanvasError
 from canvas_pocket.snapshot import capture, redact, save_private, validate_destination
 from canvas_pocket.snapshot_diff import compare, read
-from canvas_pocket.cli import parser, run
 
 
 class SnapshotTests(unittest.TestCase):

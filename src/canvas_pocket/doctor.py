@@ -2,7 +2,6 @@
 
 from .client import CanvasError
 
-
 PROBES = (
     ('assignments', 'assignments'),
     ('assignment_groups', 'assignment_groups'),

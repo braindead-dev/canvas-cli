@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from canvas_pocket.client import CanvasError
 from canvas_pocket.cli import parser, run
+from canvas_pocket.client import CanvasError
 from canvas_pocket.markdown import render, save
 
 
