@@ -6,13 +6,13 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | --- | --- | --- |
 | Identity and auth | login/status/logout, me; local keyring or environment | Institutional OAuth requires enabled developer key; no cookie scraping |
 | Courses | courses, courses --active, favorites, syllabus, tabs, front-page, sections, content-free doctor probe, multi-area title finder | External-tool tabs are paths only; finder only searches visible titles/names, module-page and linked-file fallbacks are partial, and doctor reports reachability, not publication completeness |
-| Assignments | assignments, assignment, assignment-groups, assignment-group, deadlines, work (own status and effective due date) | Richer planner views and local reminders |
+| Assignments | assignments, assignment, assignment-groups, assignment-group, deadlines, work (own status and effective due date), agenda (unfinished work in local time with undated coverage) | Course-specific workload and grade-impact judgment cannot be inferred from dates alone; local reminders remain future work |
 | Modules | modules, module-items, outline with separately paginated items | Richer progress summaries |
 | Pages | pages, page, `pages --best-effort` module fallback with explicit partial coverage, offline snapshot-markdown projection | Incremental snapshots; pages outside modules remain undiscoverable when Canvas denies the list |
 | Files | files, `files --best-effort` explicit linked-content fallback, my-files (optional filename search), file-info, folders, folder-files, folder-folders, linked-files across course content and instructor topics (optional all published pages), download, digest-confirmed preview-first download-linked with ID selection | Course Files list may be disabled while linked files remain accessible; discovered links are not a complete inventory |
 | Announcements | announcements, cross-course news | Incremental change detection; creation would be a write |
 | Discussions | discussions, topic, full visible thread with paginated replies, entries, replies, private prompt snapshots/search, post (preview + matching digest) | Topic creation/edit/delete needs preview and explicit confirmation; post-first and locked topics are not bypassed |
-| Personal tasks | todo, upcoming, overview | Planner/calendar filters and reminders; overview also derives deadlines from assignments |
+| Personal tasks | todo, upcoming, overview, agenda | Agenda prioritizes due-time urgency only; calendar meetings and externally published requirements need separate review |
 | Calendar and planner | calendar with date/type/context filters, advanced get | Mutations separately guarded; context limit is explicit |
 | Grades and submissions | grades (own enrollment only), submission (own assignment + feedback), submit-url/submit-text/submit-file (preview + matching digest), upload-assignment-file (file stage only), advanced get where authorized | Live write validation only in a designated sandbox; multi-file submission |
 | Rubrics and feedback | rubrics, rubric, submission, advanced get where authorized | Summaries and submission comments |

@@ -122,6 +122,13 @@ def parser():
     work.add_argument('--days', type=int, help='Show only work due in the next N days; default is all work')
     work.add_argument('--status', choices=('unknown', 'unsubmitted', 'submitted', 'graded',
                                            'pending_review', 'missing', 'excused'))
+    agenda = sub.add_parser('agenda', help='Unfinished dated work in local time, with undated-item coverage')
+    agenda.add_argument('--days', type=int, default=14, help='Look ahead this many days; default 14')
+    agenda.add_argument('--course', type=identifier, action='append', default=[],
+                        help='Limit to a course; repeatable')
+    agenda.add_argument('--timezone', default='local', help='IANA time zone; default is system local time')
+    agenda.add_argument('--include-undated', action='store_true',
+                        help='List undated visible items separately; not necessarily actionable')
     news = sub.add_parser('news', help='Recent announcements across active or selected courses')
     news.add_argument('--days', type=int, default=14)
     news.add_argument('--course', type=identifier, action='append', help='Limit to a course; repeatable')
@@ -346,6 +353,10 @@ def run(args):
         if args.days is not None and args.days < 1:
             raise CanvasError('--days must be positive')
         return work(client, args.max_pages, args.course, args.days, args.status)
+    if args.command == 'agenda':
+        from .planning import agenda
+        return agenda(client, args.max_pages, args.days, time_zone=args.timezone,
+                      include_undated=args.include_undated, course_ids=args.course)
     if args.command == 'news':
         from .news import announcement_feed
         if args.days < 1:
@@ -561,6 +572,32 @@ def run(args):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'priority_basis' in data and 'items' in data:
+        lines = [f"Agenda ({data['time_zone']}; next {data['window_days']} days)"]
+        for item in data['items']:
+            note = f"{item['urgency']}, {item['status']}"
+            if item['availability'] not in ('not_specified', 'within_window'):
+                note += f", {item['availability']}"
+            lines.append(f"{item['due_display']}  {item.get('course_name') or item['course_id']}: "
+                         f"{item.get('name') or item['assignment_id']}  [{note}]")
+            if item.get('html_url'):
+                lines.append(f"  {item['html_url']}")
+        if not data['items']:
+            lines.append('No unfinished dated assignments in this window.')
+        if data['undated_count']:
+            line = f"{data['undated_count']} undated visible item(s) are not deadlines."
+            if data['undated'] is None:
+                line += ' Use --include-undated to inspect them.'
+            lines.append(line)
+        if data['undated']:
+            lines.append('Undated visible items (check course instructions):')
+            lines.extend(f"  {item.get('course_name') or item['course_id']}: "
+                         f"{item.get('name') or item['assignment_id']} [{item['status']}]"
+                         for item in data['undated'])
+        if data['unavailable_courses']:
+            lines.append(f"Assignments unavailable for {len(data['unavailable_courses'])} "
+                         'course(s); see JSON for details.')
+        return '\n'.join(lines)
     if isinstance(data, dict) and all(key in data for key in
                                        ('read', 'local_write', 'canvas_write', 'auth', 'limitations')):
         sections = (('Read-only', 'read'), ('Local writes', 'local_write'),

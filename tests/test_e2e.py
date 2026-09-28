@@ -75,7 +75,10 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/assignments?include%5B%5D=submission&per_page=100':
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
-                             'submission': {'workflow_state': 'submitted', 'submitted_at': '2026-09-01T12:00:00Z'}}]
+                             'submission': {'workflow_state': 'submitted', 'submitted_at': '2026-09-01T12:00:00Z'}},
+                            {'id': 89, 'name': 'Unfinished project',
+                             'due_at': (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
+                             'submission': {'workflow_state': 'unsubmitted'}}]
                 elif self.path == '/api/v1/courses/101?include[]=syllabus_body':
                     data = {'id': 101, 'syllabus_body': '<a href="/courses/101/files/7">Syllabus</a>'}
                 elif self.path == '/api/v1/courses/103?include[]=syllabus_body':
@@ -321,6 +324,20 @@ class E2E(unittest.TestCase):
             ('GET', '/api/v1/courses/101/assignments?include%5B%5D=submission&per_page=100')])
         brief = self.invoke('--format', 'brief', 'work', '--course', '101')
         self.assertIn('Synthetic paper [submitted]', brief.stdout)
+
+    def test_agenda_over_tls_is_read_only_and_omits_submitted(self):
+        before = len(self.calls)
+        result = self.invoke('agenda', '--course', '101', '--days', '7', '--timezone', 'UTC')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual([item['assignment_id'] for item in data['items']], [89])
+        self.assertEqual(data['items'][0]['course_name'], 'Synthetic course')
+        self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/courses?enrollment_state=active&per_page=100'),
+            ('GET', '/api/v1/courses/101/assignments?include%5B%5D=submission&per_page=100')])
+        brief = self.invoke('--format', 'brief', 'agenda', '--course', '101', '--timezone', 'UTC')
+        self.assertIn('Unfinished project', brief.stdout)
+        self.assertNotIn('Synthetic paper', brief.stdout)
 
     def test_cross_course_news_over_tls_is_read_only(self):
         before = len(self.calls)

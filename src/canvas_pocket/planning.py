@@ -1,5 +1,6 @@
 """Build a deadline index from assignments rather than Canvas's short upcoming feed."""
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .client import CanvasError
 
@@ -110,3 +111,95 @@ def work(client, max_pages, course_id=None, days=None, status=None):
                                  str(pair[1]['course_id']), str(pair[1]['assignment_id'])))
     return {'assignments': [item for _, item in items], 'unavailable_courses': unavailable,
             'window_days': days, 'status_filter': status, 'generated_at': now.isoformat()}
+
+
+def agenda(client, max_pages, days=14, course_id=None, time_zone='local',
+           include_undated=False, now=None, course_ids=None):
+    """Show unfinished visible assignments, with honest local times and coverage.
+
+    Urgency is only a time bucket, not an estimate of grade impact or workload.
+    Undated items are counted but not presented as deadlines unless requested.
+    """
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise CanvasError('Agenda clock must include a time zone')
+    now = now.astimezone(timezone.utc)
+    if days < 1:
+        raise CanvasError('--days must be positive')
+    try:
+        zone = None if time_zone == 'local' else ZoneInfo(time_zone)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise CanvasError('Unknown IANA time zone; use e.g. America/Los_Angeles') from None
+    local_now = now.astimezone(zone) if zone else now.astimezone()
+    cutoff = now + timedelta(days=days)
+    selected = list(dict.fromkeys(course_ids or ([course_id] if course_id else [])))
+    course_names = {}
+    if selected:
+        try:
+            course_names = {str(course['id']): course.get('name')
+                            for course in active_courses(client, max_pages) if course.get('id')}
+        except CanvasError as exc:
+            if exc.status not in (403, 404):
+                raise
+    sources = ([work(client, max_pages, course_id=cid) for cid in selected]
+               if selected else [work(client, max_pages)])
+    assignments = [item for source in sources for item in source['assignments']]
+    unavailable = [item for source in sources for item in source['unavailable_courses']]
+    items, undated = [], []
+    finished = {'submitted', 'graded', 'pending_review', 'excused'}
+    for assignment in assignments:
+        if assignment['status'] in finished:
+            continue
+        raw_due = assignment.get('due_at')
+        due = None
+        if raw_due:
+            try:
+                parsed = datetime.fromisoformat(raw_due.replace('Z', '+00:00'))
+                due = parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+            except ValueError:
+                pass
+        base = {key: assignment.get(key) for key in
+                ('course_id', 'course_name', 'assignment_id', 'name', 'html_url',
+                 'due_at', 'unlock_at', 'lock_at', 'status')}
+        base['course_name'] = base['course_name'] or course_names.get(str(base['course_id']))
+        if due is None:
+            undated.append(base)
+            continue
+        if due > cutoff:
+            continue
+        due_local = due.astimezone(zone) if zone else due.astimezone()
+        base['due_local'] = due_local.isoformat()
+        base['due_display'] = due_local.strftime('%a %b %d, %Y %I:%M %p %Z')
+        if due < now:
+            base['urgency'] = 'overdue'
+        elif due_local.date() == local_now.date():
+            base['urgency'] = 'today'
+        elif due - now <= timedelta(hours=72):
+            base['urgency'] = 'next_72h'
+        else:
+            base['urgency'] = 'later'
+        base['availability'] = 'not_specified'
+        for field, label, condition in (('unlock_at', 'not_yet_open', lambda t: t > now),
+                                        ('lock_at', 'closed', lambda t: t < now)):
+            value = assignment.get(field)
+            if not value:
+                continue
+            try:
+                instant = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                if instant.tzinfo and condition(instant.astimezone(timezone.utc)):
+                    base['availability'] = label
+            except ValueError:
+                pass
+        if (base['availability'] == 'not_specified' and assignment.get('unlock_at')
+                and assignment.get('lock_at')):
+            base['availability'] = 'within_window'
+        items.append((due, base))
+    items.sort(key=lambda pair: (pair[0] >= now,
+                                 -pair[0].timestamp() if pair[0] < now else pair[0].timestamp(),
+                                 str(pair[1]['course_id']), str(pair[1]['assignment_id'])))
+    return {'generated_at': now.isoformat(), 'time_zone': time_zone,
+            'window_days': days, 'items': [item for _, item in items],
+            'undated_count': len(undated),
+            'undated': undated if include_undated else None,
+            'unavailable_courses': unavailable,
+            'priority_basis': 'Due-time urgency only; course meetings and workload are not inferred.'}

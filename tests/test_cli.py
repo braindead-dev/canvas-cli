@@ -85,6 +85,25 @@ class CLITests(unittest.TestCase):
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
+    def test_agenda_routes_read_only_and_brief_shows_local_time(self, client):
+        due = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        client.return_value.list.side_effect = [
+            [{'id': 8, 'name': 'Example course'}],
+            [{'id': 7, 'name': 'Synthetic task', 'due_at': due,
+              'submission': {'workflow_state': 'unsubmitted'}}]]
+        result = run(parser().parse_args(['agenda', '--course', '8', '--days', '7',
+                                          '--timezone', 'UTC']))
+        self.assertEqual(result['items'][0]['assignment_id'], 7)
+        self.assertEqual(result['items'][0]['course_name'], 'Example course')
+        self.assertEqual(result['time_zone'], 'UTC')
+        self.assertIn('Synthetic task', brief(result))
+        self.assertEqual(client.return_value.list.call_args.args,
+                         ('/api/v1/courses/8/assignments?include%5B%5D=submission&per_page=100', 100))
+        with self.assertRaises(CanvasError):
+            run(parser().parse_args(['agenda', '--days', '0']))
+
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
     def test_calendar_contexts_and_dates_are_explicit(self, client):
         client.return_value.list.side_effect = [
             [{'id': 8}, {'id': 9}], [{'id': 44, 'title': 'Synthetic event'}]]
