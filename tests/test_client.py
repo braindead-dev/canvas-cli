@@ -89,6 +89,43 @@ class Tests(unittest.TestCase):
                 client.request(route)
         self.assertEqual(calls, [])
 
+    def test_conversation_aliases_and_parameter_shapes_do_not_bypass_no_read_guard(self):
+        calls = []
+        def send(req, **kw):
+            calls.append(req)
+            return Response(b'{"id":2}')
+        client = Client('https://canvas.example.edu', 'synthetic', send)
+        paths = ('/api/v1/conversations/2/', '/api/v1/conversations/2.json',
+                 '/api/v1/%63onversations/2', '/api/v1/conversations/%32',
+                 '/api/v1//conversations/2', '/api/v1/conversations%2F2')
+        for path in paths:
+            with self.subTest(path=path), self.assertRaisesRegex(CanvasError, 'auto_mark_as_read=false'):
+                client.request(path)
+        for query in ('auto_mark_as_read=true', 'auto_mark_as_read[]=false',
+                      'auto_mark_as_read=false&auto_mark_as_read=',
+                      'auto_mark_as_read=false&auto_mark_as_read[0]=true'):
+            with self.subTest(query=query), self.assertRaises(CanvasError):
+                client.request('/api/v1/conversations/2?' + query)
+        self.assertEqual(calls, [])
+        for path in paths:
+            client.request(path + '?auto_mark_as_read=false')
+        self.assertEqual(len(calls), len(paths))
+
+    def test_indexed_and_scalar_include_shapes_cannot_mark_submissions_read(self):
+        calls = []
+        def send(req, **kw):
+            calls.append(req)
+            return Response(b'{}')
+        client = Client('https://canvas.example.edu', 'synthetic', send)
+        for query in ('include=read_status', 'include[0]=read_status', 'include%5B1%5D=read_status',
+                      'include=submission_comments,read_status', 'include[]=submission_comments&include[]=read_status',
+                      'access_token[]=secret', 'as_user_id[0]=7'):
+            with self.subTest(query=query), self.assertRaises(CanvasError):
+                client.request('/api/v1/courses/1/assignments/2/submissions/self?' + query)
+        self.assertEqual(calls, [])
+        client.request('/api/v1/courses/1/assignments/2/submissions/self?include[0]=submission_comments')
+        self.assertEqual(len(calls), 1)
+
     def test_new_quiz_namespace_stays_on_canvas_origin(self):
         calls = []
         def send(req, **kw):

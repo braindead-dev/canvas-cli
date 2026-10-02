@@ -34,19 +34,25 @@ class Client:
         url = urljoin(self.host, route)
         u = urlsplit(url)
         decoded = unquote(u.path)
+        parameters = parse_qs(u.query, keep_blank_values=True)
         if (f'{u.scheme}://{u.netloc}' != self.host or u.username or u.password
                 or not u.path.startswith(('/api/v1/', '/api/quiz/v1/')) or u.fragment
                 or any(p in ('.', '..') for p in decoded.split('/'))
                 or '\\' in decoded
-                or any(k.lower() in ('access_token', 'as_user_id') for k in parse_qs(u.query))):
+                or any(re.fullmatch(r'(access_token|as_user_id)(?:\[.*\])?', key.lower())
+                       for key in parameters)):
             raise CanvasError('Refusing request outside the configured Canvas API origin')
         if method not in ('GET', 'POST', 'PUT', 'DELETE'):
             raise CanvasError('Unsupported method')
-        parameters = parse_qs(u.query)
-        if method == 'GET' and 'read_status' in parameters.get('include[]', []):
+        if method == 'GET' and any('read_status' in value
+                for key, values in parameters.items() if re.fullmatch(r'include(?:\[.*\])?', key)
+                for value in values):
             raise CanvasError('Refusing include[]=read_status because Canvas marks submissions read')
-        if (method == 'GET' and re.fullmatch(r'/api/v1/conversations/\d+', u.path)
-                and parameters.get('auto_mark_as_read') != ['false']):
+        canonical_path = re.sub(r'/+', '/', decoded).rstrip('/')
+        if (method == 'GET' and re.fullmatch(r'/api/v1/conversations/\d+(?:\.json)?', canonical_path)
+                and (parameters.get('auto_mark_as_read') != ['false'] or
+                     any(key != 'auto_mark_as_read' and key.startswith('auto_mark_as_read[')
+                         for key in parameters))):
             raise CanvasError('Conversation reads require auto_mark_as_read=false to avoid changing Inbox state')
         req = Request(url, method=method, headers={
             'Authorization': f'Bearer {self.token}', 'Accept': 'application/json',

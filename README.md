@@ -266,6 +266,7 @@ The read-only `calendar` command also accepts repeated `--group` filters. `--und
 - No telemetry, hosted backend, analytics, cookie extraction, or credential export.
 - Token stored outside the repo in OS keyring; config stores only the Canvas origin.
 - HTTPS only. Pagination is restricted to the configured origin and API path. HTTP redirects are refused so credentials cannot follow them elsewhere.
+- Known read-state guards also cover encoded conversation paths, trailing slashes/JSON suffixes and scalar/indexed query shapes; URL credentials and impersonation parameters are refused, including bracketed forms. This is not a guarantee that every undocumented Canvas GET is side-effect-free.
 - All Canvas write previews bind the configured origin and signed-in numeric user ID. Switching accounts or sites requires a fresh preview, including for personal uploads. A refreshed token for the same user/site does not expose credentials in the preview.
 - 401 prompts reauthentication. 403 means permission/publication restrictions, not automatically bad credentials. 429 is surfaced without aggressive retries.
 - API results may contain personal data, classmates' posts, private links or grades. Do not publish your output. `exports/`, environment files, cookies and captures are ignored, but gitignore is not a privacy guarantee.
