@@ -118,6 +118,28 @@ def parser():
     notes.add_argument('--personal', action='store_true', help='Include notes not associated with a course')
     sub.add_parser('planner-note', help='Read one of your planner notes').add_argument('note', type=identifier)
     sub.add_parser('planner-overrides', help='Your planner visibility/completion overrides')
+    sub.add_parser('planner-override', help='Read one of your planner overrides').add_argument('override', type=identifier)
+    from .overrides import TYPE_NAMES
+    for name, creating in (('planner-override-create', True), ('planner-override-edit', False)):
+        override = sub.add_parser(name, help='Preview changing personal planner checkboxes, not submitting work')
+        if creating:
+            override.add_argument('type', choices=tuple(TYPE_NAMES), help='Exact type from planner output')
+            override.add_argument('item', type=identifier, help='Plannable ID, not a module-item or assignment alias')
+            override.add_argument('--start', type=calendar_date, help='Window containing the visible planner item')
+            override.add_argument('--end', type=calendar_date)
+        else:
+            override.add_argument('override', type=identifier)
+        override.add_argument('--complete', action=argparse.BooleanOptionalAction, default=None)
+        override.add_argument('--dismiss', action=argparse.BooleanOptionalAction, default=None,
+                              help='Control appearance in planner opportunities, not assignment availability')
+        override.add_argument('--allow-module-progress', action='store_true',
+                              help='Acknowledge Canvas may sync course module mark-done requirements')
+        override.add_argument('--yes', action='store_true')
+        override.add_argument('--confirm')
+    delete_override = sub.add_parser('planner-override-delete', help='Preview removing a planner override, not its assignment')
+    delete_override.add_argument('override', type=identifier)
+    delete_override.add_argument('--yes', action='store_true')
+    delete_override.add_argument('--confirm')
     task = sub.add_parser('task-create', help='Preview creating a personal Canvas planner note')
     task.add_argument('--title', required=True)
     task.add_argument('--date', required=True, type=calendar_date)
@@ -427,6 +449,18 @@ def run(args):
         return note
     if args.command == 'planner-overrides':
         return client.list('/api/v1/planner/overrides?per_page=100', args.max_pages)
+    if args.command in ('planner-override', 'planner-override-create', 'planner-override-edit', 'planner-override-delete'):
+        from . import overrides
+        if args.command == 'planner-override':
+            return overrides.read(client, args.override)
+        if args.command == 'planner-override-delete':
+            return overrides.change(client, args.override, delete=True, yes=args.yes, confirm=args.confirm)
+        options = dict(marked_complete=args.complete, dismissed=args.dismiss,
+                       allow_module_progress=args.allow_module_progress, yes=args.yes, confirm=args.confirm)
+        if args.command == 'planner-override-create':
+            return overrides.create(client, args.type, args.item, args.max_pages,
+                                    start=args.start, end=args.end, **options)
+        return overrides.change(client, args.override, **options)
     if args.command == 'task-create':
         from .planner import create_note
         details = args.details_file.read_text(encoding='utf-8') if args.details_file else ''
@@ -726,6 +760,10 @@ def brief(data):
         return (f"Event {event['id']} [{event.get('workflow_state') or 'unknown'}] {event.get('title') or 'Untitled'}\n"
                 f"{when or 'Undated'}" + (' (all day)' if event.get('all_day') else f" to {event.get('end_at') or 'unknown'}") +
                 f"\n{data['note']}")
+    if isinstance(data, dict) and 'planner_override' in data:
+        override = data['planner_override']
+        return (f"Planner override {override['id']} for {override['plannable_type']} {override['plannable_id']}\n"
+                f"Marked complete: {override['marked_complete']}; dismissed: {override['dismissed']}\n{data['note']}")
     if isinstance(data, dict) and 'export' in data and isinstance(data['export'], dict):
         job = data['export']
         lines = [f"Export {job['id']} [{job.get('workflow_state') or 'unknown'}] "

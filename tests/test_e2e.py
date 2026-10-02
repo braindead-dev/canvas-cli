@@ -29,6 +29,9 @@ class E2E(unittest.TestCase):
         cls.event = {'id': 61, 'context_code': 'user_7', 'title': 'Synthetic event',
                      'start_at': '2026-10-05T09:00:00-07:00', 'end_at': '2026-10-05T10:00:00-07:00',
                      'all_day': False, 'workflow_state': 'active', 'updated_at': '2026-10-01T12:00:00Z'}
+        cls.override = {'id': 55, 'user_id': 7, 'plannable_type': 'planner_note', 'plannable_id': 43,
+                        'marked_complete': True, 'dismissed': False, 'workflow_state': 'active',
+                        'updated_at': '2026-10-02T12:00:00Z', 'deleted_at': None}
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -171,7 +174,9 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/planner_notes/41':
                     data = {'id': 41, 'user_id': 7, 'title': 'Synthetic personal task'}
                 elif self.path == '/api/v1/planner/overrides?per_page=100':
-                    data = [{'id': 42, 'user_id': 7, 'marked_complete': True}]
+                    data = [cls.override]
+                elif self.path == '/api/v1/planner/overrides/55':
+                    data = cls.override
                 elif self.path == '/api/v1/courses/101/enrollments?user_id=7&per_page=100':
                     data = [{'id': 30, 'user_id': 7, 'course_id': 101,
                              'grades': {'current_score': 95}}]
@@ -279,6 +284,19 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path in ('/api/v1/planner/overrides', '/api/v1/planner/overrides/55'):
+                    cls.override_write = body
+                    data = {**cls.override, **body}
+                    if self.command == 'POST':
+                        data['id'] = 56
+                    elif self.command == 'DELETE':
+                        data['workflow_state'] = 'deleted'
+                        data['deleted_at'] = '2026-10-02T14:00:00Z'
+                    else:
+                        data['marked_complete'] = body.get('marked_complete', False)
+                        data['dismissed'] = body.get('dismissed', False)
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path in ('/api/v1/calendar_events', '/api/v1/calendar_events/61'):
                     cls.event_write = body
                     data = {**cls.event, **body.get('calendar_event', {})}
@@ -399,6 +417,60 @@ class E2E(unittest.TestCase):
         self.assertEqual(json.loads(sent.stdout)['title'], 'Synthetic personal task')
         self.assertEqual([c for c in self.calls[before:] if c[0] == 'POST'],
                          [('POST', '/api/v1/planner_notes')])
+
+    def test_planner_override_creation_is_confirmed_and_feed_backed(self):
+        command = ('planner-override-create', 'planner_note', '41', '--complete',
+                   '--start', '2026-10-01', '--end', '2026-10-14')
+        before = len(self.calls)
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertTrue(data['dry_run'])
+        self.assertEqual(data['target']['id'], 41)
+        self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+        rejected = self.invoke(*command, '--yes', '--confirm', 'wrong')
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(json.loads(sent.stdout)['planner_override']['id'], 56)
+        self.assertEqual(self.override_write, data['body'])
+        self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                         [('POST', '/api/v1/planner/overrides')])
+
+    def test_planner_override_edit_preserves_complete_and_supports_explicit_uncheck(self):
+        for options in (('--dismiss',), ('--no-complete',)):
+            before = len(self.calls)
+            command = ('planner-override-edit', '55', *options)
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            self.assertEqual(data['body']['marked_complete'], options == ('--dismiss',))
+            self.assertEqual(data['body']['dismissed'], options == ('--dismiss',))
+            self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+            sent = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+            self.assertEqual(sent.returncode, 0, sent.stderr)
+            self.assertIn('not an assignment submission', sent.stdout)
+            self.assertEqual(self.override_write, data['body'])
+            self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                             [('PUT', '/api/v1/planner/overrides/55')])
+
+    def test_planner_override_read_delete_and_course_acknowledgement(self):
+        before = len(self.calls)
+        read = self.invoke('planner-override', '55')
+        self.assertEqual(read.returncode, 0, read.stderr)
+        self.assertEqual(json.loads(read.stdout)['user_id'], 7)
+        refused = self.invoke('planner-override-create', 'assignment', '88', '--complete')
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn('allow-module-progress', refused.stderr)
+        preview = self.invoke('planner-override-delete', '55')
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+        sent = self.invoke('planner-override-delete', '55', '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(json.loads(sent.stdout)['planner_override']['workflow_state'], 'deleted')
+        self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                         [('DELETE', '/api/v1/planner/overrides/55')])
 
     def test_task_edit_and_delete_require_separate_exact_previews(self):
         for command, method in [(('task-edit', '41', '--title', 'Edited synthetic task'), 'PUT'),

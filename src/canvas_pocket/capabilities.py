@@ -7,7 +7,7 @@ def describe():
             'courses', 'doctor', 'find', 'me', 'favorites', 'groups', 'group', 'course-groups',
             'inbox', 'conversation (no read-state change)', 'recipients',
             'todo', 'upcoming', 'calendar', 'event', 'planner', 'planner-notes', 'planner-note',
-            'planner-overrides', 'module-progress', 'overview', 'deadlines', 'work', 'agenda',
+            'planner-overrides', 'planner-override', 'module-progress', 'overview', 'deadlines', 'work', 'agenda',
             'exports', 'export-status',
             'news', 'linked-files', 'assignments', 'assignment',
             'assignment-groups', 'assignment-group', 'submission', 'grades',
@@ -28,6 +28,7 @@ def describe():
         'canvas_write': [
             'event-create/event-edit/event-delete (personal calendar only; account-bound preview and matching digest required)',
             'task-create/task-edit/task-delete (personal planner notes; account-bound preview and matching digest required)',
+            'planner-override-create/planner-override-edit/planner-override-delete (planner completion/dismissal; account-bound preview, explicit module-progress acknowledgement for course content)',
             'post (preview and matching digest required)',
             'inbox-reply/inbox-compose (preview and matching digest required)',
             'submit-url/submit-text/submit-file (preview and matching digest required)',

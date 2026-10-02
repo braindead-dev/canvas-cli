@@ -59,6 +59,12 @@ canvas-pocket planner --course 123 --group 456 --filter incomplete_items
 canvas-pocket planner-notes --course 123 --personal
 canvas-pocket planner-note 789
 canvas-pocket planner-overrides
+canvas-pocket planner-override 789
+canvas-pocket planner-override-create planner_note 456 --complete
+canvas-pocket planner-override-create assignment 456 --complete --allow-module-progress --start 2026-10-01 --end 2026-10-14
+canvas-pocket planner-override-edit 789 --dismiss
+canvas-pocket planner-override-edit 789 --no-complete --allow-module-progress
+canvas-pocket planner-override-delete 789
 canvas-pocket task-create --title 'Read chapter' --date 2026-10-05 --course 123
 canvas-pocket task-edit 789 --date 2026-10-06
 canvas-pocket task-delete 789
@@ -246,6 +252,14 @@ Personal calendar writes use the same account-bound preview and matching `--yes 
 Use ISO timestamps with seconds and `Z` or an explicit UTC offset for timed events. Start and end must both be provided, with end later than start. `--timezone` optionally validates both offsets against that IANA zone on their dates. For a single all-day event, use `--date YYYY-MM-DD --timezone IANA`; daylight saving is handled for that date, and skipped or ambiguous midnights are refused. `--details-file` is plain UTF-8 text escaped to HTML, with an empty file clearing details; empty `--location` or `--address` clears that field. Editing sends only specified fields. The new calendar writes have unit and synthetic HTTPS tests, not live account write coverage.
 
 The read-only `calendar` command also accepts repeated `--group` filters. `--undated` returns only undated items; `--all` returns dated and undated items. Neither can be combined with a date window, since Canvas would ignore it. `event ID` reads one numeric calendar event ID without changing it; assignment calendar entries remain available through `calendar --type assignment`.
+
+## Planner checkboxes
+
+`planner-override-create TYPE ITEM_ID` previews a completion/dismissal override for one item uniquely identified in your own paginated planner feed. Use the exact `plannable_type`/`plannable_id` from `planner`, and `--start`/`--end` if it falls outside the default window. All ten documented types are supported, including personal notes, calendar events, assignments, discussion topics, announcements, pages and quiz metadata. No question content is fetched and no assessment attempt is started. Existing overrides are not duplicated; the command directs you to edit the existing ID instead. Canvas can normalize quiz/discussion/page assignments to their linked planner object; the returned associated assignment must match before the CLI reports success.
+
+`planner-override ID` reads one override owned by the current user. `planner-override-edit ID` changes only the requested logical checkbox state, preserving the other checkbox in the outgoing body because Canvas resets omitted checkbox parameters to false. Use `--complete`/`--no-complete` and `--dismiss`/`--no-dismiss`; dismissal controls planner opportunities, not access to the underlying work. Every write requires an account-bound preview followed by `--yes --confirm DIGEST`. Changed item/account/current state invalidates confirmation. `planner-override-delete` removes only the override, never its assignment or task, and does not claim to undo previously recorded module progress.
+
+**A planner checkmark is not a submission or grade.** Canvas's [planner implementation](https://github.com/instructure/canvas-lms/blob/master/app/controllers/planner_overrides_controller.rb) can sync module mark-done requirements on creation or editing. Course-content operations therefore require `--allow-module-progress` in both preview and execution. Personal notes/calendar events do not need that acknowledgement. The preview states the effect even when only dismissing an item. These commands have synthetic HTTPS tests only; no live planner or module state was changed during development.
 
 ## Privacy and security
 
