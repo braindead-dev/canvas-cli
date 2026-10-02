@@ -32,6 +32,8 @@ class E2E(unittest.TestCase):
         cls.override = {'id': 55, 'user_id': 7, 'plannable_type': 'planner_note', 'plannable_id': 43,
                         'marked_complete': True, 'dismissed': False, 'workflow_state': 'active',
                         'updated_at': '2026-10-02T12:00:00Z', 'deleted_at': None}
+        cls.entry = {'id': 301, 'user_id': 7, 'message': '<p>Synthetic original entry</p>',
+                     'updated_at': '2026-10-02T12:00:00Z'}
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -134,6 +136,13 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/groups/11/discussion_topics/205':
                     data = {'id': 205, 'context_id': 11, 'context_type': 'Group', 'published': True,
                             'require_initial_post': True, 'user_can_see_posts': False}
+                elif self.path in ('/api/v1/courses/101/discussion_topics/202/entry_list?ids%5B%5D=301&per_page=100',
+                                   '/api/v1/groups/11/discussion_topics/203/entry_list?ids%5B%5D=301&per_page=100'):
+                    self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                    data = []
+                elif self.path in ('/api/v1/courses/101/discussion_topics/202/entry_list?ids%5B%5D=301&per_page=100&page=2',
+                                   '/api/v1/groups/11/discussion_topics/203/entry_list?ids%5B%5D=301&per_page=100&page=2'):
+                    data = [cls.entry]
                 elif self.path == '/api/v1/groups/11/discussion_topics/203/entries?per_page=100':
                     data = [{'id': 301, 'message': 'Synthetic group entry', 'has_more_replies': True}]
                 elif self.path == '/api/v1/groups/11/discussion_topics/203/entries/301/replies?per_page=100':
@@ -298,6 +307,15 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path in ('/api/v1/courses/101/discussion_topics/202/entries/301',
+                                 '/api/v1/groups/11/discussion_topics/203/entries/301'):
+                    cls.entry_write = body
+                    if self.command == 'DELETE':
+                        cls.entry = {'id': 301, 'deleted': True}
+                        self.send_response(204); self.end_headers(); return
+                    cls.entry = {**cls.entry, **body, 'attachment': None, 'updated_at': '2026-10-02T13:00:00Z'}
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(cls.entry).encode()); return
                 if self.path in ('/api/v1/planner/overrides', '/api/v1/planner/overrides/55'):
                     cls.override_write = body
                     data = {**cls.override, **body}
@@ -437,6 +455,76 @@ class E2E(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('initial post', result.stderr)
         self.assertEqual(self.calls[before:], [('GET', '/api/v1/groups/11/discussion_topics/205')])
+
+    def test_own_entry_lifecycle_is_stateful_and_paginated_for_courses_and_groups(self):
+        original = self.entry.copy()
+        source = Path(self.tmp.name) / 'entry-edit.txt'
+        source.write_text('Synthetic <edited> entry')
+        try:
+            for context, context_id, topic_id in [('course', '101', '202'), ('group', '11', '203')]:
+                with self.subTest(context=context):
+                    self.__class__.entry = original.copy()
+                    args = (context_id, topic_id, '301', '--context', context)
+                    before = len(self.calls)
+                    read = self.invoke('entry', *args)
+                    self.assertEqual(read.returncode, 0, read.stderr)
+                    self.assertEqual(json.loads(read.stdout)['message'], original['message'])
+                    for command in [('entry-edit', *args, '--message-file', str(source)), ('entry-delete', *args)]:
+                        before = len(self.calls)
+                        preview = self.invoke(*command)
+                        self.assertEqual(preview.returncode, 0, preview.stderr)
+                        data = json.loads(preview.stdout)
+                        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                        rejected = self.invoke(*command, '--yes', '--confirm', 'not-the-digest')
+                        self.assertNotEqual(rejected.returncode, 0)
+                        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                        self.assertEqual(sent.returncode, 0, sent.stderr)
+                        method = 'DELETE' if command[0] == 'entry-delete' else 'PUT'
+                        self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                                         [(method, f'/api/v1/{context}s/{context_id}/discussion_topics/{topic_id}/entries/301')])
+                        reread = self.invoke('entry', *args)
+                        self.assertEqual(reread.returncode, 0, reread.stderr)
+                        state = json.loads(reread.stdout)
+                        if method == 'DELETE':
+                            self.assertTrue(json.loads(sent.stdout)['deleted'])
+                            self.assertTrue(state['deleted'])
+                        else:
+                            self.assertEqual(state['message'], '<p>Synthetic &lt;edited&gt; entry</p>')
+        finally:
+            self.__class__.entry = original
+
+    def test_entry_changes_reject_other_users_and_unacknowledged_attachment_loss_over_tls(self):
+        original = self.entry.copy()
+        source = Path(self.tmp.name) / 'attached-entry-edit.txt'
+        source.write_text('Synthetic replacement')
+        command = ('entry-edit', '101', '202', '301', '--message-file', str(source))
+        try:
+            self.__class__.entry = {**original, 'user_id': 99}
+            before = len(self.calls)
+            denied = self.invoke(*command)
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertIn('own active', denied.stderr)
+            self.__class__.entry = {**original, 'attachment': {'id': 71, 'display_name': 'synthetic.txt'}}
+            denied = self.invoke(*command)
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertIn('--remove-attachment', denied.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            preview = self.invoke(*command, '--remove-attachment')
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            sent = self.invoke(*command, '--remove-attachment', '--yes', '--confirm', data['confirm'])
+            self.assertEqual(sent.returncode, 0, sent.stderr)
+            self.assertEqual(self.entry_write['remove_attachment'], '1')
+            self.assertIsNone(self.entry['attachment'])
+        finally:
+            self.__class__.entry = original
+
+    def test_entry_list_page_limit_fails_without_silent_partial_result(self):
+        result = self.invoke('entry', '101', '202', '301', '--max-pages', '1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Page limit reached', result.stderr)
+        self.assertEqual(result.stdout, '')
 
     def test_planner_pagination_and_read_only_personal_notes(self):
         before = len(self.calls)

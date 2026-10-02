@@ -249,9 +249,23 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
 
-## Personal calendar
+## Discussion contexts and entry changes
 
 Discussion listings, topic reads, full threads, entries, replies and `post` accept `--context group` for a group ID instead of a course ID. Existing commands default to courses. The namespace is explicit in the route, thread output and write preview; course/group IDs are not interchangeable. Topic identity/publication/lock checks are shared, and entry reads or replies respect initial-post restrictions. Group access remains subject to Canvas permissions; no membership or role is assumed. Reads do not issue read-state writes, and posts still need the account-bound confirmation digest. Group routes have synthetic HTTPS coverage only.
+
+`entry CONTEXT_ID TOPIC_ID ENTRY_ID` reads exactly one visible entry through the paginated ID lookup. `entry-edit` with `--message-file` and `entry-delete` default to previews and require a matching `--yes --confirm DIGEST`. They only change entries authored by the signed-in user, bind the current entry revision/account/context, and never delete the topic or its associated assignment. Changed content, attachments or ownership require a fresh preview. Editing/deleting a graded post can affect participation credit; Canvas still enforces course permissions.
+
+**Canvas text edits can remove an existing attachment.** The CLI refuses that edit unless `--remove-attachment` explicitly acknowledges the loss. Use Canvas's native editor instead if the attachment must be preserved. Entry deletion requires Canvas's exact empty HTTP 204 acknowledgement, not an arbitrary empty response. Replies through `post --reply-to` now fetch and bind the visible, non-deleted target entry as well as the topic and message. These workflows have synthetic HTTPS tests only; no live discussion was modified. See the [discussion API](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics) and [entry controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_entries_controller.rb).
+
+```sh
+canvas-pocket entry 123 456 789
+canvas-pocket entry-edit 123 456 789 --message-file revised.txt
+canvas-pocket entry-edit 123 456 789 --message-file revised.txt --yes --confirm DIGEST
+canvas-pocket entry-delete 123 456 789 --context group
+# Review the deletion preview before repeating with --yes --confirm DIGEST.
+```
+
+## Personal calendar
 
 Personal calendar writes use the same account-bound preview and matching `--yes --confirm DIGEST` as other Canvas writes. `event-create` adds one event to your personal calendar; `event-edit` and `event-delete` re-read and verify the named event belongs to that calendar. They refuse course/group events, appointments, section events and deleted/locked/hidden events. Recurring-event edits and deletion explicitly use `which=one`, never a whole series. No assignment or reservation is changed, and uncertain write outcomes are never retried automatically.
 

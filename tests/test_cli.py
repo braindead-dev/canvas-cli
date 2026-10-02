@@ -61,6 +61,7 @@ class CLITests(unittest.TestCase):
         client.return_value.host = 'https://canvas.example.edu'
         topic = {'id': 456, 'context_id': 123, 'title': 'Synthetic topic', 'published': True}
         client.return_value.request.return_value = (topic, '')
+        client.return_value.list.return_value = [{'id': 789, 'user_id': 7, 'message': 'Synthetic reply target'}]
         with tempfile.TemporaryDirectory() as folder:
             f = Path(folder) / 'message.txt'
             f.write_text('Synthetic test only')

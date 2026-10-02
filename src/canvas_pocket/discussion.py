@@ -3,26 +3,117 @@
 import hashlib
 import html
 import json
+from urllib.parse import urlencode
 
 from .client import CanvasError
 from .contexts import discussion_base, read_topic
-from .writes import account
+from .writes import account, check_flags, confirmed, digest
+
+
+def _message(text):
+    if not isinstance(text, str) or not text.strip():
+        raise CanvasError('Empty message refused')
+    return '<p>' + html.escape(text).replace('\n', '<br>') + '</p>'
+
+
+def _entry(client, base, topic_id, entry_id, max_pages):
+    if not isinstance(entry_id, str) or not entry_id.isdecimal() or int(entry_id) < 1:
+        raise CanvasError('Expected a positive discussion entry ID')
+    rows = client.list(base + '/entry_list?' + urlencode({'ids[]': entry_id, 'per_page': 100}), max_pages)
+    if (len(rows) != 1 or not isinstance(rows[0], dict) or type(rows[0].get('id')) is not int or
+            str(rows[0]['id']) != entry_id or any(rows[0].get(key) is not None and
+                str(rows[0][key]) != topic_id for key in ('topic_id', 'discussion_topic_id'))):
+        raise CanvasError('Canvas did not return the exact requested discussion entry')
+    return rows[0]
+
+
+def entry(client, context_id, topic_id, entry_id, max_pages=100, context_type='course'):
+    base = discussion_base(context_id, topic_id, context_type)
+    read_topic(client, context_id, topic_id, context_type, require_entries=True)
+    return _entry(client, base, topic_id, entry_id, max_pages)
+
+
+def _revision(entry):
+    fields = {key: entry.get(key) for key in
+              ('id', 'user_id', 'message', 'created_at', 'updated_at', 'parent_id', 'deleted', 'permissions')}
+    attachment = entry.get('attachment')
+    if attachment is not None:
+        if not isinstance(attachment, dict) or type(attachment.get('id')) is not int or attachment['id'] < 1:
+            raise CanvasError('Canvas returned malformed discussion attachment metadata')
+        fields['attachment'] = {key: attachment.get(key) for key in
+                                ('id', 'display_name', 'size', 'updated_at', 'uuid')}
+    else:
+        fields['attachment'] = None
+    return fields
+
+
+def change_entry(client, context_id, topic_id, entry_id, message=None, *, delete=False,
+                 remove_attachment=False, max_pages=100, context_type='course', yes=False, confirm=None):
+    check_flags(yes, confirm)
+    body = None if delete else {'message': _message(message)}
+    if delete and (message is not None or remove_attachment):
+        raise CanvasError('Entry deletion cannot be combined with text or attachment changes')
+    base = discussion_base(context_id, topic_id, context_type)
+    identity = account(client)
+    topic = read_topic(client, context_id, topic_id, context_type, require_entries=True)
+    current = _entry(client, base, topic_id, entry_id, max_pages)
+    if (type(current.get('user_id')) is not int or current['user_id'] != identity['user_id'] or
+            current.get('deleted') or current.get('workflow_state') == 'deleted' or
+            current.get('locked_for_user') or current.get('hidden_for_user')):
+        raise CanvasError('Only your own active, visible discussion entries can be changed')
+    permission = 'delete' if delete else 'update'
+    permissions = current.get('permissions')
+    if isinstance(permissions, dict) and permissions.get(permission) is False:
+        raise CanvasError('Canvas does not permit this discussion entry change')
+    revision = _revision(current)
+    if not delete and revision['attachment'] and not remove_attachment:
+        raise CanvasError('Canvas text edits remove existing attachments. Use --remove-attachment '
+                          'to acknowledge that loss, or edit this entry in Canvas instead.')
+    if remove_attachment:
+        body['remove_attachment'] = '1'
+    preview = {**identity, f'{context_type}_id': context_id, 'context_type': context_type,
+               'topic_id': topic_id, 'topic_title': topic.get('title'), 'entry_id': entry_id,
+               'before': revision, 'revision_digest': digest(revision),
+               'method': 'DELETE' if delete else 'PUT', 'route': base + f'/entries/{entry_id}',
+               'body': body, 'removes_attachment': bool(revision['attachment']),
+               'effect': 'Changes only this entry, not the topic. It can affect graded discussion participation.'}
+    if delete:
+        preview['expected_response'] = 'no_content'
+    result = confirmed(client, preview, yes, confirm)
+    if not yes:
+        return result
+    if delete:
+        return {'entry_id': int(entry_id), 'context_type': context_type,
+                f'{context_type}_id': int(context_id), 'topic_id': int(topic_id), 'deleted': True,
+                'note': 'Canvas acknowledged entry deletion with HTTP 204. The topic was not deleted.'}
+    if (not isinstance(result, dict) or type(result.get('id')) is not int or str(result['id']) != entry_id or
+            type(result.get('user_id')) is not int or result['user_id'] != identity['user_id'] or
+            result.get('deleted') or any(result.get(key) is not None and str(result[key]) != topic_id
+                for key in ('topic_id', 'discussion_topic_id'))):
+        raise CanvasError('Canvas returned an unexpected entry after the edit. Verify in Canvas '
+                          'before repeating it; no automatic retries.')
+    return {'entry': result, 'context_type': context_type, f'{context_type}_id': int(context_id),
+            'topic_id': int(topic_id), 'note': 'Canvas returned the edited entry. No automatic retries.'}
 
 
 def prepare(client, course_id, topic_id, reply_to, message, context_type='course'):
-    if not isinstance(message, str) or not message.strip():
-        raise CanvasError('Empty message refused')
+    message_html = _message(message)
     discussion_base(course_id, topic_id, context_type)
     identity = account(client)
     topic = read_topic(client, course_id, topic_id, context_type, require_entries=bool(reply_to))
     route = discussion_base(course_id, topic_id, context_type) + '/entries'
     if reply_to:
+        target = _entry(client, discussion_base(course_id, topic_id, context_type), topic_id, reply_to, 100)
+        if target.get('deleted') or target.get('workflow_state') == 'deleted':
+            raise CanvasError('Cannot reply to a deleted discussion entry')
         route += f'/{reply_to}/replies'
-    body = {'message': '<p>' + html.escape(message).replace('\n', '<br>') + '</p>'}
+    body = {'message': message_html}
     preview = {**identity, f'{context_type}_id': course_id, 'context_type': context_type, 'topic_id': topic_id,
                'topic_title': topic.get('title'), 'published': topic.get('published'),
                'locked': topic.get('locked'), 'lock_at': topic.get('lock_at'),
                'reply_to': reply_to, 'route': route, 'body': body}
+    if reply_to:
+        preview['reply_target'] = _revision(target)
     digest = hashlib.sha256(json.dumps(preview, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return preview, digest
 

@@ -341,7 +341,8 @@ def parser():
                  'discussions', 'announcements', 'syllabus', 'quizzes', 'rubrics',
                  'new-quizzes'):
         listing = sub.add_parser(name)
-        listing.add_argument('course', type=identifier)
+        listing.add_argument('course', type=identifier,
+                             metavar='CONTEXT_ID' if name in ('discussions', 'announcements') else None)
         if name in ('discussions', 'announcements'):
             listing.add_argument('--context', choices=('course', 'group'), default='course')
         if name == 'pages':
@@ -366,6 +367,19 @@ def parser():
             s.add_argument('--message-file', required=True, type=Path)
             s.add_argument('--confirm', help='Digest returned by the preview')
             s.add_argument('--yes', action='store_true', help='Post only if the fresh preview matches --confirm')
+    for name in ('entry', 'entry-edit', 'entry-delete'):
+        s = sub.add_parser(name, help='Read or preview changing one of your own discussion entries')
+        s.add_argument('course', type=identifier, metavar='CONTEXT_ID')
+        s.add_argument('topic', type=identifier)
+        s.add_argument('entry', type=identifier)
+        s.add_argument('--context', choices=('course', 'group'), default='course')
+        if name == 'entry-edit':
+            s.add_argument('--message-file', required=True, type=Path)
+            s.add_argument('--remove-attachment', action='store_true',
+                           help='Acknowledge that Canvas text edits remove the existing attachment')
+        if name != 'entry':
+            s.add_argument('--confirm', help='Digest returned by the preview')
+            s.add_argument('--yes', action='store_true', help='Execute only if the fresh preview matches --confirm')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')
     help_command.add_argument('topic', nargs='?', choices=sorted(sub.choices))
     help_command.add_argument('--search', help='Find commands by name, description or safety category')
@@ -703,6 +717,15 @@ def run(args):
     if args.command == 'thread':
         from .thread import read_thread
         return read_thread(client, args.course, args.topic, args.max_pages, args.context)
+    if args.command in ('entry', 'entry-edit', 'entry-delete'):
+        from .discussion import change_entry, entry
+        if args.command == 'entry':
+            return entry(client, args.course, args.topic, args.entry, args.max_pages, args.context)
+        return change_entry(client, args.course, args.topic, args.entry,
+                            args.message_file.read_text(encoding='utf-8') if args.command == 'entry-edit' else None,
+                            delete=args.command == 'entry-delete',
+                            remove_attachment=getattr(args, 'remove_attachment', False),
+                            max_pages=args.max_pages, context_type=args.context, yes=args.yes, confirm=args.confirm)
     if args.command in ('quiz', 'rubric', 'assignment-group'):
         resource = {'quiz': 'quizzes', 'rubric': 'rubrics',
                     'assignment-group': 'assignment_groups'}[args.command]

@@ -30,7 +30,7 @@ class Client:
         self.token = token
         self.transport = transport or build_opener(NoRedirect()).open
 
-    def request(self, route, method='GET', body=None):
+    def request(self, route, method='GET', body=None, *, expect_no_content=False):
         url = urljoin(self.host, route)
         u = urlsplit(url)
         decoded = unquote(u.path)
@@ -44,6 +44,8 @@ class Client:
             raise CanvasError('Refusing request outside the configured Canvas API origin')
         if method not in ('GET', 'POST', 'PUT', 'DELETE'):
             raise CanvasError('Unsupported method')
+        if expect_no_content and method == 'GET':
+            raise CanvasError('No-content acknowledgement is only supported for explicit writes')
         if method == 'GET' and any('read_status' in value
                 for key, values in parameters.items() if re.fullmatch(r'include(?:\[.*\])?', key)
                 for value in values):
@@ -60,6 +62,11 @@ class Client:
             data=json.dumps(body).encode() if body is not None else None)
         try:
             with self.transport(req, timeout=30) as response:
+                if expect_no_content:
+                    if response.status != 204 or response.read(1):
+                        raise CanvasError('Canvas did not return the expected empty 204 acknowledgement. '
+                                          'Verify the write in Canvas before repeating it; no automatic retries.')
+                    return None, response.headers.get('Link', '')
                 return json.load(response), response.headers.get('Link', '')
         except HTTPError as e:
             e.close()

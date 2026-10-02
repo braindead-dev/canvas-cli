@@ -6,12 +6,27 @@ from canvas_pocket.client import CanvasError, Client, origin
 
 
 class Response(io.BytesIO):
-    def __init__(self, body, link=''):
+    def __init__(self, body, link='', status=200):
         super().__init__(body)
         self.headers = {'Link': link}
+        self.status = status
 
 
 class Tests(unittest.TestCase):
+    def test_empty_write_acknowledgement_requires_explicit_exact_204(self):
+        client = Client('https://canvas.example.edu', 'synthetic', lambda *a, **kw: Response(b'', status=204))
+        self.assertEqual(client.request('/api/v1/example', 'DELETE', expect_no_content=True), (None, ''))
+        with self.assertRaisesRegex(CanvasError, 'unexpected response'):
+            client.request('/api/v1/example', 'DELETE')
+        for status, body in ((200, b'null'), (200, b''), (204, b'private-response')):
+            client.transport = lambda *a, **kw: Response(body, status=status)
+            with self.subTest(status=status, body=body), self.assertRaisesRegex(CanvasError, 'expected empty 204') as caught:
+                client.request('/api/v1/example', 'DELETE', expect_no_content=True)
+            self.assertNotIn('private-response', str(caught.exception))
+        client.transport = lambda *a, **kw: self.fail('GET should fail before transport')
+        with self.assertRaises(CanvasError):
+            client.request('/api/v1/example', expect_no_content=True)
+
     def test_put_and_delete_use_same_origin_no_redirect_transport(self):
         calls = []
         def send(req, **kw):
