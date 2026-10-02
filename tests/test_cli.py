@@ -12,6 +12,24 @@ from canvas_pocket.client import CanvasError
 
 
 class CLITests(unittest.TestCase):
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
+    def test_planner_routes_and_brief_never_claim_submission(self, client):
+        client.return_value.list.return_value = [{
+            'plannable_type': 'assignment', 'plannable': {'title': 'Synthetic task'},
+            'planner_override': {'marked_complete': True}, 'submissions': {'missing': True}}]
+        result = run(parser().parse_args(['planner', '--start', '2026-10-02',
+                                          '--course', '8', '--filter', 'incomplete_items']))
+        self.assertIn('planner marked complete', brief(result))
+        self.assertNotIn('submitted', brief(result))
+        self.assertIn('context_codes%5B%5D=course_8', client.return_value.list.call_args.args[0])
+        client.return_value.request.assert_not_called()
+        client.return_value.request.return_value = ({'id': 41}, '')
+        self.assertEqual(run(parser().parse_args(['planner-note', '41'])), {'id': 41})
+        client.return_value.request.assert_called_with('/api/v1/planner_notes/41')
+        with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+            parser().parse_args(['planner', '--start', '20261002'])
+
     def test_global_options_work_before_or_after_command(self):
         self.assertEqual(parser().parse_args(['--format', 'brief', 'courses']).format, 'brief')
         self.assertEqual(parser().parse_args(['courses', '--format', 'brief']).format, 'brief')

@@ -40,7 +40,7 @@ def load():
 def identifier(value):
     if not value.isdecimal() or int(value) < 1:
         raise argparse.ArgumentTypeError('Expected a positive numeric ID')
-    return value
+    return str(int(value))
 
 
 def calendar_date(value):
@@ -106,6 +106,42 @@ def parser():
     compose.add_argument('--yes', action='store_true', help='Send only if --confirm matches the fresh preview')
     sub.add_parser('todo', help='Your Canvas to-do items')
     sub.add_parser('upcoming', help='Upcoming assignments and events')
+    planner = sub.add_parser('planner', help='Your paginated planner items, including personal tasks')
+    planner.add_argument('--start', type=calendar_date)
+    planner.add_argument('--end', type=calendar_date)
+    planner.add_argument('--course', type=identifier, action='append', default=[])
+    planner.add_argument('--group', type=identifier, action='append', default=[])
+    planner.add_argument('--filter', choices=('new_activity', 'incomplete_items', 'complete_items'))
+    notes = sub.add_parser('planner-notes', help='Your personal planner notes without changing completion')
+    notes.add_argument('--start', type=calendar_date)
+    notes.add_argument('--end', type=calendar_date)
+    notes.add_argument('--course', type=identifier, action='append', default=[])
+    notes.add_argument('--personal', action='store_true', help='Include notes not associated with a course')
+    sub.add_parser('planner-note', help='Read one of your planner notes').add_argument('note', type=identifier)
+    sub.add_parser('planner-overrides', help='Your planner visibility/completion overrides')
+    task = sub.add_parser('task-create', help='Preview creating a personal Canvas planner note')
+    task.add_argument('--title', required=True)
+    task.add_argument('--date', required=True, type=calendar_date)
+    task.add_argument('--details-file', type=Path, help='Optional plain UTF-8 note details')
+    task.add_argument('--course', type=identifier)
+    task.add_argument('--confirm')
+    task.add_argument('--yes', action='store_true', help='Create only with a matching preview digest')
+    edit_task = sub.add_parser('task-edit', help='Preview changes to one personal planner note')
+    edit_task.add_argument('note', type=identifier)
+    edit_task.add_argument('--title')
+    edit_task.add_argument('--date', type=calendar_date)
+    edit_task.add_argument('--details-file', type=Path, help='Plain UTF-8 details; an empty file clears details')
+    course_change = edit_task.add_mutually_exclusive_group()
+    course_change.add_argument('--course', type=identifier)
+    course_change.add_argument('--clear-course', action='store_true')
+    edit_task.add_argument('--yes', action='store_true')
+    edit_task.add_argument('--confirm')
+    remove_task = sub.add_parser('task-delete', help='Preview removing one personal planner note, not an assignment')
+    remove_task.add_argument('note', type=identifier)
+    remove_task.add_argument('--yes', action='store_true')
+    remove_task.add_argument('--confirm')
+    progress = sub.add_parser('module-progress', help='Read visible module requirements and completion status')
+    progress.add_argument('course', type=identifier)
     calendar = sub.add_parser('calendar', help='Events or assignments in a date window')
     calendar.add_argument('--start', type=calendar_date, help='First date (YYYY-MM-DD); default today')
     calendar.add_argument('--end', type=calendar_date, help='Last date (YYYY-MM-DD); default 13 days after start')
@@ -192,6 +228,14 @@ def parser():
     submission = sub.add_parser('submission', help='Read your own assignment submission and feedback')
     submission.add_argument('course', type=identifier)
     submission.add_argument('assignment', type=identifier)
+    feedback = sub.add_parser('submission-comment', help='Preview a comment on your own submission, without grading')
+    feedback.add_argument('course', type=identifier)
+    feedback.add_argument('assignment', type=identifier)
+    feedback.add_argument('--message-file', required=True, type=Path)
+    feedback.add_argument('--attempt', type=int, help='Attach to a confirmed submission attempt')
+    feedback.add_argument('--group-comment', action='store_true', help='Explicitly send to the submission group')
+    feedback.add_argument('--yes', action='store_true')
+    feedback.add_argument('--confirm')
     for name, file_flag in (('submit-url', '--url-file'), ('submit-text', '--text-file')):
         submit = sub.add_parser(name, help='Preview an assignment submission before explicit confirmation')
         submit.add_argument('course', type=identifier)
@@ -199,10 +243,10 @@ def parser():
         submit.add_argument(file_flag, required=True, type=Path)
         submit.add_argument('--confirm', help='Digest returned by the preview')
         submit.add_argument('--yes', action='store_true', help='Submit only if the fresh preview matches --confirm')
-    file_submit = sub.add_parser('submit-file', help='Preview submitting one previously uploaded Canvas file ID')
+    file_submit = sub.add_parser('submit-file', help='Preview submitting one or more previously uploaded Canvas file IDs')
     file_submit.add_argument('course', type=identifier)
     file_submit.add_argument('assignment', type=identifier)
-    file_submit.add_argument('file', type=identifier)
+    file_submit.add_argument('file', type=identifier, nargs='+')
     file_submit.add_argument('--confirm', help='Digest returned by the preview')
     file_submit.add_argument('--yes', action='store_true', help='Submit only if the fresh preview matches --confirm')
     grades = sub.add_parser('grades', help='Read only your own course enrollment and visible grade')
@@ -307,6 +351,35 @@ def run(args):
     if not token:
         raise CanvasError('No credential found. Run auth login again.')
     client = Client(host, token)
+    if args.command == 'planner':
+        from .planner import items
+        return items(client, args.max_pages, args.start, args.end, args.course,
+                     args.group, args.filter)
+    if args.command == 'planner-notes':
+        from .planner import notes
+        return notes(client, args.max_pages, args.start, args.end, args.course, args.personal)
+    if args.command == 'planner-note':
+        note = client.request(f'/api/v1/planner_notes/{args.note}')[0]
+        if not isinstance(note, dict) or str(note.get('id')) != args.note:
+            raise CanvasError('Canvas returned a different planner note')
+        return note
+    if args.command == 'planner-overrides':
+        return client.list('/api/v1/planner/overrides?per_page=100', args.max_pages)
+    if args.command == 'task-create':
+        from .planner import create_note
+        details = args.details_file.read_text(encoding='utf-8') if args.details_file else ''
+        return create_note(client, args.title, args.date, details, args.course, args.yes, args.confirm)
+    if args.command == 'task-edit':
+        from .planner import change_note
+        details = args.details_file.read_text(encoding='utf-8') if args.details_file else None
+        return change_note(client, args.note, args.title, args.date, details,
+                           args.course, args.clear_course, yes=args.yes, confirm=args.confirm)
+    if args.command == 'task-delete':
+        from .planner import change_note
+        return change_note(client, args.note, delete=True, yes=args.yes, confirm=args.confirm)
+    if args.command == 'module-progress':
+        from .progress import module_progress
+        return module_progress(client, args.course, args.max_pages)
     if args.command == 'linked-files':
         from .discovery import linked_files
         return linked_files(client, args.course, args.max_pages, resolve=not args.quick,
@@ -343,6 +416,11 @@ def run(args):
         from .submit import submit_file
         return submit_file(client, args.course, args.assignment, args.file,
                            args.yes, args.confirm)
+    if args.command == 'submission-comment':
+        from .feedback import comment
+        return comment(client, args.course, args.assignment,
+                       args.message_file.read_text(encoding='utf-8'), args.attempt,
+                       args.group_comment, args.yes, args.confirm)
     if args.command == 'deadlines':
         from .planning import deadlines
         if args.days < 1:
@@ -572,6 +650,36 @@ def run(args):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'planner_window' in data and 'items' in data:
+        window = data['planner_window']
+        lines = [f"Planner {window['start']} through {window['end']}"]
+        for item in data['items']:
+            content = item.get('plannable') or {}
+            override = item.get('planner_override') or {}
+            label = content.get('title') or content.get('name') or item.get('plannable_id')
+            when = item.get('plannable_date') or content.get('todo_date') or content.get('due_at') or 'undated'
+            status = ' [planner marked complete]' if override.get('marked_complete') is True else ''
+            lines.append(f"{when}  {item.get('plannable_type', 'item')}: {label}{status}")
+        if not data['items']:
+            lines.append('No planner items in this window; other course requirements may still exist.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'module_progress' in data:
+        lines = [f"Module progress for course {data['course_id']}"]
+        for module in data['module_progress']:
+            lines.append(f"{module['id']}  {module.get('name') or 'Module'} [{module.get('state') or 'unknown'}]")
+            counts = module['requirements']
+            if counts is None:
+                lines.append('  Item requirements unavailable; see JSON for details.')
+                continue
+            rule = module.get('requirement_type') or 'not reported'
+            lines.append(f"  {counts['completed']}/{counts['required']} visible requirements completed; "
+                         f"{counts['unknown']} unknown; rule: {rule}")
+            for item in module['items']:
+                locked = ', locked' if item['locked_for_user'] else ''
+                lines.append(f"  {item['id']}  {item.get('title') or 'Item'} [{item['completion']}{locked}]")
+        if not data['complete']:
+            lines.append('Some module item inventories were not read; coverage is partial.')
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'priority_basis' in data and 'items' in data:
         lines = [f"Agenda ({data['time_zone']}; next {data['window_days']} days)"]
         for item in data['items']:

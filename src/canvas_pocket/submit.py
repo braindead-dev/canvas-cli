@@ -6,11 +6,13 @@ import json
 from urllib.parse import urlsplit
 
 from .client import CanvasError
+from .writes import account
 
 
 def prepare(client, course_id, assignment_id, submission_type, content):
+    identity = account(client)
     assignment, _ = client.request(f'/api/v1/courses/{course_id}/assignments/{assignment_id}')
-    if str(assignment.get('id')) != assignment_id or (
+    if not isinstance(assignment, dict) or str(assignment.get('id')) != assignment_id or (
             assignment.get('course_id') is not None and
             str(assignment['course_id']) != course_id):
         raise CanvasError('Canvas returned a different assignment; refusing submission')
@@ -33,7 +35,7 @@ def prepare(client, course_id, assignment_id, submission_type, content):
         raise CanvasError('Unsupported submission type')
     route = f'/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions'
     body = {'submission': {'submission_type': submission_type, **details}}
-    preview = {'course_id': course_id, 'assignment_id': assignment_id,
+    preview = {**identity, 'course_id': course_id, 'assignment_id': assignment_id,
                'assignment_name': assignment.get('name'),
                'due_at': assignment.get('due_at'), 'lock_at': assignment.get('lock_at'),
                'submission_types': assignment.get('submission_types'),
@@ -56,7 +58,21 @@ def submit(client, course_id, assignment_id, submission_type, content,
 
 
 def prepare_file(client, course_id, assignment_id, file_id):
-    """Preview one already uploaded file; never upload or submit in this step."""
+    """Preview already uploaded files; never upload or submit in this step.
+
+    A single ID remains supported; passing a sequence submits all selected IDs.
+    """
+    try:
+        file_ids = [file_id] if isinstance(file_id, str) else list(file_id)
+    except TypeError:
+        raise CanvasError('Choose one or more distinct positive Canvas file IDs') from None
+    if (not file_ids or any(not isinstance(n, str) or not n.isdecimal() or int(n) < 1
+                            for n in file_ids) or len(set(file_ids)) != len(file_ids)):
+        raise CanvasError('Choose one or more distinct positive Canvas file IDs')
+    file_ids = [str(int(n)) for n in file_ids]
+    if len(set(file_ids)) != len(file_ids):
+        raise CanvasError('Choose one or more distinct positive Canvas file IDs')
+    identity = account(client)
     assignment, _ = client.request(f'/api/v1/courses/{course_id}/assignments/{assignment_id}')
     if (not isinstance(assignment, dict) or str(assignment.get('id')) != assignment_id or
             (assignment.get('course_id') is not None and
@@ -66,26 +82,31 @@ def prepare_file(client, course_id, assignment_id, file_id):
         raise CanvasError('Assignment is unpublished or locked for this user')
     if 'online_upload' not in (assignment.get('submission_types') or []):
         raise CanvasError('Assignment does not allow file submissions')
-    file_record, _ = client.request(f'/api/v1/files/{file_id}')
-    if not isinstance(file_record, dict) or str(file_record.get('id')) != file_id:
-        raise CanvasError('Canvas returned a different file; refusing submission')
-    if file_record.get('locked_for_user') or file_record.get('hidden_for_user'):
-        raise CanvasError('File is locked or hidden for this user')
-    if not isinstance(file_record.get('size'), int) or file_record['size'] < 1:
-        raise CanvasError('File has no confirmed nonempty size')
     allowed = assignment.get('allowed_extensions') or []
-    name = file_record.get('display_name') or file_record.get('filename') or ''
-    if allowed and name.rsplit('.', 1)[-1].lower() not in {
-            str(extension).lstrip('.').lower() for extension in allowed}:
-        raise CanvasError('File extension is not allowed by this assignment')
+    files = []
+    for selected_id in file_ids:
+        file_record, _ = client.request(f'/api/v1/files/{selected_id}')
+        if not isinstance(file_record, dict) or str(file_record.get('id')) != selected_id:
+            raise CanvasError('Canvas returned a different file; refusing submission')
+        if file_record.get('locked_for_user') or file_record.get('hidden_for_user'):
+            raise CanvasError('File is locked or hidden for this user')
+        if type(file_record.get('size')) is not int or file_record['size'] < 1:
+            raise CanvasError('File has no confirmed nonempty size')
+        name = file_record.get('display_name') or file_record.get('filename') or ''
+        if not isinstance(name, str) or (allowed and name.rsplit('.', 1)[-1].lower() not in {
+                str(extension).lstrip('.').lower() for extension in allowed}):
+            raise CanvasError('File extension is not allowed by this assignment')
+        files.append({'id': int(selected_id), 'name': name, 'size': file_record['size'],
+                      'uuid': file_record.get('uuid'), 'updated_at': file_record.get('updated_at')})
     route = f'/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions'
-    body = {'submission': {'submission_type': 'online_upload', 'file_ids': [int(file_id)]}}
-    preview = {'course_id': course_id, 'assignment_id': assignment_id,
+    body = {'submission': {'submission_type': 'online_upload', 'file_ids': [int(n) for n in file_ids]}}
+    preview = {**identity, 'course_id': course_id, 'assignment_id': assignment_id,
                'assignment_name': assignment.get('name'), 'due_at': assignment.get('due_at'),
                'lock_at': assignment.get('lock_at'),
-               'file': {'id': int(file_id), 'name': name, 'size': file_record['size'],
-                        'uuid': file_record.get('uuid'), 'updated_at': file_record.get('updated_at')},
+               'files': files,
                'route': route, 'body': body}
+    if len(files) == 1:
+        preview['file'] = files[0]  # Preserve the single-file preview field for existing callers.
     digest = hashlib.sha256(json.dumps(preview, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return preview, digest
 

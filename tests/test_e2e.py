@@ -102,6 +102,9 @@ class E2E(unittest.TestCase):
                     data = {'assignment_id': 88, 'workflow_state': 'submitted',
                             'submitted_at': '2026-09-01T12:00:00Z', 'grade': 'A',
                             'submission_comments': [{'comment': 'Synthetic feedback'}]}
+                elif self.path == '/api/v1/courses/101/assignments/88/submissions/self':
+                    data = {'id': 41, 'assignment_id': 88, 'user_id': 7, 'attempt': 1,
+                            'workflow_state': 'submitted', 'assignment_visible': True}
                 elif self.path == '/api/v1/courses/101/assignments/88':
                     data = {'id': 88, 'course_id': 101, 'name': 'Synthetic paper',
                             'published': True, 'locked_for_user': False,
@@ -127,10 +130,29 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/files/777':
                     data = {'id': 777, 'display_name': 'synthetic.txt', 'size': 22,
                             'uuid': 'synthetic-uuid', 'locked_for_user': False}
+                elif self.path == '/api/v1/files/778':
+                    data = {'id': 778, 'display_name': 'second.txt', 'size': 14,
+                            'uuid': 'second-synthetic-uuid', 'locked_for_user': False}
                 elif self.path == '/api/v1/users/self/files?per_page=100' or self.path == '/api/v1/users/self/files?per_page=100&search_term=synthetic':
                     data = [{'id': 777, 'display_name': 'synthetic.txt', 'size': 22}]
                 elif self.path == '/api/v1/users/self/profile':
                     data = {'id': 7, 'name': 'Synthetic Student'}
+                elif self.path == '/api/v1/planner/items?page=2':
+                    data = [{'plannable_type': 'assignment', 'plannable_id': 88,
+                             'plannable': {'title': 'Synthetic assignment'},
+                             'planner_override': {'marked_complete': True},
+                             'submissions': {'missing': True}}]
+                elif self.path.startswith('/api/v1/planner/items?'):
+                    self.send_header('Link', '</api/v1/planner/items?page=2>; rel="next"')
+                    data = [{'plannable_type': 'planner_note', 'plannable_id': 41,
+                             'plannable': {'title': 'Synthetic personal task',
+                                           'todo_date': '2026-10-02T12:00:00Z'}}]
+                elif self.path.startswith('/api/v1/planner_notes?'):
+                    data = [{'id': 41, 'user_id': 7, 'title': 'Synthetic personal task'}]
+                elif self.path == '/api/v1/planner_notes/41':
+                    data = {'id': 41, 'user_id': 7, 'title': 'Synthetic personal task'}
+                elif self.path == '/api/v1/planner/overrides?per_page=100':
+                    data = [{'id': 42, 'user_id': 7, 'marked_complete': True}]
                 elif self.path == '/api/v1/courses/101/enrollments?user_id=7&per_page=100':
                     data = [{'id': 30, 'user_id': 7, 'course_id': 101,
                              'grades': {'current_score': 95}}]
@@ -152,6 +174,18 @@ class E2E(unittest.TestCase):
                     data = {'id': 33, 'assignment_id': 34, 'title': 'Synthetic New Quiz'}
                 elif self.path == '/api/v1/courses/101/modules?per_page=100':
                     data = [{'id': 6, 'name': 'Week 1'}]
+                elif self.path == '/api/v1/courses/104/modules?per_page=100':
+                    data = [{'id': 21, 'name': 'Synthetic progress', 'state': 'started',
+                             'requirement_type': 'one'},
+                            {'id': 22, 'name': 'Future module', 'state': 'locked'},
+                            {'id': 23, 'name': 'Unpublished', 'published': False}]
+                elif self.path == '/api/v1/courses/104/modules/21/items?per_page=100&include%5B%5D=content_details':
+                    self.send_header('Link', '</api/v1/courses/104/modules/21/items?page=2>; rel="next"')
+                    data = [{'id': 31, 'title': 'Viewed page', 'completion_requirement':
+                             {'type': 'must_view', 'completed': True}}]
+                elif self.path == '/api/v1/courses/104/modules/21/items?page=2':
+                    data = [{'id': 32, 'title': 'Unknown submission',
+                             'completion_requirement': {'type': 'must_submit'}}]
                 elif self.path == '/api/v1/courses/102/modules?per_page=100':
                     data = [{'id': 7, 'name': 'Week 1', 'published': True}]
                 elif self.path == '/api/v1/courses/101/modules/6/items?per_page=100':
@@ -208,7 +242,7 @@ class E2E(unittest.TestCase):
                 self.end_headers(); self.wfile.write(json.dumps(data).encode())
             def do_POST(self):
                 cls.calls.append((self.command, self.path))
-                raw = self.rfile.read(int(self.headers['Content-Length']))
+                raw = self.rfile.read(int(self.headers.get('Content-Length', 0)))
                 if self.path.startswith('/storage/upload'):
                     cls.storage_auth = self.headers.get('Authorization')
                     cls.storage_body = raw
@@ -221,7 +255,7 @@ class E2E(unittest.TestCase):
                     self.end_headers(); return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
-                body = json.loads(raw)
+                body = json.loads(raw) if raw else {}
                 if self.path in ('/api/v1/users/self/files',
                                  '/api/v1/courses/101/assignments/89/submissions/self/files'):
                     cls.upload_initial = body
@@ -234,6 +268,10 @@ class E2E(unittest.TestCase):
                     }).encode()); return
                 self.send_response(200); self.end_headers()
                 self.wfile.write(json.dumps({'id': 999, **body}).encode())
+            def do_PUT(self):
+                self.do_POST()
+            def do_DELETE(self):
+                self.do_POST()
         cls.server = ThreadingHTTPServer(('localhost', 0), Handler)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(cls.cert, key)
@@ -255,6 +293,91 @@ class E2E(unittest.TestCase):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
+
+    def test_planner_pagination_and_read_only_personal_notes(self):
+        before = len(self.calls)
+        result = self.invoke('planner', '--start', '2026-10-02', '--end', '2026-10-03',
+                             '--course', '101', '--group', '11', '--filter', 'incomplete_items')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual([x['plannable_id'] for x in data['items']], [41, 88])
+        self.assertIn('not proof', data['note'])
+        for command in [('planner-notes', '--personal'), ('planner-note', '41'),
+                        ('planner-overrides',)]:
+            result = self.invoke(*command)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_personal_task_preview_and_confirmed_creation(self):
+        command = ('task-create', '--title', 'Synthetic personal task', '--date', '2026-10-02')
+        before = len(self.calls)
+        result = self.invoke(*command)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        preview = json.loads(result.stdout)
+        self.assertTrue(preview['dry_run'])
+        self.assertEqual(preview['user_id'], 7)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        rejected = self.invoke(*command, '--yes', '--confirm', 'wrong')
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        sent = self.invoke(*command, '--yes', '--confirm', preview['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(json.loads(sent.stdout)['title'], 'Synthetic personal task')
+        self.assertEqual([c for c in self.calls[before:] if c[0] == 'POST'],
+                         [('POST', '/api/v1/planner_notes')])
+
+    def test_task_edit_and_delete_require_separate_exact_previews(self):
+        for command, method in [(('task-edit', '41', '--title', 'Edited synthetic task'), 'PUT'),
+                                (('task-delete', '41'), 'DELETE')]:
+            before = len(self.calls)
+            result = self.invoke(*command)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
+            self.assertTrue(data['dry_run'])
+            self.assertEqual(data['method'], method)
+            self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+            rejected = self.invoke(*command, '--yes', '--confirm', 'wrong')
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+            result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual([c for c in self.calls[before:] if c[0] != 'GET'],
+                             [(method, '/api/v1/planner_notes/41')])
+
+    def test_submission_comment_only_sends_comment_fields_to_current_user(self):
+        source = Path(self.tmp.name) / 'feedback.txt'
+        source.write_text('Synthetic comment')
+        command = ('submission-comment', '101', '88', '--message-file', str(source), '--attempt', '1')
+        before = len(self.calls)
+        result = self.invoke(*command)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data['dry_run'])
+        self.assertEqual(set(data['body']), {'comment'})
+        self.assertEqual(data['route'], '/api/v1/courses/101/assignments/88/submissions/7')
+        self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(json.loads(sent.stdout)['comment']['text_comment'], 'Synthetic comment')
+        self.assertEqual([c for c in self.calls[before:] if c[0] != 'GET'],
+                         [('PUT', data['route'])])
+
+    def test_module_progress_paginates_without_marking_content_viewed(self):
+        before = len(self.calls)
+        result = self.invoke('module-progress', '104')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertFalse(data['complete'])
+        self.assertEqual(data['module_progress'][0]['requirements'],
+                         {'required': 2, 'completed': 1, 'incomplete': 0, 'unknown': 1})
+        self.assertIsNone(data['module_progress'][1]['requirements'])
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        self.assertFalse(any('/modules/22/' in path or '/modules/23/' in path
+                             for _, path in self.calls[before:]))
+        result = self.invoke('module-progress', '104', '--format', 'brief')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('unknown', result.stdout)
+        self.assertIn('coverage is partial', result.stdout)
 
     def test_expired_auth(self):
         r = self.invoke('auth', 'status', token='invalid-secret')
@@ -427,7 +550,8 @@ class E2E(unittest.TestCase):
         self.assertEqual(preview.returncode, 0, preview.stderr)
         data = json.loads(preview.stdout)
         self.assertTrue(data['dry_run'])
-        self.assertEqual(self.calls[before:], [('GET', '/api/v1/courses/101/assignments/88')])
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile'),
+                                              ('GET', '/api/v1/courses/101/assignments/88')])
         sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
         self.assertEqual(sent.returncode, 0, sent.stderr)
         self.assertEqual(self.calls[-2:], [
@@ -701,12 +825,32 @@ class E2E(unittest.TestCase):
         self.assertTrue(data['dry_run'])
         self.assertEqual(data['file']['name'], 'synthetic.txt')
         self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/users/self/profile'),
             ('GET', '/api/v1/courses/101/assignments/89'), ('GET', '/api/v1/files/777')])
         sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
         self.assertEqual(sent.returncode, 0, sent.stderr)
         self.assertEqual(self.calls[-3:], [
             ('GET', '/api/v1/courses/101/assignments/89'), ('GET', '/api/v1/files/777'),
             ('POST', '/api/v1/courses/101/assignments/89/submissions')])
+
+    def test_multiple_uploaded_files_are_submitted_in_one_confirmed_request(self):
+        command = ('submit-file', '101', '89', '777', '778')
+        before = len(self.calls)
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertEqual(data['body']['submission']['file_ids'], [777, 778])
+        self.assertEqual(len(data['files']), 2)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(json.loads(sent.stdout)['submission']['file_ids'], [777, 778])
+        self.assertEqual([c for c in self.calls[before:] if c[0] == 'POST'],
+                         [('POST', '/api/v1/courses/101/assignments/89/submissions')])
+        before = len(self.calls)
+        duplicate = self.invoke('submit-file', '101', '89', '777', '0777')
+        self.assertNotEqual(duplicate.returncode, 0)
+        self.assertEqual(len(self.calls), before)
 
     def test_personal_file_discovery_and_metadata(self):
         found = self.invoke('my-files', '--search', 'synthetic')

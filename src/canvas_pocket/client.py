@@ -40,7 +40,7 @@ class Client:
                 or '\\' in decoded
                 or any(k.lower() in ('access_token', 'as_user_id') for k in parse_qs(u.query))):
             raise CanvasError('Refusing request outside the configured Canvas API origin')
-        if method not in ('GET', 'POST'):
+        if method not in ('GET', 'POST', 'PUT', 'DELETE'):
             raise CanvasError('Unsupported method')
         parameters = parse_qs(u.query)
         if method == 'GET' and 'read_status' in parameters.get('include[]', []):

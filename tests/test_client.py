@@ -12,6 +12,21 @@ class Response(io.BytesIO):
 
 
 class Tests(unittest.TestCase):
+    def test_put_and_delete_use_same_origin_no_redirect_transport(self):
+        calls = []
+        def send(req, **kw):
+            calls.append(req)
+            return Response(b'{"id":41}')
+        client = Client('https://canvas.example.edu', 'synthetic', send)
+        client.request('/api/v1/planner_notes/41', 'PUT', {'title': 'Synthetic'})
+        client.request('/api/v1/planner_notes/41', 'DELETE')
+        self.assertEqual([req.get_method() for req in calls], ['PUT', 'DELETE'])
+        self.assertEqual(calls[0].data, b'{"title": "Synthetic"}')
+        self.assertIsNone(calls[1].data)
+        with self.assertRaises(CanvasError):
+            client.request('https://other.example.edu/api/v1/planner_notes/41', 'DELETE')
+        self.assertEqual(len(calls), 2)
+
     def test_origins(self):
         for bad in ('http://example.com', 'https://user:secret@example.com', 'https://example.com/path'):
             with self.assertRaises(CanvasError): origin(bad)

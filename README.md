@@ -52,6 +52,14 @@ canvas-pocket news --course 123 --course 456
 canvas-pocket linked-files 123
 canvas-pocket linked-files 123 --quick
 canvas-pocket upcoming
+canvas-pocket planner --start 2026-10-01 --end 2026-10-14 --format brief
+canvas-pocket planner --course 123 --group 456 --filter incomplete_items
+canvas-pocket planner-notes --course 123 --personal
+canvas-pocket planner-note 789
+canvas-pocket planner-overrides
+canvas-pocket task-create --title 'Read chapter' --date 2026-10-05 --course 123
+canvas-pocket task-edit 789 --date 2026-10-06
+canvas-pocket task-delete 789
 canvas-pocket calendar --start 2026-09-25 --end 2026-10-09 --active --personal
 canvas-pocket calendar --type assignment --course 123
 canvas-pocket assignments 123
@@ -62,16 +70,19 @@ canvas-pocket quiz 123 456
 canvas-pocket new-quizzes 123
 canvas-pocket new-quiz 123 456  # 456 is the assignment ID for a New Quiz
 canvas-pocket submission 123 456
+canvas-pocket submission-comment 123 456 --message-file question.txt
 canvas-pocket submit-url 123 456 --url-file project-url.txt
 canvas-pocket submit-text 123 456 --text-file response.txt
 canvas-pocket upload-personal --file ./notes.pdf
 canvas-pocket upload-assignment-file 123 456 --file ./paper.pdf
 canvas-pocket submit-file 123 456 789  # 789 is the resulting uploaded file ID
+canvas-pocket submit-file 123 456 789 790  # submit both already uploaded files together
 canvas-pocket grades 123
 canvas-pocket syllabus 123
 canvas-pocket tabs 123
 canvas-pocket front-page 123
 canvas-pocket modules 123
+canvas-pocket module-progress 123 --format brief
 canvas-pocket outline 123
 canvas-pocket pages 123
 canvas-pocket pages 123 --best-effort
@@ -119,6 +130,12 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 
 `agenda` is a read-only, submission-aware view of unfinished dated assignments. It displays due times in the system's local time zone by default or an explicit IANA zone, handles daylight saving at each deadline, and separates undated items from actual deadlines. Repeat `--course` to focus on current classes. Its urgency labels describe **time until due only**, not workload, grade impact, or instructor priority. It cannot infer recurring meetings or requirements embedded in external tools, and a missing Canvas submission record is labeled unknown rather than presumed unsubmitted.
 
+`planner` reads the current user's [Canvas planner feed](https://developerdocs.instructure.com/services/canvas/resources/planner), including personal tasks. It follows pagination and defaults to today through thirteen days later; use `--start`/`--end`, repeat `--course`/`--group`, or select `--filter incomplete_items`, `complete_items`, or `new_activity`. A planner completion override is a personal checkbox, not proof an assignment was submitted. This feed complements `agenda`, assignment lists and course instructions; an empty feed does not establish that there is no coursework. `planner-notes` lists personal tasks, with optional date/course filters and `--personal` to include unassociated tasks when filtering courses. `planner-note` reads one, and `planner-overrides` reads completion/visibility overrides without changing them.
+
+`task-create`, `task-edit` and `task-delete` operate only on the signed-in user's personal planner notes. Each first returns a preview, then requires the same command with `--yes --confirm DIGEST`. The preview binds the Canvas origin, signed-in user, exact changes and current destination. Edit sends only fields you specify; `--details-file` reads plain UTF-8, including an empty file to clear details. `--clear-course` explicitly removes a course association. Linked tasks cannot change course. Delete removes only the named personal task, not an assignment, and cannot be combined with editing. A changed task, account or destination invalidates confirmation. These commands have synthetic HTTPS tests only; no personal task was created or removed in a live account.
+
+`module-progress` separately paginates visible [module items](https://developerdocs.instructure.com/services/canvas/resources/modules) with reported completion requirements. It distinguishes completed, incomplete, unknown and not-required items, and preserves Canvas's module state and all/one requirement rule rather than inferring completion from counts. Locked modules are listed without fetching their items, denied item lists are explicitly partial, and hidden/unpublished metadata is skipped. It does not view content, send completion events, start assessments, or change grades.
+
 `tabs COURSE` lists visible course navigation labels and Canvas paths, including external-tool tabs, without launching those tools. `front-page COURSE` reads the published course home page where Canvas provides one. External tools such as Zoom or Piazza need their own authorization and are not controlled through these commands.
 
 `linked-files` discovers links in readable syllabus, modules, module pages, assignments, announcements and discussion prompts, useful when a course's Files tab is hidden. It skips explicitly unpublished, hidden or locked sources; it does not read student discussion entries, is not a complete inventory, and reports when a linked file is hidden or locked for the user. `--all-pages` adds accessible published pages outside modules. `--quick` skips per-file metadata requests, so availability is unknown, but is substantially faster for courses with many files. Requests remain sequential to avoid Canvas's [parallel-request throttling penalty](https://developerdocs.instructure.com/services/canvas/basics/file.throttling). Downloads use an explicit output path, refuse overwrites and Git-checkout destinations, remove failed partial files, compare received bytes with Canvas's advertised file size when available, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
@@ -152,6 +169,10 @@ Partial-coverage results are reserved for permission-denied or not-found course 
 `upload-personal` and `upload-assignment-file` follow [Canvas's three-step upload protocol](https://developerdocs.instructure.com/services/canvas/basics/file.file_uploads). They preview the source path, size, SHA-256 hash and destination, then require `--yes --confirm DIGEST`. Personal uploads request rename-on-duplicate because Canvas otherwise overwrites a same-named file. Assignment uploads check that the current assignment permits file submissions and any listed extension, but **do not submit the assignment**. The CLI sends your token only to Canvas for initiation and confirmation; its separate storage request has no token, cookies or redirects. A failed/ambiguous upload is not retried automatically. Default maximum file size is 25 MiB; use `--max-bytes` deliberately if needed. These writes have synthetic HTTPS tests but no live-upload validation. Do not assume a successful upload means your work was turned in. To turn it in, separately preview `submit-file COURSE ASSIGNMENT FILE_ID` and confirm its digest. [Canvas documents this distinct file-ID submission step](https://developerdocs.instructure.com/services/canvas/resources/submissions).
 
 `my-files` and `file-info` use the [Files API](https://developerdocs.instructure.com/services/canvas/resources/files) to locate and verify an accessible uploaded file ID. `my-files --search` filters by partial filename and follows pagination; `file-info` requires an exact numeric ID. These are read-only and may show personal filenames in terminal output.
+
+`submit-file COURSE ASSIGNMENT FILE_ID [FILE_ID ...]` supports one or several already uploaded files in one submission. It verifies every file's identity, size, access and permitted extension, and binds the selected list plus metadata to the preview. Duplicate IDs are refused; changing any selected file or the account invalidates confirmation. The single-file `file` preview field is retained alongside the uniform `files` array for existing callers. Canvas ultimately determines whether the files belong to the submitting user or their submission group. URL, text and file submission previews are bound to the signed-in user and Canvas origin as well.
+
+`submission-comment COURSE ASSIGNMENT --message-file question.txt` previews a plain-text comment on **your own submission**, using the [Submissions API](https://developerdocs.instructure.com/services/canvas/resources/submissions). It verifies current-user identity, assignment identity and submission ownership, then requires `--yes --confirm DIGEST`. It sends only `comment` fields, never grading or submission content. Optional `--attempt N` targets an existing confirmed attempt; `--group-comment` explicitly expands the audience and requires a group assignment. Comments can be visible to graders and others permitted to view that submission. New attempts or audience changes invalidate the preview. It has synthetic HTTPS coverage only, with no live comment posted.
 
 `doctor COURSE` makes small, sequential GET requests to a visible course's major read APIs and reports only reachability states, not course content. A 403 or 404 may reflect role, publication, or institution configuration, and a readable endpoint does not guarantee every item is visible. It stops probing on a rate limit. This is a diagnostic map, not a way around access controls.
 
@@ -187,6 +208,13 @@ canvas-pocket upload-assignment-file 123 456 --file ./paper.pdf --yes --confirm 
 # The upload reports the new file ID; this only stages the file.
 canvas-pocket submit-file 123 456 789
 canvas-pocket submit-file 123 456 789 --yes --confirm DIGEST
+canvas-pocket submit-file 123 456 789 790
+canvas-pocket submit-file 123 456 789 790 --yes --confirm DIGEST
+
+canvas-pocket task-edit 789 --date 2026-10-06
+canvas-pocket task-edit 789 --date 2026-10-06 --yes --confirm DIGEST
+canvas-pocket submission-comment 123 456 --message-file question.txt
+canvas-pocket submission-comment 123 456 --message-file question.txt --yes --confirm DIGEST
 ```
 
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
