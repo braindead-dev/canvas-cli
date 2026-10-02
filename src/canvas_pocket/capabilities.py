@@ -6,7 +6,7 @@ def describe():
         'read': [
             'courses', 'doctor', 'find', 'me', 'favorites', 'groups', 'group', 'course-groups',
             'inbox', 'conversation (no read-state change)', 'recipients',
-            'todo', 'upcoming', 'calendar', 'planner', 'planner-notes', 'planner-note',
+            'todo', 'upcoming', 'calendar', 'event', 'planner', 'planner-notes', 'planner-note',
             'planner-overrides', 'module-progress', 'overview', 'deadlines', 'work', 'agenda',
             'exports', 'export-status',
             'news', 'linked-files', 'assignments', 'assignment',
@@ -26,6 +26,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'event-create/event-edit/event-delete (personal calendar only; account-bound preview and matching digest required)',
             'task-create/task-edit/task-delete (personal planner notes; account-bound preview and matching digest required)',
             'post (preview and matching digest required)',
             'inbox-reply/inbox-compose (preview and matching digest required)',

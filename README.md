@@ -64,6 +64,13 @@ canvas-pocket task-edit 789 --date 2026-10-06
 canvas-pocket task-delete 789
 canvas-pocket calendar --start 2026-09-25 --end 2026-10-09 --active --personal
 canvas-pocket calendar --type assignment --course 123
+canvas-pocket calendar --group 456 --undated
+canvas-pocket calendar --all --active --personal
+canvas-pocket event 789
+canvas-pocket event-create --title 'Study block' --start 2026-10-05T19:00:00-07:00 --end 2026-10-05T20:00:00-07:00
+canvas-pocket event-create --title 'Read chapter' --date 2026-10-05 --timezone America/Los_Angeles
+canvas-pocket event-edit 789 --title 'New study block'
+canvas-pocket event-delete 789 --reason 'Schedule changed'
 canvas-pocket assignments 123
 canvas-pocket assignment-groups 123
 canvas-pocket rubrics 123
@@ -231,6 +238,14 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 ```
 
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
+
+## Personal calendar
+
+Personal calendar writes use the same account-bound preview and matching `--yes --confirm DIGEST` as other Canvas writes. `event-create` adds one event to your personal calendar; `event-edit` and `event-delete` re-read and verify the named event belongs to that calendar. They refuse course/group events, appointments, section events and deleted/locked/hidden events. Recurring-event edits and deletion explicitly use `which=one`, never a whole series. No assignment or reservation is changed, and uncertain write outcomes are never retried automatically.
+
+Use ISO timestamps with seconds and `Z` or an explicit UTC offset for timed events. Start and end must both be provided, with end later than start. `--timezone` optionally validates both offsets against that IANA zone on their dates. For a single all-day event, use `--date YYYY-MM-DD --timezone IANA`; daylight saving is handled for that date, and skipped or ambiguous midnights are refused. `--details-file` is plain UTF-8 text escaped to HTML, with an empty file clearing details; empty `--location` or `--address` clears that field. Editing sends only specified fields. The new calendar writes have unit and synthetic HTTPS tests, not live account write coverage.
+
+The read-only `calendar` command also accepts repeated `--group` filters. `--undated` returns only undated items; `--all` returns dated and undated items. Neither can be combined with a date window, since Canvas would ignore it. `event ID` reads one numeric calendar event ID without changing it; assignment calendar entries remain available through `calendar --type assignment`.
 
 ## Privacy and security
 

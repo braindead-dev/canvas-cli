@@ -26,6 +26,9 @@ class E2E(unittest.TestCase):
                         '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'],
                        check=True, capture_output=True)
         cls.calls = []
+        cls.event = {'id': 61, 'context_code': 'user_7', 'title': 'Synthetic event',
+                     'start_at': '2026-10-05T09:00:00-07:00', 'end_at': '2026-10-05T10:00:00-07:00',
+                     'all_day': False, 'workflow_state': 'active', 'updated_at': '2026-10-01T12:00:00Z'}
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -239,6 +242,10 @@ class E2E(unittest.TestCase):
                     data = []
                 elif self.path.startswith('/api/v1/calendar_events?'):
                     data = [{'id': 10, 'title': 'Synthetic event'}]
+                elif self.path == '/api/v1/calendar_events/61':
+                    data = cls.event
+                elif self.path == '/api/v1/calendar_events/62':
+                    data = {**cls.event, 'id': 62, 'context_code': 'course_101'}
                 elif self.path == '/api/v1/users/self/groups?per_page=100':
                     data = [{'id': 11, 'name': 'Synthetic group'}]
                 elif self.path == '/api/v1/users/self/favorites/courses?per_page=100':
@@ -272,6 +279,13 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path in ('/api/v1/calendar_events', '/api/v1/calendar_events/61'):
+                    cls.event_write = body
+                    data = {**cls.event, **body.get('calendar_event', {})}
+                    if self.command == 'DELETE':
+                        data['workflow_state'] = 'deleted'
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path == '/api/v1/courses/105/content_exports':
                     self.send_response(200); self.end_headers()
                     self.wfile.write(json.dumps({'id': 51, 'user_id': 7, 'workflow_state': 'exporting',
@@ -313,6 +327,46 @@ class E2E(unittest.TestCase):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
+
+    def test_personal_calendar_lifecycle_is_preview_first_over_tls(self):
+        commands = [(('event-create', '--title', 'Synthetic study block', '--date', '2026-10-05',
+                       '--timezone', 'America/Los_Angeles'), 'POST', '/api/v1/calendar_events'),
+                    (('event-edit', '61', '--start', '2026-10-05T12:00:00-07:00',
+                       '--end', '2026-10-05T13:00:00-07:00'), 'PUT', '/api/v1/calendar_events/61'),
+                    (('event-delete', '61', '--reason', 'Synthetic reason'), 'DELETE', '/api/v1/calendar_events/61')]
+        for command, method, route in commands:
+            with self.subTest(command=command):
+                before = len(self.calls)
+                preview = self.invoke(*command)
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                data = json.loads(preview.stdout)
+                self.assertTrue(data['dry_run'])
+                self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+                rejected = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+                sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                self.assertEqual(sent.returncode, 0, sent.stderr)
+                self.assertEqual(json.loads(sent.stdout)['calendar_event']['id'], 61)
+                self.assertEqual(self.event_write, data['body'])
+                self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [(method, route)])
+                if method != 'POST':
+                    self.assertEqual(self.event_write['which'], 'one')
+
+    def test_personal_calendar_refuses_course_events_and_ambiguous_time_input(self):
+        before = len(self.calls)
+        result = self.invoke('event-edit', '62', '--title', 'Not a personal event')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('personal calendar', result.stderr)
+        self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+        before = len(self.calls)
+        result = self.invoke('event-create', '--title', 'Bad time', '--start', '2026-10-05T09:00:00',
+                             '--end', '2026-10-05T10:00:00')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(self.calls), before)
+        read = self.invoke('event', '61')
+        self.assertEqual(read.returncode, 0, read.stderr)
+        self.assertEqual(json.loads(read.stdout)['context_code'], 'user_7')
 
     def test_planner_pagination_and_read_only_personal_notes(self):
         before = len(self.calls)

@@ -141,6 +141,26 @@ class CLITests(unittest.TestCase):
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
+    def test_calendar_group_undated_and_all_filters_are_explicit(self, client):
+        client.return_value.list.return_value = []
+        for options, query in [(['--undated', '--group', '11'], 'type=event&undated=true&per_page=100&context_codes%5B%5D=group_11'),
+                               (['--all'], 'type=event&all_events=true&per_page=100')]:
+            result = run(parser().parse_args(['calendar', *options]))
+            self.assertEqual(result, [])
+            client.return_value.list.assert_called_with('/api/v1/calendar_events?' + query, 100)
+        client.return_value.list.reset_mock()
+        for options in (['--all', '--start', '2026-10-02'], ['--undated', '--end', '2026-10-02'],
+                        ['--start', '9999-12-31'],
+                        [flag for number in range(1, 12) for flag in ('--group', str(number))]):
+            with self.subTest(options=options), self.assertRaises(CanvasError):
+                run(parser().parse_args(['calendar', *options]))
+        client.return_value.list.assert_not_called()
+        client.return_value.request.return_value = ({'id': True}, '')
+        with self.assertRaises(CanvasError):
+            run(parser().parse_args(['calendar', '--personal']))
+
+    @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
+    @patch('canvas_pocket.cli.Client')
     def test_grades_only_returns_own_course_enrollment(self, client):
         client.return_value.request.return_value = ({'id': 7}, '')
         client.return_value.list.return_value = [{'user_id': 7, 'course_id': 8, 'grades': {'current_score': 90}}]

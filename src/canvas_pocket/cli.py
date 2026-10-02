@@ -4,7 +4,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
@@ -165,8 +165,32 @@ def parser():
     calendar.add_argument('--end', type=calendar_date, help='Last date (YYYY-MM-DD); default 13 days after start')
     calendar.add_argument('--type', choices=('event', 'assignment', 'sub_assignment'), default='event')
     calendar.add_argument('--course', type=identifier, action='append', default=[], help='Include a course calendar; repeatable')
+    calendar.add_argument('--group', type=identifier, action='append', default=[], help='Include a group calendar; repeatable')
     calendar.add_argument('--active', action='store_true', help='Include all active course calendars')
     calendar.add_argument('--personal', action='store_true', help='Include your personal calendar with selected courses')
+    undated = calendar.add_mutually_exclusive_group()
+    undated.add_argument('--undated', action='store_true', help='Only undated items; cannot combine with dates')
+    undated.add_argument('--all', action='store_true', help='All dated and undated items; cannot combine with dates')
+    sub.add_parser('event', help='Read one calendar event without changing it').add_argument('event', type=identifier)
+    for name, creating in (('event-create', True), ('event-edit', False)):
+        event = sub.add_parser(name, help='Preview creating or editing a personal calendar event')
+        if not creating:
+            event.add_argument('event', type=identifier)
+        event.add_argument('--title', required=creating)
+        event.add_argument('--start', help='ISO timestamp with seconds and an explicit UTC offset or Z')
+        event.add_argument('--end', help='ISO timestamp with seconds and an explicit UTC offset or Z')
+        event.add_argument('--date', type=calendar_date, help='One all-day date instead of --start/--end')
+        event.add_argument('--timezone', help='IANA time zone; required with --date')
+        event.add_argument('--details-file', type=Path, help='Plain UTF-8 text; empty file clears details')
+        event.add_argument('--location')
+        event.add_argument('--address')
+        event.add_argument('--yes', action='store_true')
+        event.add_argument('--confirm', help='Digest returned by the account-bound preview')
+    remove_event = sub.add_parser('event-delete', help='Preview removing one personal calendar event occurrence')
+    remove_event.add_argument('event', type=identifier)
+    remove_event.add_argument('--reason', help='Optional cancellation reason shown in the preview')
+    remove_event.add_argument('--yes', action='store_true')
+    remove_event.add_argument('--confirm')
     sub.add_parser('overview', help='Active courses, upcoming work, and to-do items')
     due = sub.add_parser('deadlines', help='Assignment deadlines across active courses')
     due.add_argument('--days', type=int, default=14, help='Look ahead this many days; default 14')
@@ -375,6 +399,20 @@ def run(args):
     if not token:
         raise CanvasError('No credential found. Run auth login again.')
     client = Client(host, token)
+    if args.command in ('event', 'event-create', 'event-edit', 'event-delete'):
+        from . import events
+        if args.command == 'event':
+            return events.read(client, args.event)
+        if args.command == 'event-delete':
+            return events.change(client, args.event, delete=True, cancel_reason=args.reason,
+                                 yes=args.yes, confirm=args.confirm)
+        details = args.details_file.read_text(encoding='utf-8') if args.details_file else None
+        options = dict(title=args.title, start=args.start, end=args.end, day=args.date,
+                       time_zone=args.timezone, details=details, location=args.location,
+                       address=args.address, yes=args.yes, confirm=args.confirm)
+        if args.command == 'event-create':
+            return events.create(client, **options)
+        return events.change(client, args.event, **options)
     if args.command == 'planner':
         from .planner import items
         return items(client, args.max_pages, args.start, args.end, args.course,
@@ -485,21 +523,27 @@ def run(args):
             return client.request(route + f'/{args.assignment}')[0]
         return client.list(route + '?per_page=100', args.max_pages)
     if args.command == 'calendar':
-        start = args.start or datetime.now(timezone.utc).astimezone().date().isoformat()
-        end = args.end or (date.fromisoformat(start) + timedelta(days=13)).isoformat()
-        if end < start:
-            raise CanvasError('--end must not precede --start')
-        contexts = [f'course_{number}' for number in args.course]
+        from .planner import window
+        from .writes import own_id
+        if (args.all or args.undated) and (args.start or args.end):
+            raise CanvasError('--all/--undated cannot combine with --start/--end; those dates would be ignored')
+        query = [('type', args.type)]
+        if args.all or args.undated:
+            query.append(('all_events' if args.all else 'undated', 'true'))
+        else:
+            start, end = window(args.start, args.end)
+            query += [('start_date', start), ('end_date', end)]
+        query.append(('per_page', '100'))
+        contexts = [f'course_{number}' for number in args.course] + [f'group_{number}' for number in args.group]
         if args.active:
             courses = client.list('/api/v1/courses?enrollment_state=active&per_page=100', args.max_pages)
             contexts += [f"course_{course['id']}" for course in courses if course.get('id')]
         if args.personal:
             profile = client.request('/api/v1/users/self/profile')[0]
-            contexts.append(f"user_{profile['id']}")
+            contexts.append(f'user_{own_id(profile)}')
         contexts = list(dict.fromkeys(contexts))
         if len(contexts) > 10:
             raise CanvasError('Canvas calendar supports at most 10 contexts; select courses explicitly')
-        query = [('type', args.type), ('start_date', start), ('end_date', end), ('per_page', '100')]
         query += [('context_codes[]', context) for context in contexts]
         return client.list('/api/v1/calendar_events?' + urlencode(query), args.max_pages)
     if args.command == 'todo':
@@ -676,6 +720,12 @@ def brief(data):
             lines.append('No matching commands. Try help without --search.')
         lines.append(data['note'])
         return '\n'.join(lines)
+    if isinstance(data, dict) and 'calendar_event' in data:
+        event = data['calendar_event']
+        when = (event.get('all_day_date') or event.get('start_at')) if event.get('all_day') else event.get('start_at')
+        return (f"Event {event['id']} [{event.get('workflow_state') or 'unknown'}] {event.get('title') or 'Untitled'}\n"
+                f"{when or 'Undated'}" + (' (all day)' if event.get('all_day') else f" to {event.get('end_at') or 'unknown'}") +
+                f"\n{data['note']}")
     if isinstance(data, dict) and 'export' in data and isinstance(data['export'], dict):
         job = data['export']
         lines = [f"Export {job['id']} [{job.get('workflow_state') or 'unknown'}] "
