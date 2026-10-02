@@ -13,11 +13,15 @@ from canvas_pocket.upload import _upload_to_storage, prepare, upload
 
 class FakeClient:
     def __init__(self, assignment=None):
+        self.host = 'https://canvas.example.edu'
+        self.user_id = 7
         self.assignment = assignment
         self.calls = []
 
     def request(self, route, method='GET', body=None):
         self.calls.append((method, route, body))
+        if route == '/api/v1/users/self/profile':
+            return {'id': self.user_id}, ''
         return self.assignment, ''
 
 
@@ -66,8 +70,9 @@ class UploadTest(unittest.TestCase):
 
     def test_staged_bytes_are_exactly_previewed_bytes(self):
         _, digest = prepare(FakeClient(), self.source, 100)
-        client = Mock()
+        client = Mock(host='https://canvas.example.edu')
         client.request.side_effect = [
+            ({'id': 7}, ''),
             ({'upload_url': 'https://storage.example.org/upload', 'upload_params': {}}, ''),
             ({'id': 99}, ''),
         ]
@@ -78,8 +83,8 @@ class UploadTest(unittest.TestCase):
         with patch('canvas_pocket.upload._upload_to_storage', side_effect=inspect_storage):
             result = upload(client, self.source, 100, yes=True, confirm=digest)
         self.assertEqual(result['uploaded_file_id'], 99)
-        self.assertEqual(client.request.call_args_list[0].args[1], 'POST')
-        self.assertEqual(client.request.call_args_list[0].args[2]['on_duplicate'], 'rename')
+        self.assertEqual(client.request.call_args_list[1].args[1], 'POST')
+        self.assertEqual(client.request.call_args_list[1].args[2]['on_duplicate'], 'rename')
 
     def test_mutation_after_fresh_preview_is_caught_before_canvas_post(self):
         from canvas_pocket.upload import prepare as real_prepare
@@ -88,11 +93,22 @@ class UploadTest(unittest.TestCase):
             result = real_prepare(*args)
             self.source.write_text('changed!')
             return result
-        client = Mock()
+        client = Mock(host='https://canvas.example.edu')
+        client.request.return_value = ({'id': 7}, '')
         with (patch('canvas_pocket.upload.prepare', side_effect=mutate_after_prepare),
               self.assertRaisesRegex(CanvasError, 'Upload file changed')):
             upload(client, self.source, 100, yes=True, confirm=digest)
-        client.request.assert_not_called()
+        client.request.assert_called_once_with('/api/v1/users/self/profile')
+
+    def test_upload_account_change_is_refused_before_storage_or_post(self):
+        client = FakeClient()
+        _, digest = prepare(client, self.source, 100)
+        client.user_id = 99
+        with (patch('canvas_pocket.upload._upload_to_storage') as storage,
+              self.assertRaisesRegex(CanvasError, 'Preview changed')):
+            upload(client, self.source, 100, yes=True, confirm=digest)
+        storage.assert_not_called()
+        self.assertTrue(all(method == 'GET' for method, _, _ in client.calls))
 
     def test_storage_failure_modes_do_not_log_signed_url(self):
         signed = 'https://storage.example.org/upload?signature=private'

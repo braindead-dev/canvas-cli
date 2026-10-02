@@ -42,6 +42,7 @@ class CLITests(unittest.TestCase):
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
     def test_post_defaults_to_preview(self, client):
+        client.return_value.host = 'https://canvas.example.edu'
         client.return_value.request.return_value = (
             {'id': 456, 'context_id': 123, 'title': 'Synthetic topic', 'published': True}, '')
         with tempfile.TemporaryDirectory() as folder:
@@ -50,12 +51,14 @@ class CLITests(unittest.TestCase):
             result = run(parser().parse_args(['post', '123', '456', '--message-file', str(f)]))
             self.assertTrue(result['dry_run'])
             self.assertIn('&lt;script&gt;', result['body']['message'])
-            client.return_value.request.assert_called_once_with(
-                '/api/v1/courses/123/discussion_topics/456')
+            self.assertEqual([c.args for c in client.return_value.request.call_args_list],
+                             [('/api/v1/users/self/profile',),
+                              ('/api/v1/courses/123/discussion_topics/456',)])
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
     def test_explicit_reply_posts_once(self, client):
+        client.return_value.host = 'https://canvas.example.edu'
         topic = {'id': 456, 'context_id': 123, 'title': 'Synthetic topic', 'published': True}
         client.return_value.request.return_value = (topic, '')
         with tempfile.TemporaryDirectory() as folder:
@@ -64,7 +67,7 @@ class CLITests(unittest.TestCase):
             command = ['post', '123', '456', '--reply-to', '789', '--message-file', str(f)]
             preview = run(parser().parse_args(command))
             client.return_value.request.reset_mock()
-            client.return_value.request.side_effect = [(topic, ''), ({'id': 999}, '')]
+            client.return_value.request.side_effect = [(topic, ''), (topic, ''), ({'id': 999}, '')]
             run(parser().parse_args(command + ['--yes', '--confirm', preview['confirm']]))
             client.return_value.request.assert_any_call(
                 '/api/v1/courses/123/discussion_topics/456/entries/789/replies',
@@ -228,6 +231,7 @@ class CLITests(unittest.TestCase):
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
     @patch('canvas_pocket.cli.Client')
     def test_inbox_reply_requires_preview_digest_and_stable_audience(self, client):
+        client.return_value.host = 'https://canvas.example.edu'
         thread = {'id': 9, 'subject': 'Synthetic thread',
                   'participants': [{'id': 7, 'name': 'Recipient'}], 'audience': [7]}
         client.return_value.request.return_value = (thread, '')
@@ -238,8 +242,8 @@ class CLITests(unittest.TestCase):
             preview = run(parser().parse_args(command))
             self.assertTrue(preview['dry_run'])
             self.assertEqual(preview['body'], {'body': 'Synthetic response'})
-            client.return_value.request.assert_called_once_with(
-                '/api/v1/conversations/9?auto_mark_as_read=false')
+            self.assertEqual(client.return_value.request.call_count, 2)
+            client.return_value.request.assert_called_with('/api/v1/conversations/9?auto_mark_as_read=false')
             with self.assertRaisesRegex(CanvasError, 'both --yes and --confirm'):
                 run(parser().parse_args(command + ['--yes']))
             client.return_value.request.reset_mock()
@@ -247,9 +251,9 @@ class CLITests(unittest.TestCase):
             client.return_value.request.return_value = (changed, '')
             with self.assertRaisesRegex(CanvasError, 'Preview changed'):
                 run(parser().parse_args(command + ['--yes', '--confirm', preview['confirm']]))
-            client.return_value.request.assert_called_once_with(
-                '/api/v1/conversations/9?auto_mark_as_read=false')
-            client.return_value.request.side_effect = [(thread, ''), ({'id': 9}, '')]
+            self.assertEqual(client.return_value.request.call_count, 2)
+            client.return_value.request.assert_called_with('/api/v1/conversations/9?auto_mark_as_read=false')
+            client.return_value.request.side_effect = [(thread, ''), (thread, ''), ({'id': 9}, '')]
             sent = run(parser().parse_args(command + ['--yes', '--confirm', preview['confirm']]))
             self.assertEqual(sent['id'], 9)
             self.assertEqual(client.return_value.request.call_args.args,

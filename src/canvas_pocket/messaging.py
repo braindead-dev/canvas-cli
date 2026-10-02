@@ -5,6 +5,7 @@ import json
 from urllib.parse import urlencode
 
 from .client import CanvasError
+from .writes import account, check_flags, confirmed
 
 
 def recipients(client, max_pages, search=None, user_id=None, course_id=None):
@@ -41,11 +42,12 @@ def compose(client, max_pages, recipient_id, subject, message, course_id=None,
     shared = people[0].get('common_courses')
     if course_id and isinstance(shared, dict) and str(course_id) not in shared:
         raise CanvasError('Recipient is not shown as sharing that course')
+    identity = account(client)
     body = {'recipients': [recipient_id], 'subject': subject, 'body': message}
     if course_id:
         body['context_code'] = f'course_{course_id}'
     route = '/api/v1/conversations'
-    preview = {'recipient': person, 'course_id': course_id, 'route': route,
+    preview = {**identity, 'recipient': person, 'course_id': course_id, 'route': route,
                'body': body, 'may_reuse_existing_private_thread': True}
     digest = hashlib.sha256(json.dumps(preview, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     if not yes:
@@ -54,3 +56,23 @@ def compose(client, max_pages, recipient_id, subject, message, course_id=None,
     if confirm != digest:
         raise CanvasError('Preview changed (recipient or message); review a fresh preview before sending')
     return client.request(route, 'POST', body)[0]
+
+
+def reply(client, conversation_id, message, yes=False, confirm=None):
+    check_flags(yes, confirm)
+    if not isinstance(message, str) or not message.strip():
+        raise CanvasError('Empty message refused')
+    identity = account(client)
+    conversation, _ = client.request(f'/api/v1/conversations/{conversation_id}?auto_mark_as_read=false')
+    if not isinstance(conversation, dict) or str(conversation.get('id')) != conversation_id:
+        raise CanvasError('Canvas returned a different conversation; refusing to send')
+    participants = conversation.get('participants')
+    if (not isinstance(participants, list) or not participants or
+            any(not isinstance(person, dict) or type(person.get('id')) is not int or person['id'] < 1
+                for person in participants)):
+        raise CanvasError('Canvas did not identify thread participants; refusing to send')
+    preview = {**identity, 'conversation_id': conversation_id, 'subject': conversation.get('subject'),
+               'participants': participants, 'audience': conversation.get('audience'),
+               'method': 'POST', 'route': f'/api/v1/conversations/{conversation_id}/add_message',
+               'body': {'body': message}}
+    return confirmed(client, preview, yes, confirm)

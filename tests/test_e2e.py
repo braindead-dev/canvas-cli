@@ -137,6 +137,22 @@ class E2E(unittest.TestCase):
                     data = [{'id': 777, 'display_name': 'synthetic.txt', 'size': 22}]
                 elif self.path == '/api/v1/users/self/profile':
                     data = {'id': 7, 'name': 'Synthetic Student'}
+                elif self.path == '/api/v1/courses/105/content_exports?per_page=100':
+                    self.send_header('Link', '</api/v1/courses/105/content_exports?page=2>; rel="next"')
+                    data = [{'id': 51, 'user_id': 7, 'export_type': 'zip', 'workflow_state': 'exporting'}]
+                elif self.path == '/api/v1/courses/105/content_exports?page=2':
+                    data = [{'id': 52, 'user_id': 7, 'export_type': 'zip', 'workflow_state': 'exported',
+                             'attachment': {'url': f'https://localhost:{cls.server.server_port}/storage/synthetic-file?signature=hidden'}}]
+                elif self.path == '/api/v1/courses/105/content_exports/51':
+                    data = {'id': 51, 'user_id': 7, 'export_type': 'zip', 'workflow_state': 'exporting',
+                            'progress_url': f'https://localhost:{cls.server.server_port}/api/v1/progress/61'}
+                elif self.path == '/api/v1/courses/105/content_exports/52':
+                    data = {'id': 52, 'user_id': 7, 'export_type': 'zip', 'workflow_state': 'exported',
+                            'attachment': {'url': f'https://localhost:{cls.server.server_port}/storage/synthetic-file', 'size': 20}}
+                elif self.path == '/api/v1/progress/61':
+                    data = {'id': 61, 'workflow_state': 'running', 'completion': 45}
+                elif self.path == '/api/v1/courses/105':
+                    data = {'id': 105, 'name': 'Synthetic export course'}
                 elif self.path == '/api/v1/planner/items?page=2':
                     data = [{'plannable_type': 'assignment', 'plannable_id': 88,
                              'plannable': {'title': 'Synthetic assignment'},
@@ -256,6 +272,10 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path == '/api/v1/courses/105/content_exports':
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps({'id': 51, 'user_id': 7, 'workflow_state': 'exporting',
+                                                'export_type': body['export_type']}).encode()); return
                 if self.path in ('/api/v1/users/self/files',
                                  '/api/v1/courses/101/assignments/89/submissions/self/files'):
                     cls.upload_initial = body
@@ -378,6 +398,39 @@ class E2E(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('unknown', result.stdout)
         self.assertIn('coverage is partial', result.stdout)
+
+    def test_async_export_read_preview_create_and_private_download(self):
+        before = len(self.calls)
+        index = self.invoke('exports', '105')
+        self.assertEqual(index.returncode, 0, index.stderr)
+        self.assertEqual([job['id'] for job in json.loads(index.stdout)], [51, 52])
+        self.assertNotIn('signature', index.stdout)
+        status = self.invoke('export-status', '105', '51', '--progress', '--format', 'brief')
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertIn('45%', status.stdout)
+        self.assertIn('exporting', status.stdout)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        command = ('export-create', '105', '--type', 'zip', '--select', 'files', '777')
+        preview = self.invoke(*command)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        data = json.loads(preview.stdout)
+        self.assertTrue(data['dry_run'])
+        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual(json.loads(sent.stdout)['export']['workflow_state'], 'exporting')
+        self.assertEqual([c for c in self.calls[before:] if c[0] == 'POST'],
+                         [('POST', '/api/v1/courses/105/content_exports')])
+        output = Path(self.tmp.name) / 'synthetic-export.zip'
+        result = self.invoke('export-download', '105', '52', '--output', str(output))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_bytes(), b'Synthetic file bytes')
+        self.assertIsNone(self.storage_download_auth)
+        self.assertNotIn('/storage/', result.stdout)
+        self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+        pending_output = Path(self.tmp.name) / 'pending-export.zip'
+        result = self.invoke('export-download', '105', '51', '--output', str(pending_output))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(pending_output.exists())
 
     def test_expired_auth(self):
         r = self.invoke('auth', 'status', token='invalid-secret')
@@ -571,7 +624,8 @@ class E2E(unittest.TestCase):
         r = self.invoke('post', '101', '202', '--message-file', str(message))
         preview = json.loads(r.stdout)
         self.assertTrue(preview['dry_run'])
-        self.assertEqual(self.calls[before:], [('GET', '/api/v1/courses/101/discussion_topics/202')])
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile'),
+                                              ('GET', '/api/v1/courses/101/discussion_topics/202')])
         r = self.invoke('post', '101', '202', '--message-file', str(message), '--yes',
                         '--confirm', preview['confirm'])
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -725,6 +779,7 @@ class E2E(unittest.TestCase):
         data = json.loads(preview.stdout)
         self.assertTrue(data['dry_run'])
         self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/users/self/profile'),
             ('GET', '/api/v1/conversations/12?auto_mark_as_read=false')])
         sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
         self.assertEqual(sent.returncode, 0, sent.stderr)
@@ -745,11 +800,12 @@ class E2E(unittest.TestCase):
         self.assertEqual(preview.returncode, 0, preview.stderr)
         data = json.loads(preview.stdout)
         self.assertTrue(data['dry_run'])
-        self.assertEqual([method for method, _ in self.calls[before:]], ['GET', 'GET'])
+        self.assertEqual([method for method, _ in self.calls[before:]], ['GET', 'GET', 'GET'])
         sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
         self.assertEqual(sent.returncode, 0, sent.stderr)
-        self.assertEqual(self.calls[-2:], [
+        self.assertEqual(self.calls[-3:], [
             ('GET', '/api/v1/search/recipients?type=user&per_page=100&user_id=7'),
+            ('GET', '/api/v1/users/self/profile'),
             ('POST', '/api/v1/conversations')])
 
     def test_personal_upload_three_step_tls_and_no_storage_token(self):
@@ -761,7 +817,7 @@ class E2E(unittest.TestCase):
         self.assertEqual(preview.returncode, 0, preview.stderr)
         data = json.loads(preview.stdout)
         self.assertTrue(data['dry_run'])
-        self.assertEqual(len(self.calls), before)
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile')])
         sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
         self.assertEqual(sent.returncode, 0, sent.stderr)
         self.assertEqual(json.loads(sent.stdout)['uploaded_file_id'], 777)
@@ -812,6 +868,7 @@ class E2E(unittest.TestCase):
         self.assertEqual(sent.returncode, 1)
         self.assertIn('confirmation failed', sent.stderr)
         self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/users/self/profile'),
             ('POST', '/api/v1/users/self/files'), ('POST', '/storage/upload-foreign')])
         self.assertIsNone(self.storage_auth)
         self.assertNotIn('untrusted.example.org', sent.stderr)

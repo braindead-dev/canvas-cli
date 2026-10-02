@@ -5,9 +5,11 @@ import html
 import json
 
 from .client import CanvasError
+from .writes import account
 
 
 def prepare(client, course_id, topic_id, reply_to, message):
+    identity = account(client)
     topic, _ = client.request(f'/api/v1/courses/{course_id}/discussion_topics/{topic_id}')
     if (not isinstance(topic, dict) or str(topic.get('id')) != topic_id or
             (topic.get('context_id') is not None and
@@ -22,7 +24,7 @@ def prepare(client, course_id, topic_id, reply_to, message):
     if reply_to:
         route += f'/{reply_to}/replies'
     body = {'message': '<p>' + html.escape(message).replace('\n', '<br>') + '</p>'}
-    preview = {'course_id': course_id, 'topic_id': topic_id,
+    preview = {**identity, 'course_id': course_id, 'topic_id': topic_id,
                'topic_title': topic.get('title'), 'published': topic.get('published'),
                'locked': topic.get('locked'), 'lock_at': topic.get('lock_at'),
                'reply_to': reply_to, 'route': route, 'body': body}

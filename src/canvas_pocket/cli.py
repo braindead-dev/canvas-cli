@@ -1,6 +1,5 @@
 import argparse
 import getpass
-import hashlib
 import json
 import os
 import re
@@ -142,6 +141,25 @@ def parser():
     remove_task.add_argument('--confirm')
     progress = sub.add_parser('module-progress', help='Read visible module requirements and completion status')
     progress.add_argument('course', type=identifier)
+    exports = sub.add_parser('exports', help='List authorized course export jobs without signed download URLs')
+    exports.add_argument('course', type=identifier)
+    export_status = sub.add_parser('export-status', help='Read one export job without creating a new job')
+    export_status.add_argument('course', type=identifier)
+    export_status.add_argument('export', type=identifier)
+    export_status.add_argument('--progress', action='store_true', help='Also read the linked same-origin progress job')
+    export_create = sub.add_parser('export-create', help='Preview starting an asynchronous course export, if authorized')
+    export_create.add_argument('course', type=identifier)
+    export_create.add_argument('--type', choices=('zip', 'common_cartridge'), default='zip')
+    export_create.add_argument('--select', nargs=2, action='append', default=[], metavar=('RESOURCE', 'ID'),
+                               help='Select a documented resource type and positive ID; repeatable')
+    export_create.add_argument('--skip-notifications', action='store_true')
+    export_create.add_argument('--yes', action='store_true')
+    export_create.add_argument('--confirm')
+    export_download = sub.add_parser('export-download', help='Privately download an already completed authorized export')
+    export_download.add_argument('course', type=identifier)
+    export_download.add_argument('export', type=identifier)
+    export_download.add_argument('--output', required=True, type=Path)
+    export_download.add_argument('--max-bytes', type=int, default=100 * 1024 * 1024)
     calendar = sub.add_parser('calendar', help='Events or assignments in a date window')
     calendar.add_argument('--start', type=calendar_date, help='First date (YYYY-MM-DD); default today')
     calendar.add_argument('--end', type=calendar_date, help='Last date (YYYY-MM-DD); default 13 days after start')
@@ -297,6 +315,9 @@ def parser():
             s.add_argument('--message-file', required=True, type=Path)
             s.add_argument('--confirm', help='Digest returned by the preview')
             s.add_argument('--yes', action='store_true', help='Post only if the fresh preview matches --confirm')
+    help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')
+    help_command.add_argument('topic', nargs='?', choices=sorted(sub.choices))
+    help_command.add_argument('--search', help='Find commands by name, description or safety category')
     # SUPPRESS preserves a root-level value when the subcommand omits the option.
     for command_parser in (*sub.choices.values(), *a.choices.values()):
         command_parser.add_argument('--format', choices=('json', 'brief'),
@@ -310,6 +331,9 @@ def parser():
 def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
+    if args.command == 'help':
+        from .navigation import command_help
+        return command_help(parser(), args.topic, args.search)
     if args.command == 'capabilities':
         from .capabilities import describe
         return describe()
@@ -380,6 +404,17 @@ def run(args):
     if args.command == 'module-progress':
         from .progress import module_progress
         return module_progress(client, args.course, args.max_pages)
+    if args.command in ('exports', 'export-status', 'export-create', 'export-download'):
+        from . import content_exports
+        if args.command == 'exports':
+            return content_exports.list_exports(client, args.course, args.max_pages)
+        if args.command == 'export-status':
+            return content_exports.status(client, args.course, args.export, args.progress)
+        if args.command == 'export-create':
+            return content_exports.create(client, args.course, args.type, args.select,
+                                          args.skip_notifications, args.yes, args.confirm)
+        return content_exports.download_export(client, args.course, args.export,
+                                               args.output, args.max_bytes)
     if args.command == 'linked-files':
         from .discovery import linked_files
         return linked_files(client, args.course, args.max_pages, resolve=not args.quick,
@@ -511,30 +546,9 @@ def run(args):
     if args.command == 'conversation':
         return client.request(f'/api/v1/conversations/{args.conversation}?auto_mark_as_read=false')[0]
     if args.command == 'inbox-reply':
-        if bool(args.confirm) != bool(args.yes):
-            raise CanvasError('Sending requires both --yes and --confirm from a prior preview')
-        conversation = client.request(
-            f'/api/v1/conversations/{args.conversation}?auto_mark_as_read=false')[0]
-        if str(conversation.get('id')) != args.conversation:
-            raise CanvasError('Canvas returned a different conversation; refusing to send')
-        participants = conversation.get('participants')
-        if not isinstance(participants, list) or not participants:
-            raise CanvasError('Canvas did not identify thread participants; refusing to send')
-        message = args.message_file.read_text(encoding='utf-8')
-        if not message.strip():
-            raise CanvasError('Empty message refused')
-        route = f'/api/v1/conversations/{args.conversation}/add_message'
-        body = {'body': message}
-        preview = {'conversation_id': args.conversation, 'subject': conversation.get('subject'),
-                   'participants': participants, 'audience': conversation.get('audience'),
-                   'route': route, 'body': body}
-        digest = hashlib.sha256(json.dumps(preview, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-        if not args.yes:
-            return {'dry_run': True, **preview, 'confirm': digest,
-                    'next': 'Review participants and body, then repeat with --yes --confirm DIGEST to send.'}
-        if args.confirm != digest:
-            raise CanvasError('Preview changed (thread or message); review a fresh preview before sending')
-        return client.request(route, 'POST', body)[0]
+        from .messaging import reply
+        return reply(client, args.conversation, args.message_file.read_text(encoding='utf-8'),
+                     args.yes, args.confirm)
     if args.command == 'upcoming':
         return client.list('/api/v1/users/self/upcoming_events?per_page=100', args.max_pages)
     if args.command == 'overview':
@@ -650,6 +664,30 @@ def run(args):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'help_text' in data:
+        return f"{data['safety']}\n\n{data['help_text'].rstrip()}"
+    if isinstance(data, dict) and 'command_index' in data:
+        lines = []
+        for category, commands in data['command_index'].items():
+            lines.append(category)
+            lines.extend(f"  {item['command']}  {item['description']}" for item in commands)
+            lines.append('')
+        if not data['command_index']:
+            lines.append('No matching commands. Try help without --search.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'export' in data and isinstance(data['export'], dict):
+        job = data['export']
+        lines = [f"Export {job['id']} [{job.get('workflow_state') or 'unknown'}] "
+                 f"{job.get('export_type') or 'type unknown'}",
+                 f"Download available: {'yes' if job['download_available'] else 'no'}"]
+        if data.get('progress'):
+            progress = data['progress']
+            lines.append(f"Progress {progress['id']} [{progress.get('workflow_state') or 'unknown'}] "
+                         f"{progress.get('completion')}% reported")
+        if data.get('note'):
+            lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'planner_window' in data and 'items' in data:
         window = data['planner_window']
         lines = [f"Planner {window['start']} through {window['end']}"]

@@ -21,13 +21,13 @@ This is a roadmap, not a claim that all browser actions are implemented. The [of
 | Quizzes / New Quizzes | Classic quizzes/quiz and New Quizzes new-quizzes/new-quiz metadata only | No question/attempt operations or automated exam-taking |
 | Uploads | Personal and assignment-file three-step uploads, preview + file hash + matching digest; separate credential-free storage transport | Live write validation only in a designated sandbox; larger files and richer destinations |
 | Local course snapshots | snapshot, one-command private sync, optional linked-file metadata index, offline snapshot-diff, snapshot-search and snapshot-markdown; explicit incomplete state | Efficient per-resource incremental sync and richer Markdown projection |
-| Canvas course exports | Not implemented | Separate asynchronous jobs and polling; role-dependent |
+| Canvas course exports | exports, export-status with opt-in progress read, export-create (account-bound preview), export-download (private file, no storage token) | Role-dependent, often unavailable to students; no live export write validation; QTI and automatic polling not exposed |
 | Account administration / SIS | Not implemented | Separate high-risk/admin surface, not student defaults |
 | Video, Zoom, publisher tools | Links only | Separate providers/auth; not covered by Canvas credentials |
 
 ## Design rules
 
-One HTTPS API client, one pagination implementation, separate binary-download transport with no bearer header. Commands return JSON and errors go to stderr. Reads and writes must remain visibly distinct. New write verbs need an exact preview and explicit execution flag, no retry on ambiguous completion. No telemetry or private fixtures.
+One HTTPS API client, one pagination implementation, separate binary-download transport with no bearer header. Commands return JSON and errors go to stderr. Reads and writes must remain visibly distinct. Every Canvas write binds the current account and site, exact destination/content and explicit execution flags; no retry on ambiguous completion. No telemetry or private fixtures.
 
 The generic `get` command is an expert escape hatch for documented read endpoints, not a promise of harmlessness for arbitrary third-party endpoints. It accepts only the configured Canvas origin's `/api/v1/` paths and refuses credential/impersonation query parameters. Do not use it to evade course restrictions.
 

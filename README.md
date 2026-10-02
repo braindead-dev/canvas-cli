@@ -23,6 +23,8 @@ For ephemeral/headless use, supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a 
 
 ## Commands
 
+Use `canvas-pocket help --format brief` for the command index, grouped by read-only actions, local file writes and preview-first Canvas writes. `help --search TEXT` searches the actual command names and descriptions, and `help COMMAND --format brief` shows exact options. Help works offline without opening the keyring or authenticating.
+
 ```sh
 canvas-pocket courses
 canvas-pocket courses --active
@@ -93,6 +95,10 @@ canvas-pocket folder 456
 canvas-pocket folder-files 456
 canvas-pocket folder-folders 456
 canvas-pocket sections 123
+canvas-pocket exports 123
+canvas-pocket export-status 123 456 --progress --format brief
+canvas-pocket export-create 123 --type zip --select files 789
+canvas-pocket export-download 123 456 --output /private/path/course-files.zip
 canvas-pocket announcements 123
 canvas-pocket discussions 123
 canvas-pocket topic 123 456
@@ -105,6 +111,9 @@ canvas-pocket module-items 123 456
 canvas-pocket todo
 canvas-pocket download 123 456 --output /private/path/syllabus.pdf
 canvas-pocket capabilities
+canvas-pocket help --format brief
+canvas-pocket help --search export --format brief
+canvas-pocket help submit-file --format brief
 canvas-pocket get '/api/v1/courses/123/tabs' --paginate
 canvas-pocket --max-pages 200 assignments 123
 canvas-pocket linked-files 123 --all-pages --quick
@@ -135,6 +144,10 @@ List commands follow Canvas Link pagination, including empty pages. A page limit
 `task-create`, `task-edit` and `task-delete` operate only on the signed-in user's personal planner notes. Each first returns a preview, then requires the same command with `--yes --confirm DIGEST`. The preview binds the Canvas origin, signed-in user, exact changes and current destination. Edit sends only fields you specify; `--details-file` reads plain UTF-8, including an empty file to clear details. `--clear-course` explicitly removes a course association. Linked tasks cannot change course. Delete removes only the named personal task, not an assignment, and cannot be combined with editing. A changed task, account or destination invalidates confirmation. These commands have synthetic HTTPS tests only; no personal task was created or removed in a live account.
 
 `module-progress` separately paginates visible [module items](https://developerdocs.instructure.com/services/canvas/resources/modules) with reported completion requirements. It distinguishes completed, incomplete, unknown and not-required items, and preserves Canvas's module state and all/one requirement rule rather than inferring completion from counts. Locked modules are listed without fetching their items, denied item lists are explicitly partial, and hidden/unpublished metadata is skipped. It does not view content, send completion events, start assessments, or change grades.
+
+`exports COURSE` lists authorized [course content-export jobs](https://developerdocs.instructure.com/services/canvas/resources/content_exports) through pagination. `export-status COURSE EXPORT_ID` reads one existing job; `--progress` also reads its linked same-origin Canvas progress resource. It does not create another job or automatically poll. Output distinguishes exporting/exported/failed state and download availability, omitting signed attachment URLs. `export-create COURSE` previews a new asynchronous export, then requires `--yes --confirm DIGEST` bound to account, course and exact options. The default `--type zip` exports files; `common_cartridge` packages course content. Repeat `--select RESOURCE ID` to choose specific documented resources. ZIP supports only `files`/`folders`; Common Cartridge also supports `attachments`, `assignments`, `announcements`, `calendar_events`, `discussion_topics`, `modules`, `module_items`, `pages` and `rubrics`. `--skip-notifications` is an explicit job option, not a settings change. Role permissions may deny this feature, especially for students; no restriction is bypassed and no live export was started.
+
+After the **same job** reports `exported` with an available attachment, `export-download COURSE EXPORT_ID --output /private/path/export.zip` downloads it with the separate credential-free file transport. It refuses unfinished, failed, expired, hidden or locked packages, overwrites and Git-checkout destinations; the local file is mode `0600` and the byte limit defaults to 100 MiB. It never sends the API bearer token to storage or prints signed download URLs. Course packages can contain private or copyrighted material; keep them local. A timeout or uncertain creation response is not permission to create a duplicate job: inspect the existing jobs first. These paths have synthetic HTTPS tests only.
 
 `tabs COURSE` lists visible course navigation labels and Canvas paths, including external-tool tabs, without launching those tools. `front-page COURSE` reads the published course home page where Canvas provides one. External tools such as Zoom or Piazza need their own authorization and are not controlled through these commands.
 
@@ -224,6 +237,7 @@ Discussion-post and text-entry submission inputs are plain UTF-8 text, safely es
 - No telemetry, hosted backend, analytics, cookie extraction, or credential export.
 - Token stored outside the repo in OS keyring; config stores only the Canvas origin.
 - HTTPS only. Pagination is restricted to the configured origin and API path. HTTP redirects are refused so credentials cannot follow them elsewhere.
+- All Canvas write previews bind the configured origin and signed-in numeric user ID. Switching accounts or sites requires a fresh preview, including for personal uploads. A refreshed token for the same user/site does not expose credentials in the preview.
 - 401 prompts reauthentication. 403 means permission/publication restrictions, not automatically bad credentials. 429 is surfaced without aggressive retries.
 - API results may contain personal data, classmates' posts, private links or grades. Do not publish your output. `exports/`, environment files, cookies and captures are ignored, but gitignore is not a privacy guarantee.
 - `auth logout` removes the local keyring credential; it does not revoke the token on the server.

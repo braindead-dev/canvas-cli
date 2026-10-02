@@ -7,7 +7,7 @@ from canvas_pocket.messaging import compose, recipients
 
 class MessagingTests(unittest.TestCase):
     def test_search_encodes_course_and_user_only(self):
-        client = Mock()
+        client = Mock(host='https://canvas.example.edu')
         client.list.return_value = []
         recipients(client, 20, search='Jane Doe', course_id='3')
         client.list.assert_called_with(
@@ -19,24 +19,36 @@ class MessagingTests(unittest.TestCase):
             recipients(client, 20, user_id='7', course_id='3')
 
     def test_compose_preview_requires_confirmed_individual(self):
-        client = Mock()
+        client = Mock(host='https://canvas.example.edu')
+        client.request.return_value = ({'id': 1}, '')
         client.list.return_value = [{'id': 7, 'name': 'Synthetic recipient', 'type': 'user'}]
         preview = compose(client, 100, '7', 'Question', 'Hello', '3')
         self.assertTrue(preview['dry_run'])
         self.assertEqual(preview['body'], {'recipients': ['7'], 'subject': 'Question',
                                            'body': 'Hello', 'context_code': 'course_3'})
-        client.request.assert_not_called()
+        client.request.assert_called_once_with('/api/v1/users/self/profile')
         with self.assertRaisesRegex(CanvasError, 'both --yes and --confirm'):
             compose(client, 100, '7', 'Question', 'Hello', yes=True)
         with self.assertRaisesRegex(CanvasError, 'Preview changed'):
             compose(client, 100, '7', 'Question', 'Changed', '3',
                     yes=True, confirm=preview['confirm'])
-        client.request.assert_not_called()
-        client.request.return_value = ([{'id': 55}], '')
+        self.assertTrue(all(len(call.args) == 1 for call in client.request.call_args_list))
+        client.request.side_effect = [({'id': 1}, ''), ([{'id': 55}], '')]
         result = compose(client, 100, '7', 'Question', 'Hello', '3',
                          yes=True, confirm=preview['confirm'])
         self.assertEqual(result[0]['id'], 55)
-        client.request.assert_called_once_with('/api/v1/conversations', 'POST', preview['body'])
+        client.request.assert_called_with('/api/v1/conversations', 'POST', preview['body'])
+
+    def test_composition_account_change_refuses_to_send(self):
+        client = Mock(host='https://canvas.example.edu')
+        client.list.return_value = [{'id': 7, 'name': 'Synthetic recipient', 'type': 'user'}]
+        client.request.return_value = ({'id': 1}, '')
+        preview = compose(client, 100, '7', 'Question', 'Synthetic')
+        client.request.reset_mock()
+        client.request.return_value = ({'id': 2}, '')
+        with self.assertRaisesRegex(CanvasError, 'Preview changed'):
+            compose(client, 100, '7', 'Question', 'Synthetic', yes=True, confirm=preview['confirm'])
+        client.request.assert_called_once_with('/api/v1/users/self/profile')
 
     def test_compose_refuses_unresolved_or_broadcast_recipient(self):
         client = Mock()

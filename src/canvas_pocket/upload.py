@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .client import CanvasError
+from .writes import account
 
 
 def file_info(path, max_bytes):
@@ -39,9 +40,10 @@ def file_info(path, max_bytes):
 
 def prepare(client, source, max_bytes, course_id=None, assignment_id=None):
     info = file_info(source, max_bytes)
+    identity = account(client)
     if assignment_id:
         assignment, _ = client.request(f'/api/v1/courses/{course_id}/assignments/{assignment_id}')
-        if str(assignment.get('id')) != assignment_id or (
+        if not isinstance(assignment, dict) or str(assignment.get('id')) != assignment_id or (
                 assignment.get('course_id') is not None and
                 str(assignment['course_id']) != course_id):
             raise CanvasError('Canvas returned a different assignment; refusing upload')
@@ -62,7 +64,7 @@ def prepare(client, source, max_bytes, course_id=None, assignment_id=None):
     else:
         route = '/api/v1/users/self/files'
         target = {'kind': 'personal_files', 'on_duplicate': 'rename'}
-    preview = {'file': info, 'destination': target, 'init_route': route,
+    preview = {**identity, 'file': info, 'destination': target, 'init_route': route,
                'max_bytes': max_bytes}
     digest = hashlib.sha256(json.dumps(preview, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return preview, digest
