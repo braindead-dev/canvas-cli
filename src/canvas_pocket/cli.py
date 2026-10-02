@@ -320,10 +320,12 @@ def parser():
     for name in ('folder', 'folder-files', 'folder-folders'):
         sub.add_parser(name).add_argument('folder', type=identifier)
     topic = sub.add_parser('topic', help='Read one discussion topic')
-    topic.add_argument('course', type=identifier)
+    topic.add_argument('course', type=identifier, metavar='CONTEXT_ID')
+    topic.add_argument('--context', choices=('course', 'group'), default='course')
     topic.add_argument('topic', type=identifier)
     thread = sub.add_parser('thread', help='Read visible discussion entries and their paginated replies')
-    thread.add_argument('course', type=identifier)
+    thread.add_argument('course', type=identifier, metavar='CONTEXT_ID')
+    thread.add_argument('--context', choices=('course', 'group'), default='course')
     thread.add_argument('topic', type=identifier)
     for name in ('quiz', 'rubric', 'assignment-group'):
         resource = sub.add_parser(name, help=f'Read one {name} without starting or changing it')
@@ -340,6 +342,8 @@ def parser():
                  'new-quizzes'):
         listing = sub.add_parser(name)
         listing.add_argument('course', type=identifier)
+        if name in ('discussions', 'announcements'):
+            listing.add_argument('--context', choices=('course', 'group'), default='course')
         if name == 'pages':
             listing.add_argument('--best-effort', action='store_true',
                                  help='Show readable module pages when Canvas denies the pages list; reports incomplete coverage')
@@ -352,7 +356,8 @@ def parser():
                                  help='Scan listed published pages in best-effort fallback')
     for name in ('entries', 'replies', 'post'):
         s = sub.add_parser(name)
-        s.add_argument('course', type=identifier)
+        s.add_argument('course', type=identifier, metavar='CONTEXT_ID')
+        s.add_argument('--context', choices=('course', 'group'), default='course')
         s.add_argument('topic', type=identifier)
         if name == 'replies':
             s.add_argument('entry', type=identifier)
@@ -693,10 +698,11 @@ def run(args):
                  'items': client.list(base + f"/modules/{module['id']}/items?per_page=100", args.max_pages)}
                 for module in modules]
     if args.command == 'topic':
-        return client.request(base + f'/discussion_topics/{args.topic}')[0]
+        from .contexts import read_topic
+        return read_topic(client, args.course, args.topic, args.context)
     if args.command == 'thread':
         from .thread import read_thread
-        return read_thread(client, args.course, args.topic, args.max_pages)
+        return read_thread(client, args.course, args.topic, args.max_pages, args.context)
     if args.command in ('quiz', 'rubric', 'assignment-group'):
         resource = {'quiz': 'quizzes', 'rubric': 'rubrics',
                     'assignment-group': 'assignment_groups'}[args.command]
@@ -723,18 +729,23 @@ def run(args):
     if args.command == 'syllabus':
         return client.request(base + '?include[]=syllabus_body')[0]
     if args.command in ('entries', 'replies', 'post'):
-        route = base + f'/discussion_topics/{args.topic}/entries'
+        from .contexts import discussion_base, read_topic
+        route = discussion_base(args.course, args.topic, args.context) + '/entries'
         if args.command == 'replies':
             route += f'/{args.entry}/replies'
         if args.command == 'post':
             from .discussion import post
             message = args.message_file.read_text(encoding='utf-8')
             return post(client, args.course, args.topic, args.reply_to, message,
-                        args.yes, args.confirm)
+                        args.yes, args.confirm, args.context)
+        read_topic(client, args.course, args.topic, args.context, require_entries=True)
         return client.list(route + '?per_page=100', args.max_pages)
     resource = {'discussions': 'discussion_topics', 'announcements': 'discussion_topics',
                 'assignment-groups': 'assignment_groups'}.get(args.command, args.command)
     route = base + '/' + resource + '?per_page=100'
+    if args.command in ('discussions', 'announcements') and args.context == 'group':
+        from .contexts import discussion_base
+        route = discussion_base(args.course, context_type=args.context) + '?per_page=100'
     if args.command == 'announcements':
         route += '&only_announcements=true'
     return client.list(route, args.max_pages)

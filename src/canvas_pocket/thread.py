@@ -1,24 +1,17 @@
 """Read a discussion's visible top-level entries and paginated replies."""
 
 from .client import CanvasError
+from .contexts import discussion_base, read_topic
 
 
-def read_thread(client, course_id, topic_id, max_pages):
-    base = f'/api/v1/courses/{course_id}/discussion_topics/{topic_id}'
-    topic, _ = client.request(base)
-    if (not isinstance(topic, dict) or str(topic.get('id')) != topic_id or
-            (topic.get('context_id') is not None and str(topic['context_id']) != course_id)):
-        raise CanvasError('Canvas returned a different discussion topic')
-    if (topic.get('published') is False or topic.get('locked_for_user') or topic.get('locked')
-            or topic.get('workflow_state') in ('unpublished', 'deleted')):
-        raise CanvasError('Discussion topic is unpublished or locked for this user')
-    if topic.get('require_initial_post') and topic.get('user_can_see_posts') is False:
-        raise CanvasError('This discussion requires your initial post before entries are visible')
+def read_thread(client, course_id, topic_id, max_pages, context_type='course'):
+    base = discussion_base(course_id, topic_id, context_type)
+    topic = read_topic(client, course_id, topic_id, context_type, require_entries=True)
 
     entries = client.list(base + '/entries?per_page=100', max_pages)
     output, unavailable = [], []
     for entry in entries:
-        if not isinstance(entry, dict) or not entry.get('id'):
+        if not isinstance(entry, dict) or type(entry.get('id')) is not int or entry['id'] < 1:
             raise CanvasError('Canvas returned a malformed discussion entry')
         if any(entry.get(key) is not None and str(entry[key]) != topic_id
                for key in ('discussion_topic_id', 'topic_id')):
@@ -44,7 +37,7 @@ def read_thread(client, course_id, topic_id, max_pages):
         public_entry.update({'replies': reply_list, 'replies_complete': replies_complete})
         output.append(public_entry)
     return {
-        'course_id': int(course_id), 'topic_id': int(topic_id),
+        f'{context_type}_id': int(course_id), 'context_type': context_type, 'topic_id': int(topic_id),
         'title': topic.get('title'), 'message': topic.get('message'),
         'html_url': topic.get('html_url'), 'entries': output,
         'complete': not unavailable, 'unavailable': unavailable,

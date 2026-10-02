@@ -114,6 +114,10 @@ canvas-pocket export-create 123 --type zip --select files 789
 canvas-pocket export-download 123 456 --output /private/path/course-files.zip
 canvas-pocket announcements 123
 canvas-pocket discussions 123
+canvas-pocket discussions 456 --context group
+canvas-pocket announcements 456 --context group
+canvas-pocket thread 456 789 --context group --format brief
+canvas-pocket post 456 789 --context group --message-file response.txt
 canvas-pocket topic 123 456
 canvas-pocket --format brief thread 123 456
 canvas-pocket entries 123 456
@@ -246,6 +250,8 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
 
 ## Personal calendar
+
+Discussion listings, topic reads, full threads, entries, replies and `post` accept `--context group` for a group ID instead of a course ID. Existing commands default to courses. The namespace is explicit in the route, thread output and write preview; course/group IDs are not interchangeable. Topic identity/publication/lock checks are shared, and entry reads or replies respect initial-post restrictions. Group access remains subject to Canvas permissions; no membership or role is assumed. Reads do not issue read-state writes, and posts still need the account-bound confirmation digest. Group routes have synthetic HTTPS coverage only.
 
 Personal calendar writes use the same account-bound preview and matching `--yes --confirm DIGEST` as other Canvas writes. `event-create` adds one event to your personal calendar; `event-edit` and `event-delete` re-read and verify the named event belongs to that calendar. They refuse course/group events, appointments, section events and deleted/locked/hidden events. Recurring-event edits and deletion explicitly use `which=one`, never a whole series. No assignment or reservation is changed, and uncertain write outcomes are never retried automatically.
 

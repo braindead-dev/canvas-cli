@@ -124,6 +124,20 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/discussion_topics/202':
                     data = {'id': 202, 'context_id': 101, 'title': 'Synthetic discussion',
                             'published': True, 'locked_for_user': False}
+                elif self.path == '/api/v1/groups/11/discussion_topics?per_page=100':
+                    data = [{'id': 203, 'title': 'Synthetic group discussion', 'published': True}]
+                elif self.path == '/api/v1/groups/11/discussion_topics?per_page=100&only_announcements=true':
+                    data = [{'id': 204, 'title': 'Synthetic group announcement', 'is_announcement': True}]
+                elif self.path in ('/api/v1/groups/11/discussion_topics/203', '/api/v1/groups/11/discussion_topics/204'):
+                    data = {'id': int(self.path.rsplit('/', 1)[1]), 'context_id': 11, 'context_type': 'Group',
+                            'title': 'Synthetic group topic', 'published': True}
+                elif self.path == '/api/v1/groups/11/discussion_topics/205':
+                    data = {'id': 205, 'context_id': 11, 'context_type': 'Group', 'published': True,
+                            'require_initial_post': True, 'user_can_see_posts': False}
+                elif self.path == '/api/v1/groups/11/discussion_topics/203/entries?per_page=100':
+                    data = [{'id': 301, 'message': 'Synthetic group entry', 'has_more_replies': True}]
+                elif self.path == '/api/v1/groups/11/discussion_topics/203/entries/301/replies?per_page=100':
+                    data = [{'id': 401, 'message': 'Synthetic group reply'}]
                 elif self.path == '/api/v1/courses/101/discussion_topics/202/entries?per_page=100':
                     data = [{'id': 301, 'user_name': 'Synthetic student',
                              'message': '<p>Sample entry</p>', 'has_more_replies': True,
@@ -385,6 +399,44 @@ class E2E(unittest.TestCase):
         read = self.invoke('event', '61')
         self.assertEqual(read.returncode, 0, read.stderr)
         self.assertEqual(json.loads(read.stdout)['context_code'], 'user_7')
+
+    def test_group_discussion_reads_and_threads_use_the_group_namespace(self):
+        before = len(self.calls)
+        for command in (('discussions', '11'), ('announcements', '11'), ('topic', '11', '203'),
+                        ('entries', '11', '203'), ('replies', '11', '203', '301')):
+            result = self.invoke(*command, '--context', 'group')
+            self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.invoke('thread', '11', '203', '--context', 'group')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data['group_id'], 11)
+        self.assertEqual(data['entries'][0]['replies'][0]['id'], 401)
+        self.assertTrue(data['complete'])
+        self.assertTrue(all(verb == 'GET' and route.startswith('/api/v1/groups/11/')
+                            for verb, route in self.calls[before:]))
+
+    def test_group_post_context_and_account_are_bound_to_exact_confirmation(self):
+        source = Path(self.tmp.name) / 'group-post.txt'
+        source.write_text('Synthetic group message')
+        command = ('post', '11', '203', '--context', 'group', '--message-file', str(source))
+        before = len(self.calls)
+        result = self.invoke(*command)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        preview = json.loads(result.stdout)
+        self.assertEqual(preview['group_id'], '11')
+        self.assertNotIn('course_id', preview)
+        self.assertTrue(all(verb == 'GET' for verb, _ in self.calls[before:]))
+        sent = self.invoke(*command, '--yes', '--confirm', preview['confirm'])
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                         [('POST', '/api/v1/groups/11/discussion_topics/203/entries')])
+
+    def test_group_post_first_restriction_blocks_entry_read_before_list_request(self):
+        before = len(self.calls)
+        result = self.invoke('entries', '11', '205', '--context', 'group')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('initial post', result.stderr)
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/groups/11/discussion_topics/205')])
 
     def test_planner_pagination_and_read_only_personal_notes(self):
         before = len(self.calls)

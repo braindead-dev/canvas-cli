@@ -5,26 +5,21 @@ import html
 import json
 
 from .client import CanvasError
+from .contexts import discussion_base, read_topic
 from .writes import account
 
 
-def prepare(client, course_id, topic_id, reply_to, message):
-    identity = account(client)
-    topic, _ = client.request(f'/api/v1/courses/{course_id}/discussion_topics/{topic_id}')
-    if (not isinstance(topic, dict) or str(topic.get('id')) != topic_id or
-            (topic.get('context_id') is not None and
-             str(topic['context_id']) != course_id)):
-        raise CanvasError('Canvas returned a different topic; refusing post')
-    if (topic.get('published') is False or topic.get('locked') or topic.get('locked_for_user')
-            or topic.get('workflow_state') in ('unpublished', 'deleted')):
-        raise CanvasError('Discussion topic is unpublished or locked')
-    if not message.strip():
+def prepare(client, course_id, topic_id, reply_to, message, context_type='course'):
+    if not isinstance(message, str) or not message.strip():
         raise CanvasError('Empty message refused')
-    route = f'/api/v1/courses/{course_id}/discussion_topics/{topic_id}/entries'
+    discussion_base(course_id, topic_id, context_type)
+    identity = account(client)
+    topic = read_topic(client, course_id, topic_id, context_type, require_entries=bool(reply_to))
+    route = discussion_base(course_id, topic_id, context_type) + '/entries'
     if reply_to:
         route += f'/{reply_to}/replies'
     body = {'message': '<p>' + html.escape(message).replace('\n', '<br>') + '</p>'}
-    preview = {**identity, 'course_id': course_id, 'topic_id': topic_id,
+    preview = {**identity, f'{context_type}_id': course_id, 'context_type': context_type, 'topic_id': topic_id,
                'topic_title': topic.get('title'), 'published': topic.get('published'),
                'locked': topic.get('locked'), 'lock_at': topic.get('lock_at'),
                'reply_to': reply_to, 'route': route, 'body': body}
@@ -32,10 +27,10 @@ def prepare(client, course_id, topic_id, reply_to, message):
     return preview, digest
 
 
-def post(client, course_id, topic_id, reply_to, message, yes=False, confirm=None):
+def post(client, course_id, topic_id, reply_to, message, yes=False, confirm=None, context_type='course'):
     if bool(yes) != bool(confirm):
         raise CanvasError('Posting requires both --yes and --confirm from a prior preview')
-    preview, digest = prepare(client, course_id, topic_id, reply_to, message)
+    preview, digest = prepare(client, course_id, topic_id, reply_to, message, context_type)
     if not yes:
         return {'dry_run': True, **preview, 'confirm': digest,
                 'next': 'Review topic, reply target and exact message, then repeat with --yes --confirm DIGEST.'}
