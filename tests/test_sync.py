@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from canvas_pocket.cli import brief
-from canvas_pocket.client import CanvasError
-from canvas_pocket.sync import sync_course
+from canvas_cli.cli import brief
+from canvas_cli.client import CanvasError
+from canvas_cli.sync import sync_course
 
 
 def snapshot(description):
@@ -26,7 +26,7 @@ def snapshot(description):
 class SyncTests(unittest.TestCase):
     def setUp(self):
         # Capture is mocked below; own-profile checks remain explicit and independent.
-        self.account_patch = patch('canvas_pocket.sync.account', side_effect=lambda client: {
+        self.account_patch = patch('canvas_cli.sync.account', side_effect=lambda client: {
             'origin': client.host, 'user_id': 7})
         self.account = self.account_patch.start()
         self.addCleanup(self.account_patch.stop)
@@ -35,7 +35,7 @@ class SyncTests(unittest.TestCase):
         client = Mock(host='https://canvas.example.edu')
         with tempfile.TemporaryDirectory() as folder:
             directory = Path(folder) / 'snapshots'
-            with patch('canvas_pocket.sync.capture', side_effect=[snapshot('old private body'),
+            with patch('canvas_cli.sync.capture', side_effect=[snapshot('old private body'),
                                                                  snapshot('new private body')]):
                 first = sync_course(client, '12', 100, directory)
                 second = sync_course(client, '12', 100, directory)
@@ -59,7 +59,7 @@ class SyncTests(unittest.TestCase):
         client = Mock(host='https://canvas.example.edu')
         with tempfile.TemporaryDirectory() as folder:
             (Path(folder) / '.git').mkdir()
-            with patch('canvas_pocket.sync.capture') as capture:
+            with patch('canvas_cli.sync.capture') as capture:
                 with self.assertRaises(CanvasError):
                     sync_course(client, '12', 100, Path(folder) / 'snapshots')
                 capture.assert_not_called()
@@ -73,7 +73,7 @@ class SyncTests(unittest.TestCase):
             legacy = directory / f'{origin_key}-course-12-99999999.json'
             legacy.write_text(json.dumps(snapshot('legacy private body')))
             legacy_bytes = legacy.read_bytes()
-            with patch('canvas_pocket.sync.capture', return_value=snapshot('current')):
+            with patch('canvas_cli.sync.capture', return_value=snapshot('current')):
                 first = sync_course(client, '12', 100, directory)
                 self.account.side_effect = lambda client: {'origin': client.host, 'user_id': 8}
                 other = sync_course(client, '12', 100, directory)
@@ -93,7 +93,7 @@ class SyncTests(unittest.TestCase):
                       CanvasError('Expired authentication', status=401)):
             with self.subTest(final=final), tempfile.TemporaryDirectory() as folder:
                 self.account.side_effect = [identity, final]
-                with (patch('canvas_pocket.sync.capture', return_value=snapshot('private')),
+                with (patch('canvas_cli.sync.capture', return_value=snapshot('private')),
                       self.assertRaises(CanvasError)):
                     sync_course(client, '12', 100, folder)
                 self.assertEqual(list(Path(folder).glob('*.json')), [])
@@ -104,25 +104,25 @@ class SyncTests(unittest.TestCase):
         for difference in ({'origin': 'https://other.example.edu'}, {'course_id': 13},
                            {'course_id': True}, {'viewer_user_id': 8}, {'viewer_user_id': True}):
             with self.subTest(difference=difference), tempfile.TemporaryDirectory() as folder:
-                with (patch('canvas_pocket.sync.capture', return_value={**source, **difference}),
+                with (patch('canvas_cli.sync.capture', return_value={**source, **difference}),
                       self.assertRaisesRegex(CanvasError, 'Capture context')):
                     sync_course(client, '12', 100, folder)
                 self.assertEqual(list(Path(folder).glob('*.json')), [])
         with (tempfile.TemporaryDirectory() as folder,
-              patch('canvas_pocket.sync.capture', return_value=source)):
+              patch('canvas_cli.sync.capture', return_value=source)):
             sync_course(client, '12', 100, folder)
         self.assertNotIn('viewer_user_id', source)
 
     def test_namespaced_previous_snapshot_still_requires_exact_viewer_metadata(self):
         client = Mock(host='https://canvas.example.edu')
         with tempfile.TemporaryDirectory() as folder:
-            with patch('canvas_pocket.sync.capture', return_value=snapshot('baseline')):
+            with patch('canvas_cli.sync.capture', return_value=snapshot('baseline')):
                 first = sync_course(client, '12', 100, folder)
             original = json.loads(Path(first['saved']).read_text())
             for viewer in (None, True, '7', 8):
                 with self.subTest(viewer=viewer):
                     Path(first['saved']).write_text(json.dumps({**original, 'viewer_user_id': viewer}))
-                    with patch('canvas_pocket.sync.capture') as capture:
+                    with patch('canvas_cli.sync.capture') as capture:
                         with self.assertRaisesRegex(CanvasError, 'different origin, viewer or course'):
                             sync_course(client, '12', 100, folder)
                         capture.assert_not_called()
@@ -145,7 +145,7 @@ class SyncTests(unittest.TestCase):
         self.account.side_effect = CanvasError('Expired authentication', status=401)
         with tempfile.TemporaryDirectory() as folder:
             destination = Path(folder) / 'new'
-            with patch('canvas_pocket.sync.capture') as capture, self.assertRaises(CanvasError):
+            with patch('canvas_cli.sync.capture') as capture, self.assertRaises(CanvasError):
                 sync_course(client, '12', 100, destination)
             capture.assert_not_called()
             self.assertFalse(destination.exists())
@@ -153,7 +153,7 @@ class SyncTests(unittest.TestCase):
     def test_opt_in_file_index_is_forwarded_to_capture(self):
         client = Mock(host='https://canvas.example.edu')
         with tempfile.TemporaryDirectory() as folder:
-            with patch('canvas_pocket.sync.capture', return_value=snapshot('synthetic')) as capture:
+            with patch('canvas_cli.sync.capture', return_value=snapshot('synthetic')) as capture:
                 sync_course(client, '12', 100, Path(folder), include_linked_files=True)
             capture.assert_called_once_with(client, '12', 100, include_linked_files=True)
 
@@ -161,10 +161,10 @@ class SyncTests(unittest.TestCase):
         client = Mock(host='https://canvas.example.edu')
         with tempfile.TemporaryDirectory() as folder:
             directory = Path(folder)
-            with patch('canvas_pocket.sync.capture', return_value=snapshot('first')):
+            with patch('canvas_cli.sync.capture', return_value=snapshot('first')):
                 first = sync_course(client, '12', 100, directory)
             Path(first['saved']).write_text('not JSON')
-            with patch('canvas_pocket.sync.capture') as capture:
+            with patch('canvas_cli.sync.capture') as capture:
                 with self.assertRaises(CanvasError):
                     sync_course(client, '12', 100, directory)
                 capture.assert_not_called()
@@ -173,9 +173,9 @@ class SyncTests(unittest.TestCase):
         client = Mock(host='https://canvas.example.edu')
         with tempfile.TemporaryDirectory() as folder:
             directory = Path(folder)
-            with patch('canvas_pocket.sync.capture', return_value=snapshot('baseline')):
+            with patch('canvas_cli.sync.capture', return_value=snapshot('baseline')):
                 first = sync_course(client, '12', 100, directory)
-            with (patch('canvas_pocket.sync.capture', side_effect=CanvasError('rate limited', status=429)),
+            with (patch('canvas_cli.sync.capture', side_effect=CanvasError('rate limited', status=429)),
                   self.assertRaises(CanvasError)):
                 sync_course(client, '12', 100, directory)
             self.assertEqual([str(path.resolve()) for path in directory.glob('*.json')],

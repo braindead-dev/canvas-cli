@@ -58,7 +58,7 @@ class Client:
             raise CanvasError('Conversation reads require auto_mark_as_read=false to avoid changing Inbox state')
         req = Request(url, method=method, headers={
             'Authorization': f'Bearer {self.token}', 'Accept': 'application/json',
-            'Content-Type': 'application/json', 'User-Agent': 'canvas-pocket/0.1.0'},
+            'Content-Type': 'application/json', 'User-Agent': 'canvas-cli/0.1.0'},
             data=json.dumps(body).encode() if body is not None else None)
         try:
             with self.transport(req, timeout=30) as response:

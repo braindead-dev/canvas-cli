@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.overrides import TYPE_NAMES, change, create, read
+from canvas_cli.client import CanvasError
+from canvas_cli.overrides import TYPE_NAMES, change, create, read
 
 
 class OverrideTests(unittest.TestCase):
@@ -18,7 +18,7 @@ class OverrideTests(unittest.TestCase):
         self.client.request.return_value = (self.profile, '')
         self.client.list.return_value = []
 
-    @patch('canvas_pocket.overrides.items')
+    @patch('canvas_cli.overrides.items')
     def test_creation_uses_own_paginated_feed_and_exact_confirmed_body(self, feed):
         feed.return_value = self.feed
         preview = create(self.client, 'planner_note', '41', 3, marked_complete=True)
@@ -34,7 +34,7 @@ class OverrideTests(unittest.TestCase):
         self.assertEqual(result['planner_override']['id'], 42)
         self.client.request.assert_called_with('/api/v1/planner/overrides', 'POST', preview['body'])
 
-    @patch('canvas_pocket.overrides.items')
+    @patch('canvas_cli.overrides.items')
     def test_all_documented_types_are_selectable_without_reading_assessment_content(self, feed):
         for item_type in TYPE_NAMES:
             feed.return_value = {**self.feed, 'items': [{**self.item, 'plannable_type': item_type}]}
@@ -45,7 +45,7 @@ class OverrideTests(unittest.TestCase):
         self.assertTrue(all(call.args == ('/api/v1/users/self/profile',)
                             for call in self.client.request.call_args_list))
 
-    @patch('canvas_pocket.overrides.items')
+    @patch('canvas_cli.overrides.items')
     def test_assignment_normalization_accepts_only_its_linked_planner_object(self, feed):
         feed.return_value = {**self.feed, 'items': [{**self.item, 'plannable_type': 'assignment'}]}
         preview = create(self.client, 'assignment', '41', 3, marked_complete=True, allow_module_progress=True)
@@ -61,7 +61,7 @@ class OverrideTests(unittest.TestCase):
                    yes=True, confirm=preview['confirm'])
         self.assertEqual(self.client.request.call_count, 2)
 
-    @patch('canvas_pocket.overrides.items')
+    @patch('canvas_cli.overrides.items')
     def test_existing_override_is_not_duplicated_including_assignment_aliases(self, feed):
         for item_type, override in [('planner_note', self.override),
                                     ('assignment', {**self.override, 'plannable_type': 'quiz',
@@ -71,7 +71,7 @@ class OverrideTests(unittest.TestCase):
                 create(self.client, item_type, '41', 3, marked_complete=True, allow_module_progress=True)
         feed.assert_not_called()
 
-    @patch('canvas_pocket.overrides.items')
+    @patch('canvas_cli.overrides.items')
     def test_missing_duplicate_hidden_locked_or_already_overridden_feed_item_is_not_written(self, feed):
         for rows in ([], [self.item, self.item], [{**self.item, 'planner_override': self.override}],
                      [{**self.item, 'published': False}], [{**self.item, 'hidden_for_user': True}],

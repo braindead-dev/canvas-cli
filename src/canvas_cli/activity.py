@@ -160,7 +160,7 @@ def dismiss(client, item_id=None, *, all_items=False, max_pages=100, yes=False, 
                'effect': ('Hide ALL your stream items, including any outside the current visible feed.' if all_items else
                           'Hide only this notification from your own activity stream.'),
                'warning': 'Underlying discussions, messages, grades and assignments are not deleted or completed. '
-                          'Pocket has no restore command. Hidden notifications are not a task-completion mechanism.'}
+                          'Canvas CLI has no restore command. Hidden notifications are not a task-completion mechanism.'}
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -168,4 +168,4 @@ def dismiss(client, item_id=None, *, all_items=False, max_pages=100, yes=False, 
         raise CanvasError('Activity hiding was not acknowledged; verify Canvas before repeating')
     return {'activity_hidden': {'item_id': int(item_id) if item_id else None, 'all_items': bool(all_items)},
             'acknowledged': True,
-            'note': 'Canvas acknowledged the hide request; underlying content and read markers were not changed by Pocket.'}
+            'note': 'Canvas acknowledged the hide request; underlying content and read markers were not changed by Canvas CLI.'}

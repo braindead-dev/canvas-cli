@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.feedback import comment
+from canvas_cli.client import CanvasError
+from canvas_cli.feedback import comment
 
 
 class FeedbackTests(unittest.TestCase):

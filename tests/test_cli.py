@@ -7,13 +7,13 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from canvas_pocket.cli import brief, parser, run
-from canvas_pocket.client import CanvasError
+from canvas_cli.cli import brief, parser, run
+from canvas_cli.client import CanvasError
 
 
 class CLITests(unittest.TestCase):
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_planner_routes_and_brief_never_claim_submission(self, client):
         client.return_value.list.return_value = [{
             'plannable_type': 'assignment', 'plannable': {'title': 'Synthetic task'},
@@ -40,7 +40,7 @@ class CLITests(unittest.TestCase):
                          'brief')
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_post_defaults_to_preview(self, client):
         client.return_value.host = 'https://canvas.example.edu'
         client.return_value.request.return_value = (
@@ -56,7 +56,7 @@ class CLITests(unittest.TestCase):
                               ('/api/v1/courses/123/discussion_topics/456',)])
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_explicit_reply_posts_once(self, client):
         client.return_value.host = 'https://canvas.example.edu'
         topic = {'id': 456, 'context_id': 123, 'title': 'Synthetic topic', 'published': True}
@@ -75,7 +75,7 @@ class CLITests(unittest.TestCase):
                 'POST', {'message': '<p>Synthetic test only</p>'})
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_overview_uses_active_courses_and_preserves_upcoming(self, client):
         due = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
         client.return_value.list.side_effect = [
@@ -93,7 +93,7 @@ class CLITests(unittest.TestCase):
                          '/api/v1/courses?enrollment_state=active&per_page=100')
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_work_validates_window_and_routes_to_caller_submissions(self, client):
         client.return_value.list.return_value = [
             {'id': 7, 'name': 'Synthetic task', 'due_at': None,
@@ -106,7 +106,7 @@ class CLITests(unittest.TestCase):
             run(parser().parse_args(['work', '--days', '0']))
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_agenda_routes_read_only_and_brief_shows_local_time(self, client):
         due = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
         client.return_value.list.side_effect = [
@@ -125,7 +125,7 @@ class CLITests(unittest.TestCase):
             run(parser().parse_args(['agenda', '--days', '0']))
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_calendar_contexts_and_dates_are_explicit(self, client):
         client.return_value.list.side_effect = [
             [{'id': 8}, {'id': 9}], [{'id': 44, 'title': 'Synthetic event'}]]
@@ -141,7 +141,7 @@ class CLITests(unittest.TestCase):
             parser().parse_args(['calendar', '--start', '20260925'])
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_calendar_group_undated_and_all_filters_are_explicit(self, client):
         client.return_value.list.return_value = []
         for options, query in [(['--undated', '--group', '11'], 'type=event&undated=true&per_page=100&context_codes%5B%5D=group_11'),
@@ -161,7 +161,7 @@ class CLITests(unittest.TestCase):
             run(parser().parse_args(['calendar', '--personal']))
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_grades_only_returns_own_course_enrollment(self, client):
         client.return_value.request.return_value = ({'id': 7}, '')
         client.return_value.list.return_value = [{'user_id': 7, 'course_id': 8, 'grades': {'current_score': 90}}]
@@ -173,7 +173,7 @@ class CLITests(unittest.TestCase):
             run(parser().parse_args(['grades', '8']))
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_auth_status_and_grades_refuse_unidentified_or_malformed_ownership(self, client):
         client.return_value.host = 'https://canvas.example.edu'
         for profile in (None, {}, {'id': True}, {'id': '7'}, {'id': 0}):
@@ -190,7 +190,7 @@ class CLITests(unittest.TestCase):
                 run(parser().parse_args(['grades', '8']))
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_folder_and_outline_routes_are_read_only(self, client):
         client.return_value.list.side_effect = [
             [{'id': 4, 'name': 'Week 1'}], [{'id': 5, 'title': 'Page'}], [{'id': 2, 'name': 'Docs'}]]
@@ -204,7 +204,7 @@ class CLITests(unittest.TestCase):
         client.return_value.request.assert_not_called()
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_tabs_and_front_page_are_read_only_and_filtered(self, client):
         client.return_value.list.return_value = [
             {'id': 'home', 'label': 'Home', 'html_url': '/courses/8',
@@ -225,7 +225,7 @@ class CLITests(unittest.TestCase):
             run(parser().parse_args(['front-page', '8']))
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_grading_and_quiz_metadata_routes_are_get_only(self, client):
         client.return_value.list.return_value = [{'id': 3}]
         client.return_value.request.return_value = ({'id': 3}, '')
@@ -249,7 +249,7 @@ class CLITests(unittest.TestCase):
         client.return_value.request.assert_called_with('/api/quiz/v1/courses/8/quizzes/3')
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_inbox_and_group_routes(self, client):
         client.return_value.list.return_value = []
         client.return_value.request.return_value = ({'id': 9}, '')
@@ -267,7 +267,7 @@ class CLITests(unittest.TestCase):
                          '/api/v1/users/self/favorites/courses?per_page=100')
 
     @patch.dict(os.environ, {'CANVAS_ORIGIN': 'https://canvas.example.edu', 'CANVAS_TOKEN': 'synthetic'})
-    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_cli.auth.Client')
     def test_inbox_reply_requires_preview_digest_and_stable_audience(self, client):
         client.return_value.host = 'https://canvas.example.edu'
         thread = {'id': 9, 'subject': 'Synthetic thread',

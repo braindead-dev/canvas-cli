@@ -5,10 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from canvas_pocket.cli import parser, run
-from canvas_pocket.client import CanvasError
-from canvas_pocket.snapshot import capture, redact, save_private, validate_destination
-from canvas_pocket.snapshot_diff import compare, read
+from canvas_cli.cli import parser, run
+from canvas_cli.client import CanvasError
+from canvas_cli.snapshot import capture, redact, save_private, validate_destination
+from canvas_cli.snapshot_diff import compare, read
 
 
 class SnapshotTests(unittest.TestCase):
@@ -150,7 +150,7 @@ class SnapshotTests(unittest.TestCase):
         client = Mock(host='https://canvas.example.edu')
         client.request.return_value = ({'id': 12, 'syllabus_body': ''}, '')
         client.list.return_value = []
-        with patch('canvas_pocket.discovery.linked_files', return_value={
+        with patch('canvas_cli.discovery.linked_files', return_value={
                 'files': [{'id': 7, 'display_name': 'Synthetic reading.pdf', 'size': 20,
                            'downloadable': True, 'sources': ['syllabus']}],
                 'skipped_sources': []}) as linked:
@@ -165,7 +165,7 @@ class SnapshotTests(unittest.TestCase):
         client = Mock(host='https://canvas.example.edu')
         client.request.return_value = ({'id': 12}, '')
         client.list.return_value = []
-        with patch('canvas_pocket.discovery.linked_files', return_value={
+        with patch('canvas_cli.discovery.linked_files', return_value={
                 'files': [{'id': 7, 'metadata_unavailable': True}],
                 'skipped_sources': ['unreadable page']}):
             result = capture(client, '12', 100, include_linked_files=True)
@@ -176,7 +176,7 @@ class SnapshotTests(unittest.TestCase):
         client = Mock(host='https://canvas.example.edu')
         client.request.return_value = ({'id': 12}, '')
         client.list.return_value = []
-        with (patch('canvas_pocket.discovery.linked_files',
+        with (patch('canvas_cli.discovery.linked_files',
                     side_effect=CanvasError('rate limit', status=429)),
               self.assertRaisesRegex(CanvasError, 'rate limit')):
             capture(client, '12', 100, include_linked_files=True)

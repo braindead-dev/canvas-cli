@@ -5,11 +5,11 @@
 ## Inbox
 
 ```sh
-canvas-pocket inbox --scope unread --course 123
-canvas-pocket conversation 456
-canvas-pocket recipients --search 'Example Name' --course 123
-canvas-pocket inbox-compose --recipient 789 --subject 'Question' --message-file message.txt
-canvas-pocket inbox-reply 456 --message-file reply.txt
+canvas-cli inbox --scope unread --course 123
+canvas-cli conversation 456
+canvas-cli recipients --search 'Example Name' --course 123
+canvas-cli inbox-compose --recipient 789 --subject 'Question' --message-file message.txt
+canvas-cli inbox-reply 456 --message-file reply.txt
 ```
 
 Conversation reads explicitly disable automatic mark-as-read; unsafe GETs are blocked even through expert get. Recipient search is the authorized messageable directory. Numeric user lookup cannot also select course context because Canvas ignores that filter.
@@ -20,16 +20,16 @@ Compose targets one verified individual, not a course/group ID; Canvas may reuse
 
 Edit changes selected read/unread/archive/star and confirmed group-conversation subscription fields. Archive preserves messages; read/unread restores an archived thread. Subscription affects your ordering/unread flags, not other participants.
 
-Delete with permanent acknowledgement removes your own copies, not everyone's. No Pocket restore exists; archive to retain messages.
+Delete with permanent acknowledgement removes your own copies, not everyone's. No Canvas CLI restore exists; archive to retain messages.
 
 Content-free previews bind account/current state/message revision. New messages invalidate previews. Organization commands send no message; ordinary reads change no read marker.
 
 ## Discussions
 
 ```sh
-canvas-pocket thread 123 456 --format brief
-canvas-pocket entry 123 456 789
-canvas-pocket post 123 456 --reply-to 789 --message-file reply.txt
+canvas-cli thread 123 456 --format brief
+canvas-cli entry 123 456 789
+canvas-cli post 123 456 --reply-to 789 --message-file reply.txt
 ```
 
 Discussion/announcement listings, topics, threads, entries/replies, posts, edits, ratings, subscriptions, and markers support explicit group context; course is default. Namespaces are not interchangeable. Publication, locks, permissions, and initial-post restrictions remain enforced.
@@ -57,7 +57,7 @@ Forced-read-state sets a manual override; its explicit negation clears it; omiss
 ## Peer reviews
 
 ```sh
-canvas-pocket peer-reviews 123 456 --include-comments --include-users
+canvas-cli peer-reviews 123 456 --include-comments --include-users
 ```
 
 Default scope is reviews of your submission, not reviews owed. Output always states incomplete owed-review coverage. Visible scope adds only native authorized records, not elevation/enumeration.
@@ -69,10 +69,10 @@ No allocation, completion, grading, attempt, or read-state write occurs.
 ## Activity and announcements
 
 ```sh
-canvas-pocket news --days 30 --format brief
-canvas-pocket activity --active --format brief
-canvas-pocket activity --course 123 --type AssessmentRequest
-canvas-pocket activity-summary
+canvas-cli news --days 30 --format brief
+canvas-cli activity --active --format brief
+canvas-cli activity --course 123 --type AssessmentRequest
+canvas-cli activity-summary
 ```
 
 News reads posted announcements per course, reporting unavailable courses. JSON includes visible bodies; brief is a title/date index. Window is posting time, not later edits.
@@ -81,7 +81,7 @@ Activity paginates own global/course feed before exact-type filtering. Default i
 
 Empty feeds/counts are not complete assignment/owed-review inventories.
 
-Dismiss hides one own notification; dismiss-all with all acknowledgement hides every stream item, including outside displayed inventory. Previews bind account/site/full revisions without echoing bodies. No source/read marker/grade/submission changes; no Pocket restore.
+Dismiss hides one own notification; dismiss-all with all acknowledgement hides every stream item, including outside displayed inventory. Previews bind account/site/full revisions without echoing bodies. No source/read marker/grade/submission changes; no Canvas CLI restore.
 
 ## Sources
 

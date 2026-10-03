@@ -140,7 +140,7 @@ def _upload_to_storage(url, params, stream, name, content_type):
         with httpx.Client(follow_redirects=False, timeout=httpx.Timeout(60, connect=15)) as storage:
             response = storage.post(url, data={key: str(value) for key, value in params.items()},
                                     files={'file': (name, stream, content_type)},
-                                    headers={'User-Agent': 'canvas-pocket/0.1.0'})
+                                    headers={'User-Agent': 'canvas-cli/0.1.0'})
     except (httpx.HTTPError, OSError):
         raise CanvasError('Storage upload outcome uncertain; verify in Canvas before retrying. No signed URL logged.') from None
     if response.status_code not in (201, 301, 302, 303, 307, 308):

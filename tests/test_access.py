@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.access import query, read
-from canvas_pocket.client import CanvasError
+from canvas_cli.access import query, read
+from canvas_cli.client import CanvasError
 
 
 class AccessTests(unittest.TestCase):

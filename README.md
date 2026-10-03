@@ -1,4 +1,4 @@
-# Canvas Pocket
+# Canvas CLI
 
 A privacy-conscious CLI for Canvas LMS. Read coursework, keep private local snapshots, and preview changes before making them. JSON by default, OS-keyring credentials, no telemetry.
 
@@ -9,10 +9,10 @@ Unofficial and not affiliated with Instructure. **Developer preview for your own
 Requires Python 3.10+, [pipx](https://pipx.pypa.io/), and a supported OS keyring.
 
 ```sh
-pipx install git+https://github.com/braindead-dev/canvas-pocket.git
-canvas-pocket auth login --origin https://canvas.example.edu
-canvas-pocket courses --active --format brief
-canvas-pocket agenda --days 14 --format brief
+pipx install git+https://github.com/braindead-dev/canvas-cli.git
+canvas-cli auth login --origin https://canvas.example.edu
+canvas-cli courses --active --format brief
+canvas-cli agenda --days 14 --format brief
 ```
 
 Login asks for a personal Canvas token without echoing it. No passwords or browser cookies are collected. Your institution must allow token creation; apps for other users require institution-approved OAuth. See [setup and authentication](docs/getting-started.md).
@@ -20,12 +20,12 @@ Login asks for a personal Canvas token without echoing it. No passwords or brows
 ## Common workflows
 
 ```sh
-canvas-pocket work --course 123
-canvas-pocket feedback 123 --format brief
-canvas-pocket linked-files 123
-canvas-pocket sync 123
-canvas-pocket help --search discussion --format brief
-canvas-pocket help submit-file --format brief
+canvas-cli work --course 123
+canvas-cli feedback 123 --format brief
+canvas-cli linked-files 123
+canvas-cli sync 123
+canvas-cli help --search discussion --format brief
+canvas-cli help submit-file --format brief
 ```
 
 Canvas writes default to a preview. To execute, review that preview and repeat the same command with `--yes --confirm DIGEST`. Account, target, content, or relevant state changes require a fresh preview. Writes are never retried automatically.
@@ -43,7 +43,7 @@ Canvas writes default to a preview. To execute, review that preview and repeat t
 | [Development](docs/development.md) | Architecture, tests, contribution rules, validation limits |
 | [Capabilities](CAPABILITIES.md) | Coverage and remaining work |
 
-Exact options live in `canvas-pocket help COMMAND --format brief`; scripts can inspect `canvas-pocket schema COMMAND` offline. The schema describes syntax, not permission to execute.
+Exact options live in `canvas-cli help COMMAND --format brief`; scripts can inspect `canvas-cli schema COMMAND` offline. The schema describes syntax, not permission to execute.
 
 ## Boundaries
 

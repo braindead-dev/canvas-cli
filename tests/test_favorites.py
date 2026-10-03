@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.favorites import change, listing
+from canvas_cli.client import CanvasError
+from canvas_cli.favorites import change, listing
 
 
 class FavoritesTests(unittest.TestCase):

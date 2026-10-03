@@ -9,6 +9,8 @@ from pathlib import Path
 from .client import CanvasError, Client, origin
 from .writes import account
 
+# Keep the historical storage namespace so renaming the app does not strand
+# existing keyring credentials, configuration, or private sync baselines.
 SERVICE = 'canvas-pocket'
 
 
@@ -34,7 +36,7 @@ def load():
             raise ValueError('Invalid configuration shape')
         host = origin(configuration['origin'])
     except (OSError, ValueError, KeyError):
-        raise CanvasError('Run canvas-pocket auth login first, or set CANVAS_ORIGIN and CANVAS_TOKEN.') from None
+        raise CanvasError('Run canvas-cli auth login first, or set CANVAS_ORIGIN and CANVAS_TOKEN.') from None
     return host
 
 

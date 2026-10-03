@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.discussion import change_entry, entry, post, state
+from canvas_cli.client import CanvasError
+from canvas_cli.discussion import change_entry, entry, post, state
 
 
 class EntryTests(unittest.TestCase):

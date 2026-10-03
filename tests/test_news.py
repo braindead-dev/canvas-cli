@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock
 from urllib.parse import parse_qs, urlsplit
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.news import announcement_feed
+from canvas_cli.client import CanvasError
+from canvas_cli.news import announcement_feed
 
 
 class NewsTests(unittest.TestCase):

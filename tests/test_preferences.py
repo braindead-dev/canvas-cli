@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.preferences import (
+from canvas_cli.client import CanvasError
+from canvas_cli.preferences import (
     change_color,
     change_nickname,
     change_positions,

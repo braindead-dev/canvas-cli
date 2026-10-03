@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import Mock
 from urllib.parse import parse_qs, urlsplit
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.planner import change_note, create_note, items, notes, own_id, window
+from canvas_cli.client import CanvasError
+from canvas_cli.planner import change_note, create_note, items, notes, own_id, window
 
 
 class PlannerTests(unittest.TestCase):

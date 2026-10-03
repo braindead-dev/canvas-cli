@@ -5,9 +5,9 @@ Developer preview for the owner's account. Coverage follows the [native Canvas A
 Exact commands/options and safety classifications are available offline:
 
 ```sh
-canvas-pocket help --format brief
-canvas-pocket capabilities
-canvas-pocket schema --search upload
+canvas-cli help --format brief
+canvas-cli capabilities
+canvas-cli schema --search upload
 ```
 
 ## Coverage

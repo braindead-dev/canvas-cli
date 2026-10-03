@@ -5,9 +5,9 @@
 ## Read planner/calendar
 
 ```sh
-canvas-pocket planner --start 2026-10-01 --end 2026-10-14 --format brief
-canvas-pocket planner-notes --course 123 --personal
-canvas-pocket calendar --active --personal --start 2026-10-01 --end 2026-10-14
+canvas-cli planner --start 2026-10-01 --end 2026-10-14 --format brief
+canvas-cli planner-notes --course 123 --personal
+canvas-cli calendar --active --personal --start 2026-10-01 --end 2026-10-14
 ```
 
 Own planner paginates today through thirteen days later by default. Course/group/date/native completeness/activity filters complement assignments/instructions, not a complete coursework guarantee. Single note/override reads do not change state; personal includes unassociated notes when course-filtering.
@@ -17,9 +17,9 @@ Calendar defaults to own personal context; active/course/group selection is expl
 ## Personal tasks
 
 ```sh
-canvas-pocket task-create --title 'Read chapter' --date 2026-10-05 --course 123
-canvas-pocket task-edit 789 --date 2026-10-06
-canvas-pocket task-delete 789
+canvas-cli task-create --title 'Read chapter' --date 2026-10-05 --course 123
+canvas-cli task-edit 789 --date 2026-10-06
+canvas-cli task-delete 789
 ```
 
 Own planner-note mutations are not assignment edits. [Confirmation](safety.md#confirmation) binds account/site/selected changes/current destination. Changed state invalidates previews.
@@ -29,10 +29,10 @@ Edits send selected fields; UTF-8 details-file includes empty to clear; clear-co
 ## Personal calendar events
 
 ```sh
-canvas-pocket event-create --title 'Study' --start 2026-10-05T19:00:00-07:00 --end 2026-10-05T20:00:00-07:00
-canvas-pocket event-create --title 'Read' --date 2026-10-05 --timezone America/Los_Angeles
-canvas-pocket event-edit 789 --title 'Revised study block'
-canvas-pocket event-delete 789 --reason 'Schedule changed'
+canvas-cli event-create --title 'Study' --start 2026-10-05T19:00:00-07:00 --end 2026-10-05T20:00:00-07:00
+canvas-cli event-create --title 'Read' --date 2026-10-05 --timezone America/Los_Angeles
+canvas-cli event-edit 789 --title 'Revised study block'
+canvas-cli event-delete 789 --reason 'Schedule changed'
 ```
 
 Create is personal-only. Edit/delete verify exact own-calendar association and refuse course/group/section/appointment/deleted/hidden/locked events. Recurring edits target one instance, never a series. No reservation/assignment changes.
@@ -44,10 +44,10 @@ Details are escaped UTF-8. Empty details/location/address clears, omission prese
 ## Planner checkboxes
 
 ```sh
-canvas-pocket planner-override-create planner_note 789 --complete
-canvas-pocket planner-override-create assignment 456 --complete --allow-module-progress
-canvas-pocket planner-override-edit 123 --dismiss
-canvas-pocket planner-override-delete 123
+canvas-cli planner-override-create planner_note 789 --complete
+canvas-cli planner-override-create assignment 456 --complete --allow-module-progress
+canvas-cli planner-override-edit 123 --dismiss
+canvas-cli planner-override-delete 123
 ```
 
 Create identifies an exact type/ID from the fully paginated own feed; use its reported plannable type/ID and date bounds if needed. Supported types include notes/events/assignments/discussions/announcements/pages/quiz metadata, never questions/attempts. Existing overrides are not duplicated.

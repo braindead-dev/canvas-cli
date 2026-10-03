@@ -18,7 +18,7 @@ Tests use standard unittest. Subprocess integration requires openssl and synthet
 Keep domain behavior outside the entry point. No school-specific rules, plugin framework, generic CRUD engine, or speculative backend layers.
 
 ```text
-src/canvas_pocket/
+src/canvas_cli/
   cli.py          entry point; offline/online orchestration
   arguments.py    argparse definitions; shared confirmation flags
   auth.py         origin config, keyring, login/logout/client setup

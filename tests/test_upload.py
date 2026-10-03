@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 
 import httpx
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.upload import _upload_to_storage, prepare, upload
+from canvas_cli.client import CanvasError
+from canvas_cli.upload import _upload_to_storage, prepare, upload
 
 
 class FakeClient:
@@ -80,14 +80,14 @@ class UploadTest(unittest.TestCase):
             self.assertEqual(staged.read(), b'original')
             self.assertEqual(name, 'paper.txt')
             return '/api/v1/files/99/create_success'
-        with patch('canvas_pocket.upload._upload_to_storage', side_effect=inspect_storage):
+        with patch('canvas_cli.upload._upload_to_storage', side_effect=inspect_storage):
             result = upload(client, self.source, 100, yes=True, confirm=digest)
         self.assertEqual(result['uploaded_file_id'], 99)
         self.assertEqual(client.request.call_args_list[1].args[1], 'POST')
         self.assertEqual(client.request.call_args_list[1].args[2]['on_duplicate'], 'rename')
 
     def test_mutation_after_fresh_preview_is_caught_before_canvas_post(self):
-        from canvas_pocket.upload import prepare as real_prepare
+        from canvas_cli.upload import prepare as real_prepare
         _, digest = real_prepare(FakeClient(), self.source, 100)
         def mutate_after_prepare(*args):
             result = real_prepare(*args)
@@ -95,7 +95,7 @@ class UploadTest(unittest.TestCase):
             return result
         client = Mock(host='https://canvas.example.edu')
         client.request.return_value = ({'id': 7}, '')
-        with (patch('canvas_pocket.upload.prepare', side_effect=mutate_after_prepare),
+        with (patch('canvas_cli.upload.prepare', side_effect=mutate_after_prepare),
               self.assertRaisesRegex(CanvasError, 'Upload file changed')):
             upload(client, self.source, 100, yes=True, confirm=digest)
         client.request.assert_called_once_with('/api/v1/users/self/profile')
@@ -104,7 +104,7 @@ class UploadTest(unittest.TestCase):
         client = FakeClient()
         _, digest = prepare(client, self.source, 100)
         client.user_id = 99
-        with (patch('canvas_pocket.upload._upload_to_storage') as storage,
+        with (patch('canvas_cli.upload._upload_to_storage') as storage,
               self.assertRaisesRegex(CanvasError, 'Preview changed')):
             upload(client, self.source, 100, yes=True, confirm=digest)
         storage.assert_not_called()
@@ -117,12 +117,12 @@ class UploadTest(unittest.TestCase):
                 response = Mock(status_code=status, headers={})
                 if location:
                     response.headers['Location'] = location
-                with patch('canvas_pocket.upload.httpx.Client') as client:
+                with patch('canvas_cli.upload.httpx.Client') as client:
                     client.return_value.__enter__.return_value.post.return_value = response
                     with self.assertRaises(CanvasError) as caught:
                         _upload_to_storage(signed, {}, stream, 'paper.txt', 'text/plain')
                 self.assertNotIn('signature=private', str(caught.exception))
-            with patch('canvas_pocket.upload.httpx.Client') as client:
+            with patch('canvas_cli.upload.httpx.Client') as client:
                 client.return_value.__enter__.return_value.post.side_effect = httpx.ConnectError('secret')
                 with self.assertRaisesRegex(CanvasError, 'outcome uncertain') as caught:
                     _upload_to_storage(signed, {}, stream, 'paper.txt', 'text/plain')

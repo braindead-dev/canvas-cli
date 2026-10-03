@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.cli import brief, parser, run
-from canvas_pocket.client import CanvasError
-from canvas_pocket.pages import page_index
+from canvas_cli.cli import brief, parser, run
+from canvas_cli.client import CanvasError
+from canvas_cli.pages import page_index
 
 
 class PageIndexTests(unittest.TestCase):
@@ -75,7 +75,7 @@ class PageIndexTests(unittest.TestCase):
     def test_cli_flag_preserves_default_raw_list(self):
         client = Mock()
         client.list.return_value = [{'url': 'intro', 'published': True}]
-        import canvas_pocket.auth as auth
+        import canvas_cli.auth as auth
         original = auth.Client
         original_load = auth.load
         original_keyring = auth.secure_keyring

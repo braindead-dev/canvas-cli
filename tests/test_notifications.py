@@ -2,8 +2,8 @@ import unittest
 from copy import deepcopy
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.notifications import change, channels, pairs, preferences
+from canvas_cli.client import CanvasError
+from canvas_cli.notifications import change, channels, pairs, preferences
 
 
 class NotificationsTests(unittest.TestCase):

@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.progress import module_progress
+from canvas_cli.client import CanvasError
+from canvas_cli.progress import module_progress
 
 
 class ProgressTests(unittest.TestCase):

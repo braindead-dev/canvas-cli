@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.cli import brief
-from canvas_pocket.client import CanvasError
-from canvas_pocket.thread import read_thread
+from canvas_cli.cli import brief
+from canvas_cli.client import CanvasError
+from canvas_cli.thread import read_thread
 
 
 class ThreadTests(unittest.TestCase):

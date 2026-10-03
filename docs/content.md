@@ -5,12 +5,12 @@
 ## Discover visible content
 
 ```sh
-canvas-pocket syllabus 123
-canvas-pocket tabs 123
-canvas-pocket front-page 123
-canvas-pocket find 123 --query 'reading' --area files
-canvas-pocket linked-files 123
-canvas-pocket doctor 123
+canvas-cli syllabus 123
+canvas-cli tabs 123
+canvas-cli front-page 123
+canvas-cli find 123 --query 'reading' --area files
+canvas-cli linked-files 123
+canvas-cli doctor 123
 ```
 
 Syllabus returns the course body, not every linked document. Tabs list visible paths without launching external tools. Front page requires accessible published content.
@@ -22,12 +22,12 @@ Doctor probes sequentially without printing content and stops on rate limits. Re
 ## Files, folders, and groups
 
 ```sh
-canvas-pocket files 123 --best-effort
-canvas-pocket linked-files 123 --all-pages --quick
-canvas-pocket files 456 --context group
-canvas-pocket page 456 welcome --context group
-canvas-pocket folder-path 456 --context group --path 'Week 1/Readings'
-canvas-pocket file-quota 456 --context group
+canvas-cli files 123 --best-effort
+canvas-cli linked-files 123 --all-pages --quick
+canvas-cli files 456 --context group
+canvas-cli page 456 welcome --context group
+canvas-cli folder-path 456 --context group --path 'Week 1/Readings'
+canvas-cli file-quota 456 --context group
 ```
 
 Course files preserves the raw native list. Best-effort falls back only when denied and reports incomplete coverage. Linked-files indexes references in readable syllabus, modules/pages, assignments, announcements, and discussion prompts, not student replies. Hidden/unpublished/locked sources are skipped. All-pages adds readable pages outside modules; quick skips per-file availability checks, so availability is unknown. Neither is a complete Files inventory.
@@ -41,8 +41,8 @@ Native root/path GETs can materialize a missing Canvas root, including upload ro
 ## Download privately
 
 ```sh
-canvas-pocket download 123 789 --output /private/path/reading.pdf
-canvas-pocket download-linked 123 --directory /private/path/readings --file 789
+canvas-cli download 123 789 --output /private/path/reading.pdf
+canvas-cli download-linked 123 --directory /private/path/readings --file 789
 ```
 
 Downloads use private/no-overwrite/no-Git rules, default to 100 MiB, remove failed partial files, and check advertised size. Storage receives no bearer token/cookies/redirects; signed URLs are not logged.
@@ -52,11 +52,11 @@ Batches require an existing private directory and [confirmation](safety.md#confi
 ## Private snapshots
 
 ```sh
-canvas-pocket snapshot 123 --output /private/path/course.json
-canvas-pocket sync 123 --include-linked-files
-canvas-pocket snapshot-diff /private/path/older.json /private/path/newer.json --format brief
-canvas-pocket snapshot-search /private/path/course.json --query 'research paper'
-canvas-pocket snapshot-markdown /private/path/course.json --output /private/path/course.md
+canvas-cli snapshot 123 --output /private/path/course.json
+canvas-cli sync 123 --include-linked-files
+canvas-cli snapshot-diff /private/path/older.json /private/path/newer.json --format brief
+canvas-cli snapshot-search /private/path/course.json --query 'research paper'
+canvas-cli snapshot-markdown /private/path/course.json --output /private/path/course.md
 ```
 
 Capture includes course/syllabus, assignments, modules/items, readable published pages, announcements, and visible discussion prompts, not classmates' replies/questions/attempts. Optional linked files are metadata references, not binary downloads/full inventory. Requests are sequential to respect throttling.
@@ -84,9 +84,9 @@ Markdown is a readable projection, not a lossless backup. HTML becomes plain tex
 ## Upload files
 
 ```sh
-canvas-pocket upload-personal --folder 789 --file notes.pdf
-canvas-pocket upload-context 123 --context group --folder 789 --file shared-notes.pdf
-canvas-pocket upload-assignment-file 123 456 --file paper.pdf
+canvas-cli upload-personal --folder 789 --file notes.pdf
+canvas-cli upload-context 123 --context group --folder 789 --file shared-notes.pdf
+canvas-cli upload-assignment-file 123 456 --file paper.pdf
 ```
 
 Three-step uploads bind source SHA-256/size/destination/account in a preview. Default maximum is 25 MiB. Personal/shared duplicates request rename, never overwrite. Storage gets no token/cookies/redirects; initiation/confirmation stay on Canvas.
@@ -115,10 +115,10 @@ Folder ancestry/siblings are verified; root/self/descendant/cycle/foreign/submis
 ## Canvas export jobs
 
 ```sh
-canvas-pocket exports 123
-canvas-pocket export-create 123 --type zip --select files 789
-canvas-pocket export-status 123 456 --progress --format brief
-canvas-pocket export-download 123 456 --output /private/path/course.zip
+canvas-cli exports 123
+canvas-cli export-create 123 --type zip --select files 789
+canvas-cli export-status 123 456 --progress --format brief
+canvas-cli export-download 123 456 --output /private/path/course.zip
 ```
 
 Creation is asynchronous, role-dependent, and previewed. ZIP selects files/folders; Common Cartridge additionally supports documented course-content types shown in help. Skip-notifications is a job option, not a preference edit.

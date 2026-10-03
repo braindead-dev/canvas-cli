@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from canvas_pocket.arguments import parser
+from canvas_cli.arguments import parser
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -55,7 +55,7 @@ class DocumentationTests(unittest.TestCase):
                             self.assertEqual(lines[index - 1], '')
                         self.assertEqual(lines[index + 1], '')
 
-    @patch('canvas_pocket.auth.connect')
+    @patch('canvas_cli.auth.connect')
     def test_shell_examples_parse_offline_without_authentication(self, connect):
         root = parser()
         examples = 0
@@ -63,7 +63,7 @@ class DocumentationTests(unittest.TestCase):
             for block in re.findall(r'```sh\n(.*?)\n```', document.read_text(), re.DOTALL):
                 for line in block.splitlines():
                     words = shlex.split(line, comments=True)
-                    if not words or words[0] != 'canvas-pocket':
+                    if not words or words[0] != 'canvas-cli':
                         continue
                     with self.subTest(document=document.name, example=line):
                         root.parse_args(words[1:])

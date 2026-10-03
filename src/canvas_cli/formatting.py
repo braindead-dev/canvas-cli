@@ -33,7 +33,7 @@ def brief(data):
     if isinstance(data, dict) and 'help_text' in data:
         return f"{data['safety']}\n\n{data['help_text'].rstrip()}"
     if isinstance(data, dict) and 'schema_version' in data and 'commands' in data:
-        lines = [f"Pocket parser schema v{data['schema_version']} (JSON has full argument details)"]
+        lines = [f"Canvas CLI parser schema v{data['schema_version']} (JSON has full argument details)"]
         for command in data['commands']:
             lines.append(f"{command['command']} | {command['safety']}")
             lines.extend('  ' + (' / '.join(argument['flags']) or argument['destination']) +

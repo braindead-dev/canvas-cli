@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.group_membership import change, read
+from canvas_cli.client import CanvasError
+from canvas_cli.group_membership import change, read
 
 
 class GroupMembershipTests(unittest.TestCase):

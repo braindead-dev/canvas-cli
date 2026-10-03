@@ -14,8 +14,8 @@ Start with [setup](getting-started.md), then choose a guide by task.
 These guides explain behavior and limits, not every flag combination. The parser is the source of truth for exact syntax.
 
 ```sh
-canvas-pocket help --format brief
-canvas-pocket help --search upload --format brief
-canvas-pocket help upload-context --format brief
-canvas-pocket schema upload-context
+canvas-cli help --format brief
+canvas-cli help --search upload --format brief
+canvas-cli help upload-context --format brief
+canvas-cli schema upload-context
 ```

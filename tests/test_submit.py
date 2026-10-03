@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.submit import submit, submit_file
+from canvas_cli.client import CanvasError
+from canvas_cli.submit import submit, submit_file
 
 
 class SubmitTests(unittest.TestCase):

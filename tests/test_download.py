@@ -5,8 +5,8 @@ from urllib.error import HTTPError
 
 from test_client import Response
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.download import download
+from canvas_cli.client import CanvasError
+from canvas_cli.download import download
 
 
 class DownloadTests(unittest.TestCase):

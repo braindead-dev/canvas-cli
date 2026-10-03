@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.discovery import file_index, linked_files, referenced_ids
+from canvas_cli.client import CanvasError
+from canvas_cli.discovery import file_index, linked_files, referenced_ids
 
 
 class DiscoveryTests(unittest.TestCase):

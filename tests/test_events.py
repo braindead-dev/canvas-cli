@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.events import change, create, read, timing
+from canvas_cli.client import CanvasError
+from canvas_cli.events import change, create, read, timing
 
 
 class EventTests(unittest.TestCase):

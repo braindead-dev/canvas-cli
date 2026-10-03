@@ -45,7 +45,7 @@ def change(client, conversation_id, *, state=None, starred=None, subscribed=None
                'body': None if delete else {'conversation': fields},
                'conversation': summary, 'message_revision': digest(revisions), 'permanent': bool(permanent),
                'effect': ('Remove ALL visible messages from your own view. This does not unsend them for others. '
-                          'Pocket has no restore command; archive instead to keep the thread.' if delete else
+                          'Canvas CLI has no restore command; archive instead to keep the thread.' if delete else
                           'Change only your Inbox view. No message is sent, and other participants are unaffected.'),
                'warning': 'Changing subscription can change unread flags and Inbox ordering. A read marker is not proof you read the content.'}
     response = confirmed(client, preview, yes, confirm)

@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.personal_files import (
+from canvas_cli.client import CanvasError
+from canvas_cli.personal_files import (
     change_file,
     change_folder,
     create_folder,

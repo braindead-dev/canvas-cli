@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.activity import dismiss, feed, summary
-from canvas_pocket.cli import brief
-from canvas_pocket.client import CanvasError
+from canvas_cli.activity import dismiss, feed, summary
+from canvas_cli.cli import brief
+from canvas_cli.client import CanvasError
 
 
 class ActivityTests(unittest.TestCase):

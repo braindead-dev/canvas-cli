@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import Mock
 from urllib.parse import parse_qs, urlsplit
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.roster import listing
+from canvas_cli.client import CanvasError
+from canvas_cli.roster import listing
 
 
 class RosterTests(unittest.TestCase):

@@ -2,8 +2,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.planning import agenda, deadlines, work
+from canvas_cli.client import CanvasError
+from canvas_cli.planning import agenda, deadlines, work
 
 
 class PlanningTests(unittest.TestCase):

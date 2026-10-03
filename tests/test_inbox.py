@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.inbox import change
+from canvas_cli.client import CanvasError
+from canvas_cli.inbox import change
 
 
 class InboxTests(unittest.TestCase):

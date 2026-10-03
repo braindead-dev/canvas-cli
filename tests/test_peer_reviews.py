@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.cli import brief
-from canvas_pocket.client import CanvasError
-from canvas_pocket.peer_reviews import read
+from canvas_cli.cli import brief
+from canvas_cli.client import CanvasError
+from canvas_cli.peer_reviews import read
 
 
 class PeerReviewTests(unittest.TestCase):

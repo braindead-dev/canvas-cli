@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.discussion import post
+from canvas_cli.client import CanvasError
+from canvas_cli.discussion import post
 
 
 class DiscussionTests(unittest.TestCase):

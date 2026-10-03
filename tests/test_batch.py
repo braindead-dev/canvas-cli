@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from canvas_pocket.batch import batch_download, directory, safe_filename
-from canvas_pocket.client import CanvasError
+from canvas_cli.batch import batch_download, directory, safe_filename
+from canvas_cli.client import CanvasError
 
 
 class BatchTests(unittest.TestCase):
@@ -12,8 +12,8 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(safe_filename(42, '../../private\\syllabus (1).pdf'),
                          '42-syllabus-1.pdf')
 
-    @patch('canvas_pocket.batch.download')
-    @patch('canvas_pocket.batch.linked_files')
+    @patch('canvas_cli.batch.download')
+    @patch('canvas_cli.batch.linked_files')
     def test_preview_then_bounded_download(self, linked, download):
         linked.return_value = {'files': [{'id': 7, 'display_name': 'Read me.pdf',
                                           'size': 30, 'downloadable': True},
@@ -38,7 +38,7 @@ class BatchTests(unittest.TestCase):
                                              Path(folder).resolve() / '7-Read-me.pdf', 100,
                                              expected_bytes=30)
 
-    @patch('canvas_pocket.batch.linked_files')
+    @patch('canvas_cli.batch.linked_files')
     def test_limits_and_git_guard_fail_before_download(self, linked):
         linked.return_value = {'files': [{'id': 1, 'name': 'one', 'size': 101,
                                           'downloadable': True}], 'skipped_sources': []}
@@ -56,7 +56,7 @@ class BatchTests(unittest.TestCase):
             with self.assertRaises(CanvasError):
                 directory(folder)
 
-    @patch('canvas_pocket.batch.linked_files')
+    @patch('canvas_cli.batch.linked_files')
     def test_preview_can_show_more_files_than_execution_limit(self, linked):
         linked.return_value = {'files': [
             {'id': 1, 'display_name': 'one.pdf', 'size': 10, 'downloadable': True},
@@ -73,8 +73,8 @@ class BatchTests(unittest.TestCase):
                                yes=True, confirm=preview['confirm'])
             client.request.assert_not_called()
 
-    @patch('canvas_pocket.batch.download')
-    @patch('canvas_pocket.batch.linked_files')
+    @patch('canvas_cli.batch.download')
+    @patch('canvas_cli.batch.linked_files')
     def test_download_requires_matching_unchanged_preview(self, linked, download):
         linked.return_value = {'files': [{'id': 1, 'display_name': 'one.pdf',
                                           'size': 10, 'downloadable': True}],
@@ -91,8 +91,8 @@ class BatchTests(unittest.TestCase):
                                yes=True, confirm=preview['confirm'])
             download.assert_not_called()
 
-    @patch('canvas_pocket.batch.download')
-    @patch('canvas_pocket.batch.linked_files')
+    @patch('canvas_cli.batch.download')
+    @patch('canvas_cli.batch.linked_files')
     def test_file_change_between_confirmation_and_transfer_is_refused(self, linked, download):
         linked.return_value = {'files': [{'id': 1, 'display_name': 'one.pdf',
                                           'size': 10, 'updated_at': 'before',
@@ -108,8 +108,8 @@ class BatchTests(unittest.TestCase):
                                yes=True, confirm=preview['confirm'])
             download.assert_not_called()
 
-    @patch('canvas_pocket.batch.download')
-    @patch('canvas_pocket.batch.linked_files')
+    @patch('canvas_cli.batch.download')
+    @patch('canvas_cli.batch.linked_files')
     def test_select_specific_discovered_files_without_expanding_batch_limits(self, linked, download):
         linked.return_value = {'files': [
             {'id': 1, 'display_name': 'one.pdf', 'size': 10, 'downloadable': True},

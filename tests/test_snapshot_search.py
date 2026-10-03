@@ -1,7 +1,7 @@
 import unittest
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.snapshot_search import search
+from canvas_cli.client import CanvasError
+from canvas_cli.snapshot_search import search
 
 
 class SnapshotSearchTests(unittest.TestCase):

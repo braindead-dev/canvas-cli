@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.upload import prepare, upload
+from canvas_cli.client import CanvasError
+from canvas_cli.upload import prepare, upload
 
 
 class ScopedClient:
@@ -77,7 +77,7 @@ class ScopedUploadTests(unittest.TestCase):
                 client = ScopedClient(kind)
                 options = self.options(kind, '40')
                 preview = upload(client, self.source, 100, **options)
-                with patch('canvas_pocket.upload._upload_to_storage', return_value='/api/v1/files/777/create_success') as storage:
+                with patch('canvas_cli.upload._upload_to_storage', return_value='/api/v1/files/777/create_success') as storage:
                     result = upload(client, self.source, 100, yes=True, confirm=preview['confirm'], **options)
                 posts = [call for call in client.calls if call[0] == 'POST']
                 self.assertEqual(len(posts), 1)
@@ -136,7 +136,7 @@ class ScopedUploadTests(unittest.TestCase):
             else:
                 client.folder[{'folder_name': 'name', 'folder_lock': 'lock_at', 'folder_parent': 'parent_folder_id'}[change]] = (
                     39 if change == 'folder_parent' else 'Synthetic changed value')
-            with self.subTest(change=change), patch('canvas_pocket.upload._upload_to_storage') as storage:
+            with self.subTest(change=change), patch('canvas_cli.upload._upload_to_storage') as storage:
                 with self.assertRaisesRegex(CanvasError, 'Preview changed'):
                     upload(client, self.source, 100, yes=True, confirm=preview['confirm'], **options)
                 storage.assert_not_called()
@@ -147,7 +147,7 @@ class ScopedUploadTests(unittest.TestCase):
         options = self.options()
         preview = upload(client, self.source, 100, **options)
         client.deny_upload = True
-        with patch('canvas_pocket.upload._upload_to_storage') as storage:
+        with patch('canvas_cli.upload._upload_to_storage') as storage:
             with self.assertRaisesRegex(CanvasError, '403'):
                 upload(client, self.source, 100, yes=True, confirm=preview['confirm'], **options)
             storage.assert_not_called()
@@ -165,7 +165,7 @@ class ScopedUploadTests(unittest.TestCase):
                     client.record.update(change)
                 else:
                     client.scoped = {**client.record, **change}
-                with self.subTest(phase=phase, change=change), patch('canvas_pocket.upload._upload_to_storage',
+                with self.subTest(phase=phase, change=change), patch('canvas_cli.upload._upload_to_storage',
                         return_value='/api/v1/files/777/create_success') as storage:
                     with self.assertRaisesRegex(CanvasError, 'may have succeeded') as caught:
                         upload(client, self.source, 100, yes=True, confirm=preview['confirm'], **options)
@@ -182,7 +182,7 @@ class ScopedUploadTests(unittest.TestCase):
                 client.scoped = {**client.record, 'id': 778}
             else:
                 client.record['id'] = True
-            with patch('canvas_pocket.upload._upload_to_storage', return_value='/api/v1/files/777/create_success'), self.assertRaises(CanvasError):
+            with patch('canvas_cli.upload._upload_to_storage', return_value='/api/v1/files/777/create_success'), self.assertRaises(CanvasError):
                 upload(client, self.source, 100, yes=True, confirm=preview['confirm'], **options)
             self.assertEqual(len([call for call in client.calls if call[0] == 'POST']), 1)
 

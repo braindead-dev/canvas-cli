@@ -1,7 +1,7 @@
 import unittest
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.doctor import course_doctor
+from canvas_cli.client import CanvasError
+from canvas_cli.doctor import course_doctor
 
 
 class FakeClient:

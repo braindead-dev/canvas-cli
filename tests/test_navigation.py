@@ -3,9 +3,9 @@ import json
 import unittest
 from unittest.mock import patch
 
-from canvas_pocket.cli import brief, parser, run
-from canvas_pocket.client import CanvasError
-from canvas_pocket.navigation import command_help, command_schema
+from canvas_cli.cli import brief, parser, run
+from canvas_cli.client import CanvasError
+from canvas_cli.navigation import command_help, command_schema
 
 
 class NavigationTests(unittest.TestCase):
@@ -39,8 +39,8 @@ class NavigationTests(unittest.TestCase):
                 self.assertIn('usage:', help_page['help_text'])
                 self.assertIn(name, help_page['help_text'])
 
-    @patch('canvas_pocket.auth.Client')
-    @patch('canvas_pocket.auth.secure_keyring')
+    @patch('canvas_cli.auth.Client')
+    @patch('canvas_cli.auth.secure_keyring')
     def test_help_does_not_access_credentials_or_canvas(self, keyring, client):
         result = run(parser().parse_args(['help', 'task-delete']))
         self.assertIn('--confirm', result['help_text'])
@@ -113,9 +113,9 @@ class NavigationTests(unittest.TestCase):
         data = command_schema(synthetic, 'help')['commands'][0]
         self.assertEqual(data['mutually_exclusive_groups'], [{'required': True, 'destinations': ['one', 'two']}])
 
-    @patch('canvas_pocket.auth.Client')
-    @patch('canvas_pocket.auth.secure_keyring')
-    @patch('canvas_pocket.auth.config_path')
+    @patch('canvas_cli.auth.Client')
+    @patch('canvas_cli.auth.secure_keyring')
+    @patch('canvas_cli.auth.config_path')
     def test_schema_and_search_run_offline_without_credentials_or_configuration(self, config, keyring, client):
         data = run(parser().parse_args(['schema', '--search', 'invitation']))
         self.assertIn('enrollment-accept', [row['command'] for row in data['commands']])

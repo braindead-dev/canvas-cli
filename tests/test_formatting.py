@@ -1,7 +1,7 @@
 import unittest
 
-from canvas_pocket.formatting import brief
-from canvas_pocket.snapshot_diff import compare
+from canvas_cli.formatting import brief
+from canvas_cli.snapshot_diff import compare
 
 
 def snapshot():

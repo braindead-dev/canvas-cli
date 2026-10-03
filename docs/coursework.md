@@ -5,10 +5,10 @@
 ## What needs attention?
 
 ```sh
-canvas-pocket agenda --days 21 --include-undated --format brief
-canvas-pocket work --course 123
-canvas-pocket missing --course 123 --include-planner
-canvas-pocket news --days 30 --format brief
+canvas-cli agenda --days 21 --include-undated --format brief
+canvas-cli work --course 123
+canvas-cli missing --course 123 --include-planner
+canvas-cli news --days 30 --format brief
 ```
 
 | View | Purpose | Limit |
@@ -28,10 +28,10 @@ Multi-course views report unavailable courses. Auth, rate-limit, network, malfor
 ## Assignment and grade context
 
 ```sh
-canvas-pocket assignment 123 456
-canvas-pocket assignment-groups 123
-canvas-pocket rubrics 123
-canvas-pocket grades 123
+canvas-cli assignment 123 456
+canvas-cli assignment-groups 123
+canvas-cli rubrics 123
+canvas-cli grades 123
 ```
 
 Assignment groups expose native weights/rules; visible rubrics expose criteria. Grades select only the signed-in user and reject foreign user/course enrollments. Canvas controls visibility. Raw resource responses can contain private data.
@@ -39,11 +39,11 @@ Assignment groups expose native weights/rules; visible rubrics expose criteria. 
 ## Own submissions and feedback
 
 ```sh
-canvas-pocket submission 123 456
-canvas-pocket submissions 123 --state submitted --include-history
-canvas-pocket submissions 123 --include-rubric
-canvas-pocket feedback 123 --format brief
-canvas-pocket feedback 123 --include-text --since 2026-10-01T00:00:00Z
+canvas-cli submission 123 456
+canvas-cli submissions 123 --state submitted --include-history
+canvas-cli submissions 123 --include-rubric
+canvas-cli feedback 123 --format brief
+canvas-cli feedback 123 --include-text --since 2026-10-01T00:00:00Z
 ```
 
 Single submission reads own status/comments/rubric. Bulk submissions paginate with the own numeric ID, never another student or `all`. Repeated assignment IDs/native state narrow scope. Foreign parents and malformed/truncated inventories fail.
@@ -61,10 +61,10 @@ Reads never include `read_status`, submit, start attempts, or grade.
 ## Modules and quiz metadata
 
 ```sh
-canvas-pocket outline 123
-canvas-pocket module-progress 123 --format brief
-canvas-pocket quizzes 123
-canvas-pocket new-quizzes 123
+canvas-cli outline 123
+canvas-cli module-progress 123 --format brief
+canvas-cli quizzes 123
+canvas-cli new-quizzes 123
 ```
 
 Outline fetches module items separately because embedded lists may be capped/omitted. Progress preserves all/one rules and completed/incomplete/unknown/not-required states. Locked modules are not opened; denied item inventories remain partial. No view/completion event is sent.
@@ -74,11 +74,11 @@ Classic quiz takes a quiz ID; New Quiz takes its assignment ID. Both expose meta
 ## Turn in work deliberately
 
 ```sh
-canvas-pocket upload-assignment-file 123 456 --file paper.pdf
-canvas-pocket submit-file 123 456 789
-canvas-pocket submit-text 123 456 --text-file response.txt
-canvas-pocket submit-url 123 456 --url-file project-url.txt
-canvas-pocket submission-comment 123 456 --message-file question.txt
+canvas-cli upload-assignment-file 123 456 --file paper.pdf
+canvas-cli submit-file 123 456 789
+canvas-cli submit-text 123 456 --text-file response.txt
+canvas-cli submit-url 123 456 --url-file project-url.txt
+canvas-cli submission-comment 123 456 --message-file question.txt
 ```
 
 These start as previews; follow [confirmation](safety.md#confirmation). Upload stages a file, not a submission. Submit the returned file ID separately; multiple staged IDs are supported.

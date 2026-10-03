@@ -7,13 +7,15 @@
 Python 3.10+ and a supported OS keyring are required. Install [pipx](https://pipx.pypa.io/) separately if needed.
 
 ```sh
-pipx install git+https://github.com/braindead-dev/canvas-pocket.git
-canvas-pocket auth login --origin https://canvas.example.edu
-canvas-pocket auth status
-canvas-pocket courses --active --format brief
+pipx install git+https://github.com/braindead-dev/canvas-cli.git
+canvas-cli auth login --origin https://canvas.example.edu
+canvas-cli auth status
+canvas-cli courses --active --format brief
 ```
 
 This is a developer preview; no npm/PyPI release is published.
+
+Upgrading from Canvas Pocket? Install from the new URL above, check `canvas-cli auth status`, then remove the old pipx package with `pipx uninstall canvas-pocket`. The new command is `canvas-cli`; saved authentication and sync storage are unchanged.
 
 ## Personal-token login
 
@@ -29,16 +31,16 @@ Supported backends are macOS Keychain, Windows Credential Locker, Secret Service
 
 Supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a secret manager/process environment. They override saved authentication. Never put tokens in arguments, shell history, repository files, or bug reports.
 
-Configuration lives at `$XDG_CONFIG_HOME/canvas-pocket/config.json`, or `~/.config/canvas-pocket/config.json` when unset. Credentials are separate.
+Configuration lives at `$XDG_CONFIG_HOME/canvas-pocket/config.json`, or `~/.config/canvas-pocket/config.json` when unset. Credentials are separate. The historical storage namespace is retained after the Canvas CLI rename, so existing logins and private sync baselines still work. New installs use the same storage namespace.
 
 ## Output and discovery
 
 JSON is complete; `--format brief` is a human summary. `--format` and `--max-pages` work before or after commands.
 
 ```sh
-canvas-pocket help --search feedback --format brief
-canvas-pocket help feedback --format brief
-canvas-pocket schema feedback
+canvas-cli help --search feedback --format brief
+canvas-cli help feedback --format brief
+canvas-cli schema feedback
 ```
 
 Help/schema run offline without configuration, keyring, or network. The versioned schema derives flags, positionals, choices, defaults, accumulation, exclusion groups, and nested auth commands from the actual parser.

@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.cli import brief
-from canvas_pocket.client import CanvasError
-from canvas_pocket.feedback_read import read
+from canvas_cli.cli import brief
+from canvas_cli.client import CanvasError
+from canvas_cli.feedback_read import read
 
 
 class FeedbackReadTests(unittest.TestCase):

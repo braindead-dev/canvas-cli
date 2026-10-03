@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.content_exports import (
+from canvas_cli.client import CanvasError
+from canvas_cli.content_exports import (
     create,
     download_export,
     list_exports,
@@ -90,7 +90,7 @@ class ExportTests(unittest.TestCase):
             create(self.client, '8', yes=True, confirm=preview['confirm'])
         self.assertEqual(self.client.request.call_count, 3)
 
-    @patch('canvas_pocket.content_exports.download')
+    @patch('canvas_cli.content_exports.download')
     def test_download_uses_separate_no_bearer_binary_transport(self, binary):
         self.client.request.return_value = (self.job, '')
         binary.return_value = {'saved': '/private/synthetic.zip', 'bytes': 12}
@@ -100,7 +100,7 @@ class ExportTests(unittest.TestCase):
         self.assertNotIn('signature', json.dumps(result))
         self.assertEqual(result['export_id'], 51)
 
-    @patch('canvas_pocket.content_exports.download')
+    @patch('canvas_cli.content_exports.download')
     def test_pending_failed_expired_or_locked_exports_do_not_download(self, binary):
         for fields in ({'workflow_state': 'exporting'}, {'workflow_state': 'failed'},
                        {'attachment': None}, {'attachment': {'url': 'https://storage.example.edu/file',

@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from canvas_pocket.cli import parser, run
-from canvas_pocket.client import CanvasError
-from canvas_pocket.markdown import render, save
+from canvas_cli.cli import parser, run
+from canvas_cli.client import CanvasError
+from canvas_cli.markdown import render, save
 
 
 class MarkdownTests(unittest.TestCase):
@@ -72,7 +72,7 @@ class MarkdownTests(unittest.TestCase):
             source.write_text(json.dumps(self.fixture()))
             destination = root / 'course.md'
             with patch.dict(os.environ, {'CANVAS_ORIGIN': '', 'CANVAS_TOKEN': ''}), \
-                 patch('canvas_pocket.auth.Client') as client:
+                 patch('canvas_cli.auth.Client') as client:
                 result = run(parser().parse_args(
                     ['snapshot-markdown', str(source), '--output', str(destination)]))
                 client.assert_not_called()

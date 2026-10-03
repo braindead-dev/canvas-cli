@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.messaging import compose, recipients
+from canvas_cli.client import CanvasError
+from canvas_cli.messaging import compose, recipients
 
 
 class MessagingTests(unittest.TestCase):

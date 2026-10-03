@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.profile import change, read
+from canvas_cli.client import CanvasError
+from canvas_cli.profile import change, read
 
 
 class ProfileTests(unittest.TestCase):

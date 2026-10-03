@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import Mock
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.contexts import discussion_base, read_topic
-from canvas_pocket.discussion import post
-from canvas_pocket.thread import read_thread
+from canvas_cli.client import CanvasError
+from canvas_cli.contexts import discussion_base, read_topic
+from canvas_cli.discussion import post
+from canvas_cli.thread import read_thread
 
 
 class ContextTests(unittest.TestCase):

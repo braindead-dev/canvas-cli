@@ -2,7 +2,7 @@ import io
 import unittest
 from urllib.error import HTTPError
 
-from canvas_pocket.client import CanvasError, Client, origin
+from canvas_cli.client import CanvasError, Client, origin
 
 
 class Response(io.BytesIO):

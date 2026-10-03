@@ -29,7 +29,7 @@ def download(url, destination, max_bytes=100 * 1024 * 1024, transport=None,
         if u.scheme != 'https' or not u.hostname or u.username or u.password:
             raise CanvasError('Refusing a non-HTTPS or credential-bearing download URL')
         try:
-            response = transport(Request(url, headers={'User-Agent': 'canvas-pocket/0.1.0'}), timeout=30)
+            response = transport(Request(url, headers={'User-Agent': 'canvas-cli/0.1.0'}), timeout=30)
         except HTTPError as e:
             location = e.headers.get('Location')
             status = e.code

@@ -890,5 +890,5 @@ class CanvasFixture(unittest.TestCase):
     def invoke(self, *args, token='synthetic-token'):
         env = {**os.environ, 'CANVAS_ORIGIN': f'https://localhost:{self.server.server_port}',
                'CANVAS_TOKEN': token, 'SSL_CERT_FILE': str(self.cert), 'NO_PROXY': 'localhost'}
-        return subprocess.run([sys.executable, '-m', 'canvas_pocket.cli', *args], env=env,
+        return subprocess.run([sys.executable, '-m', 'canvas_cli.cli', *args], env=env,
                               text=True, capture_output=True, timeout=10, check=False)

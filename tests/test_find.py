@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import patch
 
-from canvas_pocket.client import CanvasError
-from canvas_pocket.find import find
+from canvas_cli.client import CanvasError
+from canvas_cli.find import find
 
 
 class FakeClient:
@@ -31,7 +31,7 @@ class FakeClient:
 class FindTests(unittest.TestCase):
     def test_reports_partial_coverage_without_private_bodies(self):
         client = FakeClient()
-        with patch('canvas_pocket.discovery.linked_files', return_value={
+        with patch('canvas_cli.discovery.linked_files', return_value={
                 'files': [], 'skipped_sources': []}):
             result = find(client, '101', 'Synthetic', 4)
         self.assertFalse(result['complete'])
@@ -45,7 +45,7 @@ class FindTests(unittest.TestCase):
 
     def test_file_search_falls_back_to_accessible_linked_names(self):
         client = FakeClient()
-        with patch('canvas_pocket.discovery.linked_files', return_value={
+        with patch('canvas_cli.discovery.linked_files', return_value={
                 'files': [{'id': 10, 'display_name': 'Synthetic reading.pdf', 'downloadable': True},
                           {'id': 11, 'display_name': 'Other.pdf', 'downloadable': True},
                           {'id': 12, 'display_name': 'Synthetic hidden.pdf', 'downloadable': False}],
@@ -109,7 +109,7 @@ class FindTests(unittest.TestCase):
                     raise CanvasError('Files list denied', status=403)
                 return []
 
-        with patch('canvas_pocket.discovery.linked_files',
+        with patch('canvas_cli.discovery.linked_files',
                    side_effect=CanvasError('rate limit', status=429)):
             result = find(LimitedFiles(), '101', 'paper')
         self.assertEqual(result['coverage']['files'], 'unavailable')

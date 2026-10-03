@@ -5,9 +5,9 @@
 ## Own profile
 
 ```sh
-canvas-pocket profile --format brief
-canvas-pocket profile-set --timezone America/Los_Angeles
-canvas-pocket profile-set --short-name 'Example Name' --acknowledge-shared-profile
+canvas-cli profile --format brief
+canvas-cli profile-set --timezone America/Los_Angeles
+canvas-cli profile-set --short-name 'Example Name' --acknowledge-shared-profile
 ```
 
 Profile whitelists own names/title/pronunciation/pronouns/time zone/locale. Bio/email are opt-ins. Feed secrets/login/SIS/LTI/avatar/services/unknown fields are omitted; expert me/get are raw alternatives, not this projection.
@@ -43,15 +43,15 @@ Positions are -1000 through 1000; order assigns 0,1,2... Unselected values remai
 ## Notification preferences
 
 ```sh
-canvas-pocket channels --format brief
-canvas-pocket notification-preferences 123 --category announcement
-canvas-pocket notification-preferences-set 123 --set new_announcement=immediately
-canvas-pocket notification-category-set 123 --category announcement --frequency daily
+canvas-cli channels --format brief
+canvas-cli notification-preferences 123 --category announcement
+canvas-cli notification-preferences-set 123 --set new_announcement=immediately
+canvas-cli notification-category-set 123 --category announcement --frequency daily
 ```
 
 Own channel addresses are opt-in for email/SMS, never push/provider tokens or bounce summaries. State is not delivery proof. Creation/deletion excluded.
 
-Native reads validate exact notification/category keys and reject absent/malformed/duplicate inventories. GETs can persist native default policies without Pocket selecting new frequencies.
+Native reads validate exact notification/category keys and reject absent/malformed/duplicate inventories. GETs can persist native default policies without Canvas CLI selecting new frequencies.
 
 Writes send exact selected keys with immediately/daily/weekly/never, through one account/channel/current-state/digest-bound batch. Addresses are hashed, not echoed; other settings untouched.
 
@@ -62,11 +62,11 @@ Failure can partially apply: check Canvas before repeating, no retry/body loggin
 ## Rosters, groups, permissions
 
 ```sh
-canvas-pocket course-users 123 --enrollment-type teacher --include-enrollments
-canvas-pocket group-users 789 --exclude-inactive
-canvas-pocket permissions 123 --permission read_roster
-canvas-pocket category-groups 123 456
-canvas-pocket group-membership 789
+canvas-cli course-users 123 --enrollment-type teacher --include-enrollments
+canvas-cli group-users 789 --exclude-inactive
+canvas-cli permissions 123 --permission read_roster
+canvas-cli category-groups 123 456
+canvas-cli group-membership 789
 ```
 
 Rosters are fully paginated authorized/filter coverage, not a census. Section restrictions can omit people. Names/IDs are metadata-first, email opt-in if native returned. Role/state/section associations are user/course-verified, never grades/SIS/login/bio/avatar/analytics. Native member counts/capacity differ from visible counts; denial/truncation fails.
