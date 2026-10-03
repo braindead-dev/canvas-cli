@@ -49,6 +49,26 @@ Downloads use private/no-overwrite/no-Git rules, default to 100 MiB, remove fail
 
 Batches require an existing private directory and [confirmation](safety.md#confirmation) bound to selection, discovery scope, metadata, destination, and limits. Oversized previews show limit issues; execution refuses them. Collisions/unsafe server filenames are guarded. Earlier successful files remain after later failure, with partial progress reported.
 
+## Author shared wiki pages
+
+```sh
+canvas page-create 123 --context course --title 'Shared notes' --body-file notes.html --acknowledge-shared-page
+canvas page-edit 456 789 --context group --body-file notes.html --acknowledge-shared-page
+canvas page-edit 123 789 --context course --title 'New title' --published --acknowledge-shared-page
+```
+
+Both commands use [confirmation](safety.md#confirmation) and require audience acknowledgement even for previews. HTML inputs are bounded UTF-8; empty clears content. These are shared wiki pages, not private notes or assignment submissions. Native reads/edits can record module read/contribution progress.
+
+Edits take an exact numeric **page ID**, not a slug. Native numeric slugs take precedence over IDs; reads can explicitly use `page_id:789`. Title edits can change the URL, so verification uses the original numeric ID and returns the new page link. Missing preflight pages fail without a PUT. Canvas's update API is an upsert, not an atomic compare-and-swap: concurrent deletion can still create an unwanted page; concurrent edits can be overwritten. Revision/body fingerprints reject changed previews, not races during execution.
+
+Course-wide student wiki opt-in/native permissions and page-level edit-history authorization are checked. Readable pages/course membership alone do not grant editing. Body-only contributors cannot change titles or request notifications. Native role, blueprint, institution and OAuth-scope restrictions remain authoritative.
+
+Creation uses POST, never replacement. Existing title matches are counted; Canvas chooses a unique locator. Native defaults are explicit in previews: course wiki managers create drafts, while student/group creation defaults to published. A draft is not necessarily private from teachers/managers. Publication, editing-role and front-page controls require Manage Wiki Update; changing the front page is context-wide and binds the paginated current inventory. A front page must remain published unless explicitly unset. Native creation of a default-named front page can select it implicitly; use `--front-page` when intended. Unexpected context-wide selection is reported as uncertain, not successful. Notifications default off; `--notify` requests them but does not prove delivery.
+
+Exact page ID, selected metadata, fresh identity/permissions and separate acknowledgement/readback are verified. Stored HTML may be sanitized or rewritten; `html_matches_request` distinguishes literal equality and JSON includes the stored body when requested. Unobserved changes, conflicting readbacks, denied verification and foreign acknowledgements are uncertain outcomes, never automatically retried. Previous bodies/editors/history are fingerprinted or omitted, not dumped in previews.
+
+Block-editor/Horizon payloads, deletion, revision restore and scheduling changes remain separate work. Authorized RCE drafts can be edited without bypassing publication; existing publication schedules are preserved, and future-scheduled pages refuse implicit publication/front-page changes.
+
 ## Private snapshots
 
 ```sh
@@ -129,4 +149,4 @@ After uncertain creation, inspect existing jobs first. Packages may be private/c
 
 ## Sources
 
-[Files/Folders](https://developerdocs.instructure.com/services/canvas/resources/files), [Pages](https://developerdocs.instructure.com/services/canvas/resources/pages), [Tabs](https://developerdocs.instructure.com/services/canvas/resources/tabs), [Uploads](https://developerdocs.instructure.com/services/canvas/basics/file.file_uploads), [Exports](https://developerdocs.instructure.com/services/canvas/resources/content_exports), [Throttling](https://developerdocs.instructure.com/services/canvas/basics/file.throttling), [Native root behavior](https://github.com/instructure/canvas-lms/blob/master/app/models/folder.rb).
+[Files/Folders](https://developerdocs.instructure.com/services/canvas/resources/files), [Pages](https://developerdocs.instructure.com/services/canvas/resources/pages), [Native page authorization/upsert](https://github.com/instructure/canvas-lms/blob/master/app/controllers/wiki_pages_api_controller.rb), [Wiki role/default policy](https://github.com/instructure/canvas-lms/blob/master/app/models/wiki.rb), [Page edit policy](https://github.com/instructure/canvas-lms/blob/master/app/models/wiki_page.rb), [Tabs](https://developerdocs.instructure.com/services/canvas/resources/tabs), [Uploads](https://developerdocs.instructure.com/services/canvas/basics/file.file_uploads), [Exports](https://developerdocs.instructure.com/services/canvas/resources/content_exports), [Throttling](https://developerdocs.instructure.com/services/canvas/basics/file.throttling), [Native root behavior](https://github.com/instructure/canvas-lms/blob/master/app/models/folder.rb).

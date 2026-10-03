@@ -37,6 +37,7 @@ tests/
     appointments.py  focused synthetic Scheduler routes and state
     team_appointments.py  shared-team Scheduler routes and state
     channels.py      focused synthetic contact routes and state
+    page_authoring.py  shared RCE wiki routes and state
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 

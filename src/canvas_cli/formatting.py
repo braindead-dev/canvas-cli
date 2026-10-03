@@ -36,6 +36,15 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'shared_page' in data:
+        row = data['shared_page']
+        status = 'created' if data['created'] else 'edited'
+        body = ('\nStored HTML differs from input; inspect JSON and the page in Canvas.'
+                if data['html_matches_request'] is False else '')
+        return (f"Shared {data['context_type']} {data[data['context_type'] + '_id']} page {row['page_id']} {status}\n"
+                f"{row['title']} | {row['url']} | {'published' if row['published'] else 'draft'}\n"
+                f"{row['html_url']}\n"
+                f"Acknowledgement matches separate readback.{body}\n{data['note']}")
     if isinstance(data, dict) and 'team_reservations' in data and not data.get('dry_run'):
         team, group = data['team'], data['appointment_group']
         lines = [f"Team {team['id']} | {team.get('name') or '(unnamed)'} | Scheduler group {group['id']}"]

@@ -9,6 +9,13 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('page-create', 'page-edit'):
+        from .page_authoring import change
+        content = read_utf8(args.body_file, label='Page body') if args.body_file is not None else None
+        return change(client, args.context_id, getattr(args, 'page_id', None), context_type=args.context,
+                      title=args.title, body=content, roles=args.editing_roles, published=args.published,
+                      front_page=args.front_page, notify=args.notify, acknowledge_shared=args.acknowledge_shared_page,
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('appointment-team-reservations', 'appointment-team-reserve', 'appointment-team-cancel'):
         from . import team_appointments
         if args.command == 'appointment-team-reservations':

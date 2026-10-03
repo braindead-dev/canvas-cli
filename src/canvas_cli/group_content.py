@@ -119,8 +119,16 @@ def _page(row, group_id, key=None):
     if not isinstance(row.get('url'), str) or not row['url']:
         raise CanvasError('Canvas returned an invalid group page')
     _group_association(row, group_id)
-    if key is not None and (str(row.get('page_id')) != key if key.isascii() and key.isdecimal() else row['url'] != key):
-        raise CanvasError('Canvas returned a different group page')
+    if key is not None:
+        if key.startswith('page_id:'):
+            matches = type(row.get('page_id')) is int and str(row['page_id']) == key[8:]
+        elif key.isascii() and key.isdecimal():
+            # Native lookup chooses an exact numeric slug before falling back to a page ID.
+            matches = row['url'] == key or type(row.get('page_id')) is int and str(row['page_id']) == key
+        else:
+            matches = row['url'] == key
+        if not matches:
+            raise CanvasError('Canvas returned a different group page')
     return redact(row)
 
 
@@ -128,6 +136,8 @@ def page(client, group_id, key=None):
     if key is not None and (not isinstance(key, str) or not key or key in ('.', '..') or
                             '/' in key or '\\' in key or any(ord(char) < 32 or ord(char) == 127 for char in key)):
         raise CanvasError('Use one page slug or ID, not a URL or path')
+    if key is not None and key.startswith('page_id:'):
+        _number(key[8:])
     route, _ = _context(client, group_id, 'group')
     row, _ = client.request(route + ('/front_page' if key is None else '/pages/' + quote(key, safe='')))
     return _page(row, group_id, key)

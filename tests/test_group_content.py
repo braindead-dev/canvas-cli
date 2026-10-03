@@ -110,6 +110,23 @@ class GroupContentTests(unittest.TestCase):
         self.client.request.assert_not_called()
         self.client.list.assert_not_called()
 
+    def test_numeric_slug_precedes_numeric_id_and_explicit_page_id_disambiguates(self):
+        colliding = {'url': '31', 'page_id': 32, 'published': True, 'body': '<p>Numeric slug</p>'}
+        self.client.request.side_effect = [(self.group, ''), (colliding, '')]
+        self.assertEqual(page(self.client, '11', '31')['page_id'], 32)
+        self.client.request.side_effect = [(self.group, ''), (colliding, '')]
+        with self.assertRaisesRegex(CanvasError, 'different group page'):
+            page(self.client, '11', 'page_id:31')
+        expected = {'url': 'welcome', 'page_id': 31, 'published': True}
+        self.client.request.side_effect = [(self.group, ''), (expected, '')]
+        self.assertEqual(page(self.client, '11', 'page_id:31')['page_id'], 31)
+        self.client.request.assert_called_with('/api/v1/groups/11/pages/page_id%3A31')
+        self.client.request.reset_mock()
+        for key in ('page_id:', 'page_id:0', 'page_id:01', 'page_id:١'):
+            with self.assertRaises(CanvasError):
+                page(self.client, '11', key)
+        self.client.request.assert_not_called()
+
     def test_root_folder_checks_native_context_and_root_identity(self):
         self.client.request.side_effect = [(self.group, ''), (self.folder, '')]
         result = root(self.client, '11', 'group')

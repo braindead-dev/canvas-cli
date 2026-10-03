@@ -40,6 +40,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'page-create/page-edit (shared RCE wiki content; explicit context/audience acknowledgement, native page-edit authorization, exact page IDs and revision-bound preview, matching digest and separate stored-page readback; native HTML normalization is labeled)',
             'channel-create/channel-delete (exact own contact methods; explicit message/removal acknowledgement, account/full-inventory-bound preview and matching digest; native confirmation, separate full own-inventory verification)',
             'profile-set (selected own name/profile/time-zone fields; shared-audience acknowledgement, account/profile-bound preview and matching digest; no SIS override, subsequent exact read-back verification)',
             'enrollment-accept/enrollment-reject (exact pending own Canvas invitation only; explicit membership acknowledgement, fresh account/invitation-bound preview and matching digest required; not official university registration)',

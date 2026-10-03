@@ -442,6 +442,20 @@ def parser():
     context_upload.add_argument('--file', required=True, type=Path)
     context_upload.add_argument('--max-bytes', type=int, default=25 * 1024 * 1024)
     _confirmation(context_upload)
+    for name in ('page-create', 'page-edit'):
+        authoring = sub.add_parser(name, help='Preview shared RCE page authoring with native authorization and exact-ID readback')
+        authoring.add_argument('context_id', type=identifier)
+        if name == 'page-edit':
+            authoring.add_argument('page_id', type=identifier, help='Exact numeric page ID, never an ambiguous slug')
+        authoring.add_argument('--context', required=True, choices=('course', 'group'))
+        authoring.add_argument('--title', required=name == 'page-create')
+        authoring.add_argument('--body-file', type=Path, help='UTF-8 HTML; empty clears the body, maximum 40000 bytes')
+        authoring.add_argument('--editing-roles', help='Comma-separated teachers/students/public for courses, members/public for groups')
+        authoring.add_argument('--published', action=argparse.BooleanOptionalAction, default=None)
+        authoring.add_argument('--front-page', action=argparse.BooleanOptionalAction, default=None)
+        authoring.add_argument('--notify', action='store_true', help='Explicitly request participant notifications; delivery is not verified')
+        authoring.add_argument('--acknowledge-shared-page', action='store_true', help='Required even for previews; affects shared wiki content/progress')
+        _confirmation(authoring)
     for name in ('assignment', 'page', 'module-items'):
         s = sub.add_parser(name, help='Read one resource or list module items')
         s.add_argument('course', type=identifier, metavar='CONTEXT_ID' if name == 'page' else None)
