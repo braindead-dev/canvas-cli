@@ -33,6 +33,46 @@ def entry(client, context_id, topic_id, entry_id, max_pages=100, context_type='c
     return _entry(client, base, topic_id, entry_id, max_pages)
 
 
+def state(client, context_id, topic_id, action, *, entry_id=None, forced=None,
+          max_pages=100, context_type='course', yes=False, confirm=None):
+    """Change only the signed-in user's subscription or read markers, never content."""
+    check_flags(yes, confirm)
+    if action not in ('subscribe', 'unsubscribe', 'read', 'unread'):
+        raise CanvasError('Unknown discussion state change')
+    if entry_id is not None and action in ('subscribe', 'unsubscribe'):
+        raise CanvasError('Subscriptions apply to topics, not individual entries')
+    if forced is not None and (entry_id is None or type(forced) is not bool):
+        raise CanvasError('Forced read state is an explicit boolean for one entry only')
+    base = discussion_base(context_id, topic_id, context_type)
+    identity = account(client)
+    topic = read_topic(client, context_id, topic_id, context_type,
+                       require_entries=entry_id is not None, allow_locked=True)
+    before = {key: topic.get(key) for key in ('id', 'title', 'message', 'subscribed', 'read_state', 'updated_at')}
+    route = base + ('/subscribed' if action in ('subscribe', 'unsubscribe') else '/read')
+    effect = ('Changes only your topic notification subscription.' if action in ('subscribe', 'unsubscribe') else
+              'Changes only your read marker for the initial topic text, not its replies.')
+    if entry_id is not None:
+        current = _entry(client, base, topic_id, entry_id, max_pages)
+        if current.get('deleted') or current.get('workflow_state') == 'deleted' or current.get('hidden_for_user'):
+            raise CanvasError('Cannot change a read marker for a deleted or hidden entry')
+        before['entry'] = {key: current.get(key) for key in
+                           ('id', 'user_id', 'message', 'updated_at', 'read_state', 'forced_read_state')}
+        route = base + f'/entries/{entry_id}/read'
+        effect = 'Changes only your read marker for this visible entry, not its content or author.'
+    preview = {**identity, f'{context_type}_id': context_id, 'context_type': context_type,
+               'topic_id': topic_id, 'topic_title': topic.get('title'), 'entry_id': entry_id,
+               'action': action, 'before': before, 'method': 'PUT' if action in ('subscribe', 'read') else 'DELETE',
+               'route': route, 'body': {'forced_read_state': forced} if forced is not None else None,
+               'expected_response': 'no_content', 'effect': effect}
+    result = confirmed(client, preview, yes, confirm)
+    if not yes:
+        return result
+    return {'discussion_state': {'context_type': context_type, f'{context_type}_id': int(context_id),
+                                 'topic_id': int(topic_id), 'entry_id': int(entry_id) if entry_id else None,
+                                 'action': action, 'forced_read_state': forced},
+            'note': 'Canvas acknowledged the requested state change with HTTP 204. ' + effect}
+
+
 def _revision(entry):
     fields = {key: entry.get(key) for key in
               ('id', 'user_id', 'message', 'created_at', 'updated_at', 'parent_id', 'deleted', 'permissions')}

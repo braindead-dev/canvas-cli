@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from canvas_pocket.client import CanvasError
-from canvas_pocket.discussion import change_entry, entry, post
+from canvas_pocket.discussion import change_entry, entry, post, state
 
 
 class EntryTests(unittest.TestCase):
@@ -127,6 +127,71 @@ class EntryTests(unittest.TestCase):
         self.current['deleted'] = True
         with self.assertRaisesRegex(CanvasError, 'deleted'):
             post(self.client, '8', '9', '31', 'A reply')
+
+    def test_subscription_and_topic_read_markers_only_touch_the_requested_state(self):
+        for action, method, suffix in [('subscribe', 'PUT', 'subscribed'), ('unsubscribe', 'DELETE', 'subscribed'),
+                                       ('read', 'PUT', 'read'), ('unread', 'DELETE', 'read')]:
+            with self.subTest(action=action):
+                self.client.request.reset_mock()
+                preview = state(self.client, '8', '9', action, context_type='group')
+                self.assertTrue(preview['dry_run'])
+                self.assertIsNone(preview['entry_id'])
+                self.assertIsNone(preview['body'])
+                self.assertTrue(all(len(call.args) == 1 for call in self.client.request.call_args_list))
+                state(self.client, '8', '9', action, context_type='group', yes=True, confirm=preview['confirm'])
+                self.client.request.assert_called_with(f'/api/v1/groups/8/discussion_topics/9/{suffix}',
+                                                       method, None, expect_no_content=True)
+                self.client.list.assert_not_called()
+
+    def test_read_marker_on_another_authors_entry_is_allowed_and_forced_flag_preserved(self):
+        self.current['user_id'] = 99
+        for forced in (None, False, True):
+            with self.subTest(forced=forced):
+                preview = state(self.client, '8', '9', 'unread', entry_id='31', forced=forced)
+                body = {'forced_read_state': forced} if forced is not None else None
+                self.assertEqual(preview['body'], body)
+                result = state(self.client, '8', '9', 'unread', entry_id='31', forced=forced,
+                               yes=True, confirm=preview['confirm'])
+                self.assertEqual(result['discussion_state']['forced_read_state'], forced)
+                self.client.request.assert_called_with('/api/v1/courses/8/discussion_topics/9/entries/31/read',
+                                                       'DELETE', body, expect_no_content=True)
+
+    def test_read_or_subscription_state_changes_invalidate_confirmation(self):
+        for change in ('subscribed', 'read_state', 'forced_read_state', 'entry_message', 'origin', 'account'):
+            self.setUp()
+            preview = state(self.client, '8', '9', 'read', entry_id='31')
+            if change == 'subscribed': self.topic['subscribed'] = True
+            if change == 'read_state': self.current['read_state'] = 'read'
+            if change == 'forced_read_state': self.current['forced_read_state'] = True
+            if change == 'entry_message': self.current['message'] = 'Changed content'
+            if change == 'origin': self.client.host = 'https://other.example.edu'
+            if change == 'account': self.profile['id'] = 99
+            self.client.request.reset_mock()
+            with self.subTest(change=change), self.assertRaisesRegex(CanvasError, 'Preview changed'):
+                state(self.client, '8', '9', 'read', entry_id='31', yes=True, confirm=preview['confirm'])
+            self.assertTrue(all(len(call.args) == 1 for call in self.client.request.call_args_list))
+
+    def test_state_controls_do_not_bypass_post_first_or_hidden_deleted_content(self):
+        self.topic.update(require_initial_post=True, user_can_see_posts=False)
+        # Topic text/subscription controls don't fetch entries; reading somebody's entry still requires visibility.
+        self.assertTrue(state(self.client, '8', '9', 'subscribe')['dry_run'])
+        with self.assertRaisesRegex(CanvasError, 'initial post'):
+            state(self.client, '8', '9', 'read', entry_id='31')
+        self.client.list.assert_not_called()
+        self.setUp(); self.topic['locked'] = True
+        self.assertTrue(state(self.client, '8', '9', 'unsubscribe')['dry_run'])
+        for fields in ({'deleted': True}, {'hidden_for_user': True}):
+            self.setUp(); self.current.update(fields)
+            with self.subTest(fields=fields), self.assertRaises(CanvasError):
+                state(self.client, '8', '9', 'read', entry_id='31')
+
+    def test_invalid_state_combinations_are_refused_before_network(self):
+        for action, kwargs in [('delete', {}), ('subscribe', {'entry_id': '31'}),
+                               ('read', {'forced': True}), ('read', {'entry_id': '31', 'forced': 'false'}),
+                               ('read', {'yes': True})]:
+            with self.subTest(action=action, kwargs=kwargs), self.assertRaises(CanvasError):
+                state(self.client, '8', '9', action, **kwargs)
+        self.client.request.assert_not_called()
 
 
 if __name__ == '__main__': unittest.main()

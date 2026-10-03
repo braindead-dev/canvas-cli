@@ -31,6 +31,7 @@ def describe():
             'planner-override-create/planner-override-edit/planner-override-delete (planner completion/dismissal; account-bound preview, explicit module-progress acknowledgement for course content)',
             'post (preview and matching digest required)',
             'entry-edit/entry-delete (own entry only; account-bound preview, matching digest and attachment-loss acknowledgement)',
+            'topic-subscribe/topic-unsubscribe/topic-mark-read/topic-mark-unread/entry-mark-read/entry-mark-unread (only own subscription/read markers; account-bound preview and matching digest required)',
             'inbox-reply/inbox-compose (preview and matching digest required)',
             'submit-url/submit-text/submit-file (preview and matching digest required)',
             'submission-comment (own submission only; account-bound preview and matching digest required)',

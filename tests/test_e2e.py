@@ -34,6 +34,7 @@ class E2E(unittest.TestCase):
                         'updated_at': '2026-10-02T12:00:00Z', 'deleted_at': None}
         cls.entry = {'id': 301, 'user_id': 7, 'message': '<p>Synthetic original entry</p>',
                      'updated_at': '2026-10-02T12:00:00Z'}
+        cls.topic_state = {'subscribed': False, 'read_state': 'unread'}
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -125,14 +126,14 @@ class E2E(unittest.TestCase):
                             'allowed_extensions': ['txt']}
                 elif self.path == '/api/v1/courses/101/discussion_topics/202':
                     data = {'id': 202, 'context_id': 101, 'title': 'Synthetic discussion',
-                            'published': True, 'locked_for_user': False}
+                            'published': True, 'locked_for_user': False, **cls.topic_state}
                 elif self.path == '/api/v1/groups/11/discussion_topics?per_page=100':
                     data = [{'id': 203, 'title': 'Synthetic group discussion', 'published': True}]
                 elif self.path == '/api/v1/groups/11/discussion_topics?per_page=100&only_announcements=true':
                     data = [{'id': 204, 'title': 'Synthetic group announcement', 'is_announcement': True}]
                 elif self.path in ('/api/v1/groups/11/discussion_topics/203', '/api/v1/groups/11/discussion_topics/204'):
                     data = {'id': int(self.path.rsplit('/', 1)[1]), 'context_id': 11, 'context_type': 'Group',
-                            'title': 'Synthetic group topic', 'published': True}
+                            'title': 'Synthetic group topic', 'published': True, **cls.topic_state}
                 elif self.path == '/api/v1/groups/11/discussion_topics/205':
                     data = {'id': 205, 'context_id': 11, 'context_type': 'Group', 'published': True,
                             'require_initial_post': True, 'user_can_see_posts': False}
@@ -307,6 +308,19 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                state_paths = ('/api/v1/courses/101/discussion_topics/202', '/api/v1/groups/11/discussion_topics/203')
+                if any(self.path == prefix + suffix for prefix in state_paths
+                       for suffix in ('/read', '/subscribed', '/entries/301/read')):
+                    cls.state_write = body
+                    if self.path.endswith('/subscribed'):
+                        cls.topic_state['subscribed'] = self.command == 'PUT'
+                    elif self.path.endswith('/entries/301/read'):
+                        cls.entry['read_state'] = 'read' if self.command == 'PUT' else 'unread'
+                        if 'forced_read_state' in body:
+                            cls.entry['forced_read_state'] = body['forced_read_state']
+                    else:
+                        cls.topic_state['read_state'] = 'read' if self.command == 'PUT' else 'unread'
+                    self.send_response(204); self.end_headers(); return
                 if self.path in ('/api/v1/courses/101/discussion_topics/202/entries/301',
                                  '/api/v1/groups/11/discussion_topics/203/entries/301'):
                     cls.entry_write = body
@@ -525,6 +539,43 @@ class E2E(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Page limit reached', result.stderr)
         self.assertEqual(result.stdout, '')
+
+    def test_discussion_subscriptions_and_read_markers_are_explicit_stateful_writes(self):
+        original_entry, original_state = self.entry.copy(), self.topic_state.copy()
+        commands = [('topic-subscribe', 'subscribed', None), ('topic-unsubscribe', 'subscribed', None),
+                    ('topic-mark-read', 'read', None), ('topic-mark-unread', 'read', None),
+                    ('entry-mark-read', 'entries/301/read', True), ('entry-mark-unread', 'entries/301/read', False)]
+        try:
+            for context, context_id, topic_id in [('course', '101', '202'), ('group', '11', '203')]:
+                for name, suffix, forced in commands:
+                    with self.subTest(context=context, name=name):
+                        command = [name, context_id, topic_id, '--context', context]
+                        if name.startswith('entry-'):
+                            command += ['301', '--forced-read-state' if forced else '--no-forced-read-state']
+                        before = len(self.calls)
+                        preview = self.invoke(*command)
+                        self.assertEqual(preview.returncode, 0, preview.stderr)
+                        data = json.loads(preview.stdout)
+                        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                        rejected = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                        self.assertNotEqual(rejected.returncode, 0)
+                        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                        sent = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+                        self.assertEqual(sent.returncode, 0, sent.stderr)
+                        self.assertIn('HTTP 204', sent.stdout)
+                        method = 'DELETE' if name.endswith(('unsubscribe', 'unread')) else 'PUT'
+                        self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                                         [(method, f'/api/v1/{context}s/{context_id}/discussion_topics/{topic_id}/{suffix}')])
+                        if name.startswith('entry-'):
+                            self.assertEqual(self.entry['forced_read_state'], forced)
+                            self.assertEqual(self.entry['read_state'], 'unread' if method == 'DELETE' else 'read')
+                            self.assertEqual(self.entry['message'], original_entry['message'])
+                        elif suffix == 'subscribed':
+                            self.assertEqual(self.topic_state['subscribed'], method == 'PUT')
+                        else:
+                            self.assertEqual(self.topic_state['read_state'], 'unread' if method == 'DELETE' else 'read')
+        finally:
+            self.__class__.entry, self.__class__.topic_state = original_entry, original_state
 
     def test_planner_pagination_and_read_only_personal_notes(self):
         before = len(self.calls)

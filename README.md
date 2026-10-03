@@ -265,6 +265,10 @@ canvas-pocket entry-delete 123 456 789 --context group
 # Review the deletion preview before repeating with --yes --confirm DIGEST.
 ```
 
+`topic-subscribe`/`topic-unsubscribe` change only your notifications for one topic. `topic-mark-read`/`topic-mark-unread` change only your read marker for the initial topic text, not all replies. `entry-mark-read`/`entry-mark-unread` change your marker for one visible entry, including another author's post, without changing its content. They all take context/topic IDs, entry commands also take an entry ID, and `--context group` selects group routes. Every change is separately previewed and digest-confirmed; ordinary reads never call these mutation endpoints. Explicit subscription changes remain possible for a closed topic, subject to Canvas access controls.
+
+For entry markers, optional `--forced-read-state` sets Canvas's manual override and `--no-forced-read-state` clears it. Omit both to leave the override unchanged. Changing any current target/account/state invalidates confirmation. Initial-post restrictions still block entry lookups; topic-text and subscription operations do not read entries at all. The API's empty HTTP 204 acknowledges success; it does not mean content was read by a person or coursework completed. These state controls have synthetic HTTPS coverage only.
+
 ## Personal calendar
 
 Personal calendar writes use the same account-bound preview and matching `--yes --confirm DIGEST` as other Canvas writes. `event-create` adds one event to your personal calendar; `event-edit` and `event-delete` re-read and verify the named event belongs to that calendar. They refuse course/group events, appointments, section events and deleted/locked/hidden events. Recurring-event edits and deletion explicitly use `which=one`, never a whole series. No assignment or reservation is changed, and uncertain write outcomes are never retried automatically.

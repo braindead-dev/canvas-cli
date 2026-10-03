@@ -380,6 +380,18 @@ def parser():
         if name != 'entry':
             s.add_argument('--confirm', help='Digest returned by the preview')
             s.add_argument('--yes', action='store_true', help='Execute only if the fresh preview matches --confirm')
+    for name in ('topic-subscribe', 'topic-unsubscribe', 'topic-mark-read', 'topic-mark-unread',
+                 'entry-mark-read', 'entry-mark-unread'):
+        s = sub.add_parser(name, help='Preview changing only your discussion subscription or read marker')
+        s.add_argument('course', type=identifier, metavar='CONTEXT_ID')
+        s.add_argument('topic', type=identifier)
+        s.add_argument('--context', choices=('course', 'group'), default='course')
+        if name.startswith('entry-'):
+            s.add_argument('entry', type=identifier)
+            s.add_argument('--forced-read-state', action=argparse.BooleanOptionalAction,
+                           help='Explicitly set or clear the manual read-marker override; omitted leaves it unchanged')
+        s.add_argument('--confirm', help='Digest returned by the preview')
+        s.add_argument('--yes', action='store_true', help='Execute only if the fresh preview matches --confirm')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')
     help_command.add_argument('topic', nargs='?', choices=sorted(sub.choices))
     help_command.add_argument('--search', help='Find commands by name, description or safety category')
@@ -726,6 +738,12 @@ def run(args):
                             delete=args.command == 'entry-delete',
                             remove_attachment=getattr(args, 'remove_attachment', False),
                             max_pages=args.max_pages, context_type=args.context, yes=args.yes, confirm=args.confirm)
+    if args.command in ('topic-subscribe', 'topic-unsubscribe', 'topic-mark-read', 'topic-mark-unread',
+                        'entry-mark-read', 'entry-mark-unread'):
+        from .discussion import state
+        return state(client, args.course, args.topic, args.command.rsplit('-', 1)[1],
+                     entry_id=getattr(args, 'entry', None), forced=getattr(args, 'forced_read_state', None),
+                     max_pages=args.max_pages, context_type=args.context, yes=args.yes, confirm=args.confirm)
     if args.command in ('quiz', 'rubric', 'assignment-group'):
         resource = {'quiz': 'quizzes', 'rubric': 'rubrics',
                     'assignment-group': 'assignment_groups'}[args.command]
@@ -794,6 +812,14 @@ def brief(data):
         return (f"Event {event['id']} [{event.get('workflow_state') or 'unknown'}] {event.get('title') or 'Untitled'}\n"
                 f"{when or 'Undated'}" + (' (all day)' if event.get('all_day') else f" to {event.get('end_at') or 'unknown'}") +
                 f"\n{data['note']}")
+    if isinstance(data, dict) and 'discussion_state' in data:
+        state = data['discussion_state']
+        return (f"Discussion {state['topic_id']}: {state['action']}" +
+                (f" (entry {state['entry_id']})" if state.get('entry_id') else '') + f"\n{data['note']}")
+    if isinstance(data, dict) and 'entry' in data and 'note' in data:
+        return f"Entry {data['entry']['id']} updated.\n{data['note']}"
+    if isinstance(data, dict) and data.get('deleted') and 'entry_id' in data:
+        return f"Entry {data['entry_id']} deleted.\n{data['note']}"
     if isinstance(data, dict) and 'planner_override' in data:
         override = data['planner_override']
         return (f"Planner override {override['id']} for {override['plannable_type']} {override['plannable_id']}\n"
