@@ -1,6 +1,8 @@
 """Independent native soft-delete model, cascade acknowledgement and readback."""
 
 import copy
+import hashlib
+import json
 import unittest
 from urllib.parse import unquote, urlsplit
 
@@ -135,6 +137,16 @@ class PageDeletionTests(unittest.TestCase):
         self.assertNotIn('synthetic-private', str(preview))
         self.assertEqual(self.writes(), [])
         self.assertFalse(any('/revisions?' in route for _, route, _ in self.client.calls))
+
+    def test_shared_helper_preserves_existing_deletion_content_fingerprint_contract(self):
+        for patch in ({}, {'editor': 'block_editor', 'block_editor_attributes': {'id': 17, 'blocks': 'opaque', 'version': '0.2'}}):
+            self.client = DeletionClient()
+            self.client.pages[9].update(patch)
+            row = self.client.pages[9]
+            payload = {'editor': row.get('editor'), **({'block_editor_attributes': row['block_editor_attributes']}
+                                                     if 'block_editor_attributes' in row else {'body': row['body']})}
+            expected = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest()
+            self.assertEqual(self.delete()['content_digest'], expected)
 
     def test_native_delete_rights_are_separate_from_editing_ownership_and_history(self):
         for value in (False, None, 1, 'true'):

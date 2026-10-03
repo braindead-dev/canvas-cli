@@ -36,6 +36,19 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'copied_page' in data:
+        row = data['copied_page']
+        lines = [f"Course {data['course_id']} page {data['source_page_id']} copied to new draft {row['page_id']}",
+                 row['title'], row['html_url']]
+        if not data['content_matches_source']:
+            lines.append('Stored content differs from the source; inspect Canvas and JSON before using the copy.')
+        if data['copied_assignment']:
+            lines.append(f"Linked assignment copied to {data['copied_assignment']['id']}; exact source lineage verified.")
+        if data['assignment_configuration_changed_fields']:
+            lines.append('Assignment configuration differs: ' + ', '.join(data['assignment_configuration_changed_fields']))
+        if data['assignment_configuration_unknown_fields']:
+            lines.append(f"{len(data['assignment_configuration_unknown_fields'])} selected assignment configuration fields were not comparable; see JSON.")
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'deleted_page' in data:
         page = data['deleted_page']
         lines = [f"Shared {data['context_type']} page {page['page_id']} deleted | {page['title']}",

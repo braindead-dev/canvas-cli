@@ -28,6 +28,7 @@ src/canvas_cli/
   strict_json.py  unambiguous API/snapshot decoding
   writes.py       identity and confirmation digests
   text.py         bounded explicit UTF-8 file inputs
+  wiki_content.py shared native page metadata and private content fingerprints
   download.py     credential-free binary transport
   <domain>.py     resource-specific validation/projection/behavior
 tests/
@@ -40,6 +41,7 @@ tests/
     page_authoring.py  shared RCE wiki routes and state
     page_history.py   native history and exact-revision restore routes
     page_deletion.py  native soft-delete evidence and assignment cascades
+    page_duplication.py  native course copies and assignment lineage
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 

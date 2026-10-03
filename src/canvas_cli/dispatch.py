@@ -9,6 +9,11 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'page-duplicate':
+        from .page_duplication import duplicate
+        return duplicate(client, args.course_id, args.page_id, acknowledge_shared=args.acknowledge_shared_page,
+                         acknowledge_assignment=args.acknowledge_linked_assignment_copy,
+                         max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'page-delete':
         from .page_deletion import delete
         return delete(client, args.context_id, args.page_id, context_type=args.context,

@@ -104,6 +104,25 @@ Verification combines exact-ID acknowledgement, inventory removal, an inaccessib
 
 [Native delete and front-page restrictions](https://github.com/instructure/canvas-lms/blob/master/app/controllers/wiki_pages_api_controller.rb), [exact-ID/slug lookup](https://github.com/instructure/canvas-lms/blob/master/app/models/wiki.rb), [native assignment cascade](https://github.com/instructure/canvas-lms/blob/master/lib/submittable.rb), [soft-deletion implementation](https://github.com/instructure/canvas-lms/blob/master/lib/canvas/soft_deletable.rb).
 
+## Duplicate a course wiki page
+
+```sh
+canvas page-duplicate 123 789 --acknowledge-shared-page
+canvas page-duplicate 123 789 --acknowledge-shared-page --acknowledge-linked-assignment-copy
+```
+
+Uses [confirmation](safety.md#confirmation) and one native course-only duplication POST with an empty body, not HTML replay or a create/edit fallback. Creation requires Manage Wiki Create or course-wide student wiki opt-in, not editing/ownership/history permission. Exact numeric source IDs avoid slug collisions. Native restrictions remain authoritative; no group duplication route is invented.
+
+Canvas chooses a unique, potentially localized title/URL and creates an unpublished page. Editing roles and todo date are retained; publication schedules are not copied. Copying a front-page source does not select the copy or unset the source. A draft is not private from teachers/managers. Student opt-in can allow creating a draft that the student cannot subsequently read: failed verification is uncertain, never a reason for automatic publication or deletion.
+
+A reported linked wiki assignment requires separate acknowledgement even for previews. Native duplication can also copy rubric, plagiarism-tool or asset-processor associations and reset selected settings. The new assignment is read independently and must report the exact original assignment/course IDs, a different assignment ID and the copied page's title. Unsupported/missing lineage or inconsistent associations are uncertain. No second assignment POST, submission, assessment attempt or explicit grading action is sent. Separate integrations/background work and every copied association are not verified by this command.
+
+Previews bind account, course/create rights, source page/todo date, latest revision, private HTML/block/external-content fingerprints, any linked assignment/configuration, and full page/front-page inventory. Source bodies, rubric contents, tokens, editors and submission/grade records are not emitted. Reads can record native module progress; latest revision reads can repair legacy imported YAML. Unreadable content or incomplete inventories fail before posting; source changes during execution remain possible despite confirmation.
+
+Exact new-page acknowledgement and separate readback, unchanged source page/assignment, stable account/create rights and an unchanged front page are verified. `content_matches_source` labels literal HTML or portable block-data equality; block comparisons exclude the newly allocated block ID, which must not reuse the source's ID. Native content rewrites or representation changes are reported, not presented as faithful backup. Assignment comparisons expose only field names that changed, were compared, or remain unknown when unavailable; no missing setting is assumed unchanged. No automatic retry, publication, deletion or rollback follows an uncertain result.
+
+[Native course-only route and copy authorization](https://github.com/instructure/canvas-lms/blob/master/app/controllers/wiki_pages_api_controller.rb), [native wiki copy defaults](https://github.com/instructure/canvas-lms/blob/master/app/models/wiki_page.rb), [assignment-copy resets and associated entities](https://github.com/instructure/canvas-lms/blob/master/app/models/abstract_assignment.rb), [native assignment lineage fields](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/assignment.rb).
+
 ## Private snapshots
 
 ```sh

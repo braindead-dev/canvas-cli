@@ -6,10 +6,10 @@ from urllib.parse import quote
 from .client import CanvasError
 from .events import timestamp
 from .group_content import _context, _id, _number, base
+from .wiki_content import _html, _inventory, _metadata
 from .writes import account, check_flags, confirmed, digest
 
 PERMISSIONS = ('manage_wiki_create', 'manage_wiki_update', 'participate_as_student')
-PAGE_FIELDS = ('page_id', 'url', 'title', 'editing_roles', 'published', 'front_page', 'updated_at', 'publish_at')
 WARNING = ('Shared wiki content, not a private note or assignment submission. Editing can affect module '
            'contribution/read progress. Canvas enforces role, blueprint, scope and institution restrictions '
            'and may sanitize/rewrite HTML. Front-page changes affect the whole context. Native page PUT '
@@ -80,20 +80,6 @@ def _scope(client, item, context_type):
     return route, {key: context.get(key) for key in ('id', 'name', 'workflow_state', 'concluded', 'non_collaborative')}, rights
 
 
-def _metadata(row, page_id=None):
-    identifier = _id(row, 'page_id')
-    if page_id is not None and identifier != int(page_id):
-        raise CanvasError('Canvas returned a different page ID')
-    if (any(not isinstance(row.get(key), str) or not row[key] for key in ('url', 'title', 'editing_roles', 'updated_at')) or
-            any(type(row.get(key)) is not bool for key in ('published', 'front_page')) or
-            row.get('workflow_state') == 'deleted' or row.get('hidden_for_user') or row.get('locked_for_user')):
-        raise CanvasError('Canvas returned an unavailable or malformed page')
-    timestamp(row['updated_at'])
-    if row.get('publish_at') is not None:
-        timestamp(row['publish_at'])
-    return {key: row.get(key) for key in PAGE_FIELDS}
-
-
 def _read_page(client, route, page_id, *, no_verifiers=False):
     # Successful native Page GET authorizes this exact page, including readable drafts.
     # Do not invent manager permissions for read-only revision access.
@@ -113,12 +99,6 @@ def _page(client, route, page_id, rights):
     return row, metadata
 
 
-def _html(row):
-    if 'body' not in row or row['body'] is not None and not isinstance(row['body'], str):
-        raise CanvasError('Canvas did not return readable page HTML')
-    return row['body'] if row['body'] is not None else ''  # Native nil represents an unedited empty RCE page.
-
-
 def _revision(client, route, page_id):
     target = route + '/pages/page_id:' + page_id
     # A bounded permission probe, not a complete revision inventory. Latest alone only requires read rights.
@@ -132,13 +112,6 @@ def _revision(client, route, page_id):
         raise CanvasError('Canvas did not report the current page revision')
     timestamp(revision.get('updated_at'))
     return {key: revision[key] for key in ('revision_id', 'updated_at', 'latest')}
-
-
-def _inventory(client, route, max_pages):
-    rows = [_metadata(row) for row in client.list(route + '/pages?per_page=100', max_pages)]
-    if len({row['page_id'] for row in rows}) != len(rows) or sum(row['front_page'] for row in rows) > 1:
-        raise CanvasError('Canvas returned an ambiguous page/front-page inventory')
-    return sorted(rows, key=lambda row: row['page_id'])
 
 
 def change(client, item, page_id=None, *, context_type, title=None, body=None, roles=None,

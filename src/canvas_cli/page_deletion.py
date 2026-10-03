@@ -4,9 +4,9 @@ from urllib.parse import quote
 
 from .client import CanvasError
 from .events import timestamp
-from .group_content import _context, _id, _number, base
-from .page_authoring import PAGE_FIELDS, _html, _inventory, _metadata
+from .group_content import _context, _number, base
 from .page_history import _detail
+from .wiki_content import PAGE_FIELDS, _assignment, _content, _inventory, _metadata
 from .writes import account, check_flags, confirmed, digest
 
 WARNING = ('Deletes shared wiki content, not a private note or a submission. Canvas soft-deletes pages; '
@@ -34,46 +34,12 @@ def _scope(client, item, context_type):
     return route, context, {'manage_wiki_delete': True}
 
 
-def _assignment(row, item, context_type):
-    if row is None:
-        return None
-    _id(row)
-    if (context_type != 'course' or type(row.get('course_id')) is not int or row['course_id'] != int(item) or
-            not isinstance(row.get('name'), str) or not row['name'] or type(row.get('published')) is not bool or
-            not isinstance(row.get('submission_types'), list) or not row['submission_types'] or
-            any(not isinstance(value, str) for value in row['submission_types']) or
-            len(set(row['submission_types'])) != len(row['submission_types']) or
-            'wiki_page' not in row['submission_types'] or
-            row.get('workflow_state') is not None and not isinstance(row['workflow_state'], str) or
-            row.get('workflow_state') == 'deleted'):
-        raise CanvasError('Canvas returned an invalid or foreign linked wiki assignment')
-    timestamp(row.get('updated_at'))
-    return {key: row.get(key) for key in ('id', 'course_id', 'name', 'submission_types', 'published', 'updated_at', 'workflow_state')}
-
-
 def _page(client, route, page_id, item, context_type):
     row, _ = client.request(route + '/pages/page_id:' + page_id + '?no_verifiers=true')
     metadata = _metadata(row, page_id)
-    editor = row.get('editor')
-    if editor not in (None, 'rce', 'block_editor', 'block_content_editor'):
-        raise CanvasError('Canvas returned an unknown native wiki editor')
-    blocks, external = row.get('block_editor_attributes'), row.get('block_editor_data')
-    if blocks is not None and external is not None:
-        raise CanvasError('Canvas returned ambiguous native wiki content')
-    if blocks is not None:
-        if not isinstance(blocks, dict) or 'blocks' not in blocks:
-            raise CanvasError('Canvas did not return readable native block content')
-        _id(blocks)
-        content = {'editor': editor, 'block_editor_attributes': blocks}
-    elif external is not None:
-        if not isinstance(external, (dict, list, str)):
-            raise CanvasError('Canvas did not return readable native external block content')
-        content = {'editor': editor, 'block_editor_data': external}
-    else:
-        content = {'editor': editor, 'body': _html(row)}
     # Opaque native block content is fingerprinted, never converted to HTML or replayed as an edit.
     linked = _assignment(row.get('assignment'), item, context_type)
-    return metadata, digest(content), linked
+    return metadata, _content(row)['fingerprint'], linked
 
 
 def _absent(client, route, allowed=(404,)):

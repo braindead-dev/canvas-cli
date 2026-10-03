@@ -41,6 +41,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'page-duplicate (native course-only draft copy; separate creation/student-wiki authorization, exact source ID and revision/content/inventory-bound preview; explicit linked-assignment copy acknowledgement and independently verified exact lineage, unchanged source/front page; differences labeled, no automatic retry/publication/rollback)',
             'page-delete (native shared wiki soft deletion; separate delete permission, exact-ID revision/content/inventory-bound preview and digest, explicit linked-assignment cascade acknowledgement; independent inventory/ID/URL and linked-assignment readbacks, no front-page changes or automatic retry)',
             'page-restore (shared RCE title/body/URL; native full-update/history authorization, exact-ID account/revision/inventory-bound preview and digest, explicit front-page risk acknowledgement, separate page/revision/front readback; normalization is labeled, no automatic retry or repair)',
             'page-create/page-edit (shared RCE wiki content; explicit context/audience acknowledgement, native page-edit authorization, exact page IDs and revision-bound preview, matching digest and separate stored-page readback; native HTML normalization is labeled)',

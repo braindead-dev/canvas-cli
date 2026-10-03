@@ -5,7 +5,8 @@ from urllib.parse import quote
 from .client import CanvasError
 from .events import timestamp
 from .group_content import _context, _id, _number, base
-from .page_authoring import _html, _inventory, _metadata, _read_page, _scope
+from .page_authoring import _read_page, _scope
+from .wiki_content import _html, _inventory, _metadata
 from .writes import account, check_flags, confirmed, digest
 
 READ_NOTE = ('Only native-authorized RCE page revisions, not deleted-page recovery or a historical '
