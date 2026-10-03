@@ -36,6 +36,11 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'scheduled_page' in data:
+        page = data['scheduled_page']
+        date = page['publish_at'] or 'cancelled'
+        return (f"Course {data['course_id']} page {page['page_id']} | publication date {date} | draft\n"
+                f"{page['title']}\n{page['html_url']}\n{data['note']}")
     if isinstance(data, dict) and 'copied_page' in data:
         row = data['copied_page']
         lines = [f"Course {data['course_id']} page {data['source_page_id']} copied to new draft {row['page_id']}",

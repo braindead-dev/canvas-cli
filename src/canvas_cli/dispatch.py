@@ -9,6 +9,11 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'page-schedule':
+        from .page_scheduling import schedule
+        return schedule(client, args.course_id, args.page_id, publish_at=args.publish_at, cancel=args.cancel,
+                        acknowledge_shared=args.acknowledge_shared_page,
+                        max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'page-duplicate':
         from .page_duplication import duplicate
         return duplicate(client, args.course_id, args.page_id, acknowledge_shared=args.acknowledge_shared_page,

@@ -123,6 +123,23 @@ Exact new-page acknowledgement and separate readback, unchanged source page/assi
 
 [Native course-only route and copy authorization](https://github.com/instructure/canvas-lms/blob/master/app/controllers/wiki_pages_api_controller.rb), [native wiki copy defaults](https://github.com/instructure/canvas-lms/blob/master/app/models/wiki_page.rb), [assignment-copy resets and associated entities](https://github.com/instructure/canvas-lms/blob/master/app/models/abstract_assignment.rb), [native assignment lineage fields](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/assignment.rb).
 
+## Schedule a course page
+
+```sh
+canvas page-schedule 123 789 --publish-at 2030-10-01T10:00:00-07:00 --acknowledge-shared-page
+canvas page-schedule 123 789 --cancel --acknowledge-shared-page
+```
+
+Uses [confirmation](safety.md#confirmation). Both operations leave the page unpublished. Cancelling a stored date is **not** publish-now, even if an old scheduled date belongs to a currently published page. A new date must have an explicit offset and remain at least 60 seconds ahead after preflight; equivalent dates and absent cancellations are refused without a write.
+
+This course-only command requires native Manage Wiki Update, readable RCE/edit history and a reported enabled root-account feature. The exact course's `root_account_id` determines the feature-flag read; course enabled-feature lists do not prove this root-only setting. An unreadable, missing or disabled flag stops before writing. Group/block pages, front pages and reported linked wiki assignments are not supported by this command. No feature setting, front-page deselection or assignment control is changed implicitly.
+
+Previews bind account, course/permissions/root flag, exact page ID, current revision/private body fingerprint, stored date and full page/front-page inventory. One native PUT sends only the date and disabled update notifications, never content or an explicit publication toggle. Exact acknowledgement and separate page/inventory reads must verify the stored date, draft state, unchanged content/title/URL/roles and stable account/feature/front page. Missing dates are unknown, not an assumed null. No private body/editor/flag extras are emitted.
+
+Canvas can ignore unavailable features and PUT can create a page after concurrent deletion. Uncertain results never trigger retry, publish-now, rollback or repair. Stored-date verification does not prove future background execution, cache propagation or student visibility; ordinary native authorization still applies.
+
+[Native schedule parameters](https://developerdocs.instructure.com/services/canvas/resources/pages), [publication/cancellation callbacks](https://github.com/instructure/canvas-lms/blob/master/app/models/scheduled_publication.rb), [root-account feature definition](https://github.com/instructure/canvas-lms/blob/master/config/feature_flags/00_standard.yml), [feature-flag reads](https://developerdocs.instructure.com/services/canvas/resources/feature_flags).
+
 ## Private snapshots
 
 ```sh
