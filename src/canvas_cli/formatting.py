@@ -30,6 +30,16 @@ def _diff_lines(diff):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'team_reservations' in data and not data.get('dry_run'):
+        team, group = data['team'], data['appointment_group']
+        lines = [f"Team {team['id']} | {team.get('name') or '(unnamed)'} | Scheduler group {group['id']}"]
+        lines.extend(f"  team reservation {row['id']} | slot {row['parent_event_id']} | "
+                     f"{row.get('start_at') or 'undated'} to {row.get('end_at') or 'unknown'}"
+                     for row in data['team_reservations'])
+        if not data['team_reservations']:
+            lines.append('No active reservations returned for this team and Scheduler group.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and ('appointment_groups' in data or 'appointment_group' in data) and not data.get('dry_run'):
         groups = data.get('appointment_groups', [data.get('appointment_group')])
         lines = ['Native Canvas Scheduler']
@@ -48,7 +58,8 @@ def brief(data):
         return '\n'.join(lines)
     if isinstance(data, dict) and 'appointment_reservation' in data:
         row = data['appointment_reservation']
-        return (f"Own Scheduler reservation {row['id']} | group {row['appointment_group_id']} | slot {row['parent_event_id']} | "
+        owner = f"Team {data['team']['id']} Scheduler" if 'team' in data else 'Own Scheduler'
+        return (f"{owner} reservation {row['id']} | group {row['appointment_group_id']} | slot {row['parent_event_id']} | "
                 f"{'cancelled' if data['cancelled'] else 'reserved'}\n{row.get('start_at') or 'undated'} to {row.get('end_at') or 'unknown'}\n{data['note']}")
     if isinstance(data, dict) and 'help_text' in data:
         return f"{data['safety']}\n\n{data['help_text'].rstrip()}"

@@ -1,4 +1,4 @@
-"""Native Scheduler discovery and own individual reservations, never allocation."""
+"""Native Scheduler metadata and shared reservation checks, never allocation."""
 
 import re
 from datetime import datetime, timezone
@@ -122,8 +122,11 @@ def listing(client, max_pages=100, *, courses=(), include_past=False, include_de
             'scope': 'reservable', 'include_past': include_past, 'note': NOTE}
 
 
-def _read_group(client, group_id, include_details=False):
-    record, _ = client.request(f'/api/v1/appointment_groups/{_id(group_id)}?include%5B%5D=reserved_times')
+def _read_group(client, group_id, include_details=False, *, include_past=False):
+    route = f'/api/v1/appointment_groups/{_id(group_id)}?include%5B%5D=reserved_times'
+    if include_past:
+        route += '&include_past_appointments=true'
+    record, _ = client.request(route)
     group = _group(record, include_details=include_details, slots=True)
     if str(group['id']) != group_id:
         raise CanvasError('Canvas returned a different appointment group')
@@ -145,49 +148,55 @@ def _individual(group):
         raise CanvasError('This appointment requires a group booking; individual reservation commands cannot change it')
 
 
-def _own(record, identity, group_id, slot_id, *, reservation_id=None, deleted=False):
+def _reservation(record, participant_type, participant_id, group_id, slot_id, *, reservation_id=None, deleted=False):
+    kind = 'user' if participant_type == 'User' else 'group'
+    other = 'group' if kind == 'user' else 'user'
     if (not isinstance(record, dict) or not _numeric(record.get('id')) or
             reservation_id is not None and str(record['id']) != reservation_id or
-            record.get('context_code') != f"user_{identity['user_id']}" or record.get('participant_type') != 'User' or
+            record.get('context_code') != f'{kind}_{participant_id}' or record.get('participant_type') != participant_type or
             type(record.get('appointment_group_id')) is not int or str(record['appointment_group_id']) != group_id or
             type(record.get('parent_event_id')) is not int or str(record['parent_event_id']) != slot_id or
             record.get('workflow_state') not in (('deleted',) if deleted else ('active', 'locked')) or
-            record.get('group') is not None or record.get('series_uuid') or record.get('rrule') or
-            record.get('user') is not None and (not isinstance(record['user'], dict) or
-                type(record['user'].get('id')) is not int or record['user']['id'] != identity['user_id']) or
+            record.get(other) is not None or record.get('series_uuid') or record.get('rrule') or
+            record.get(kind) is not None and (not isinstance(record[kind], dict) or
+                type(record[kind].get('id')) is not int or record[kind]['id'] != participant_id) or
             record.get('hidden') or record.get('locked_for_user')):
-        raise CanvasError('Canvas did not confirm the exact own individual appointment reservation')
+        raise CanvasError('Canvas did not confirm the exact selected appointment participant and reservation')
     return _project(record, EVENT_FIELDS)
 
 
-def _ack(result, group_id, slot_id, *, reservation_id=None, deleted=False):
-    # Native acknowledgements may display a course context, not the underlying User.
+def _ack(result, group_id, slot_id, *, reservation_id=None, deleted=False, participant_type='User'):
+    # Native acknowledgements may display a course context, not the underlying participant.
     # Validate the relation here; a separate GET without child events proves own ownership/state.
     if (not isinstance(result, dict) or not _numeric(result.get('id')) or
             reservation_id is not None and str(result['id']) != reservation_id or
             type(result.get('appointment_group_id')) is not int or str(result['appointment_group_id']) != group_id or
             type(result.get('parent_event_id')) is not int or str(result['parent_event_id']) != slot_id or
-            result.get('participant_type') != 'User' or
+            result.get('participant_type') != participant_type or
             result.get('workflow_state') not in (('deleted',) if deleted else ('active', 'locked'))):
         raise CanvasError('Appointment write outcome uncertain; check Canvas before repeating. No automatic retries.')
     return str(result['id'])
 
 
 def _verify(client, result, identity, group_id, slot_id, *, reservation_id=None, deleted=False,
-            expected=None, comments=None):
-    new_id = _ack(result, group_id, slot_id, reservation_id=reservation_id, deleted=deleted)
+            expected=None, comments=None, participant_type='User', participant_id=None):
+    participant_id = identity['user_id'] if participant_id is None else participant_id
+    new_id = _ack(result, group_id, slot_id, reservation_id=reservation_id, deleted=deleted,
+                  participant_type=participant_type)
     try:
         record = read_event(client, new_id, exclude_children=True)
-        reservation = _own(record, identity, group_id, slot_id, reservation_id=new_id, deleted=deleted)
+        reservation = _reservation(record, participant_type, participant_id, group_id, slot_id,
+                                   reservation_id=new_id, deleted=deleted)
         if expected and any(timestamp(record.get(key)) != timestamp(expected.get(key)) for key in ('start_at', 'end_at')):
             raise CanvasError('Reservation time changed')
         if comments is not None and record.get('comments') != comments:
             raise CanvasError('Reservation comments changed')
     except CanvasError:
-        raise CanvasError('Appointment write was acknowledged, but own state could not be verified. '
+        raise CanvasError('Appointment write was acknowledged, but participant state could not be verified. '
                           'Check Canvas before repeating; no automatic retries.') from None
+    owner = 'own individual' if participant_type == 'User' else 'selected team'
     return {'appointment_reservation': reservation, 'cancelled': deleted,
-            'note': 'Exact own individual reservation state verified by a separate read. '
+            'note': f'Exact {owner} reservation state verified by a separate read. '
                     'The organizer may receive native notifications; no other reservation was intentionally changed.'}
 
 
@@ -233,7 +242,7 @@ def cancel(client, group_id, reservation_id, *, reason=None, yes=False, confirm=
     _individual(group)
     record = read_event(client, reservation_id, exclude_children=True)
     slot_id = str(record.get('parent_event_id'))
-    reservation = _own(record, identity, group_id, slot_id, reservation_id=reservation_id)
+    reservation = _reservation(record, 'User', identity['user_id'], group_id, slot_id, reservation_id=reservation_id)
     _future(reservation)
     if int(reservation_id) not in {item['id'] for item in group['reserved_times']}:
         raise CanvasError('This reservation is not in the reported own reservation inventory')

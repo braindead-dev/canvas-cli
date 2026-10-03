@@ -9,6 +9,17 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('appointment-team-reservations', 'appointment-team-reserve', 'appointment-team-cancel'):
+        from . import team_appointments
+        if args.command == 'appointment-team-reservations':
+            return team_appointments.read(client, args.appointment_group, args.team, max_pages=args.max_pages)
+        options = dict(acknowledge_team_change=args.acknowledge_team_change, max_pages=args.max_pages,
+                       yes=args.yes, confirm=args.confirm)
+        if args.command == 'appointment-team-cancel':
+            return team_appointments.cancel(client, args.appointment_group, args.team, args.reservation,
+                                            reason=args.reason, **options)
+        comments = read_utf8(args.comments_file, label='Reservation comments') if args.comments_file is not None else None
+        return team_appointments.reserve(client, args.appointment_group, args.team, args.slot, comments=comments, **options)
     if args.command in ('appointment-groups', 'appointment-group', 'appointment-reserve', 'appointment-cancel'):
         from . import appointments
         if args.command == 'appointment-groups':

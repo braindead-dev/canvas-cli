@@ -343,6 +343,21 @@ def parser():
             appointments.add_argument('reservation', type=identifier, help='Own reservation ID from reserved_times, never the parent slot')
             appointments.add_argument('--reason', help='Optional reason visible to the organizer')
         _confirmation(appointments)
+    for name in ('appointment-team-reservations', 'appointment-team-reserve', 'appointment-team-cancel'):
+        appointments = sub.add_parser(name, help='Read or preview reservations for one joined course team, not an individual')
+        appointments.add_argument('appointment_group', type=identifier)
+        appointments.add_argument('team', type=identifier, help='Explicit Canvas course group ID, not the Scheduler group ID')
+        if name == 'appointment-team-reservations':
+            continue
+        appointments.add_argument('--acknowledge-team-change', action='store_true',
+                                  help='Required: this change affects every member, including bookings made by teammates')
+        if name == 'appointment-team-reserve':
+            appointments.add_argument('slot', type=identifier, help='Parent slot ID from appointment-group')
+            appointments.add_argument('--comments-file', type=Path, help='Bounded UTF-8 comments shared with the organizer')
+        else:
+            appointments.add_argument('reservation', type=identifier, help='Team reservation ID, never its parent slot')
+            appointments.add_argument('--reason', help='Optional reason visible to the organizer')
+        _confirmation(appointments)
     sub.add_parser('overview', help='Active courses, upcoming work, and to-do items')
     due = sub.add_parser('deadlines', help='Assignment deadlines across active courses')
     due.add_argument('--days', type=int, default=14, help='Look ahead this many days; default 14')

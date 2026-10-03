@@ -35,6 +35,7 @@ tests/
   e2e/
     fixture.py       shared synthetic Canvas/storage HTTPS server
     appointments.py  focused synthetic Scheduler routes and state
+    team_appointments.py  shared-team Scheduler routes and state
     channels.py      focused synthetic contact routes and state
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
