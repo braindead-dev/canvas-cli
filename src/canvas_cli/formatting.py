@@ -36,6 +36,24 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'mastery_paths' in data and not data.get('dry_run'):
+        item_id = data.get('item_id') or data['module_item']['id']
+        module_id = data.get('module_id') or data['module']['id']
+        lines = [f"Course {data['course_id']} module {module_id} item {item_id} | mastery paths"]
+        paths = data['mastery_paths']
+        if paths is None:
+            lines.append('No native mastery-path metadata reported for this item.')
+        else:
+            lines.append(f"Selected set: {paths.get('selected_set_id') or 'none/unknown'}; "
+                         f"locked: {paths.get('locked', 'unknown')}; processing: {paths.get('still_processing', 'unknown')}")
+            for row in paths.get('assignment_sets', []):
+                identifiers = row['assignment_ids']
+                lines.append(f"Set {row['id']} | assignments: " +
+                             (', '.join(str(value) for value in identifiers) or 'none' if identifiers is not None else 'unknown'))
+        if data.get('request_acknowledged'):
+            lines.append('Request acknowledged; ' + ('choice independently verified.' if data['choice_verified'] else
+                                                    'choice not yet verified. Check Canvas before repeating.'))
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'module_sequence' in data:
         lines = [f"Course {data['course_id']} | {data['asset_type']} {data['asset_id']} | {data['matched_occurrences']} occurrence(s)"]
         for node in data['module_sequence']:

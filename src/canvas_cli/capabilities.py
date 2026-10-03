@@ -29,6 +29,7 @@ def describe():
             'snapshot-search (offline)',
         ],
         'read_with_native_side_effects': [
+            'module-paths (own eligible mastery choices and assignment-ID projection; native module/conditional evaluation can have downstream effects, no path chosen or content/assessment navigation)',
             'module-sequence (native previous/next metadata, at most ten occurrences; no content navigation or mastery choice; conditional-release evaluation may have native effects)',
             'module-progress/module-item (metadata through paginated lists; native evaluation may materialize/recalculate progression, no explicit view/done events)',
             'page-revisions/page-revision (metadata by default; native page-read/edit-history permissions, exact numeric page IDs; GET can record module progress or repair legacy imported revision records)',
@@ -43,6 +44,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'module-path-select (own native mastery selection/switch; graded posted trigger and account/inventory/choice-bound preview, explicit assignment-change/switch acknowledgement; separate own choice readback, asynchronous/unverified outcomes labeled, availability/dates/downstream effects not asserted)',
             'module-item-done/module-item-not-done/module-item-mark-read (explicit own native progression events; student permission, account/full-item-inventory/policy-bound preview, matching digest and independent requirement readback; read requires prior-content-access acknowledgement, no assessment/score/submission simulation, planner/downstream effects not asserted)',
             'page-schedule (course RCE publication date/cancel; manager-only, enabled root-account feature, exact-ID revision/content/inventory-bound preview and independent stored-date/draft readback; front/linked-assignment pages refused, future background execution not asserted, no automatic publication/retry)',
             'page-duplicate (native course-only draft copy; separate creation/student-wiki authorization, exact source ID and revision/content/inventory-bound preview; explicit linked-assignment copy acknowledgement and independently verified exact lineage, unchanged source/front page; differences labeled, no automatic retry/publication/rollback)',

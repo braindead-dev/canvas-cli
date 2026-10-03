@@ -41,7 +41,7 @@ def _node(row, modules, client, course_id):
     return projected
 
 
-def _mastery(row, course_id, item_id, client):
+def _mastery(row, course_id, item_id, client, *, include_assignments=False):
     if row is None:
         return None
     if not isinstance(row, dict):
@@ -63,6 +63,25 @@ def _mastery(row, course_id, item_id, client):
         if len(set(identifiers)) != len(identifiers):
             raise CanvasError('Canvas returned duplicate mastery-path sets')
         result['assignment_set_ids'] = identifiers
+        if include_assignments:
+            sets = []
+            for item in row['assignment_sets']:
+                associations = item.get('assignment_set_associations')
+                if associations is not None and not isinstance(associations, list):
+                    raise CanvasError('Canvas returned malformed mastery-path associations')
+                assignment_ids = None
+                if isinstance(associations, list):
+                    assignment_ids = []
+                    for association in associations:
+                        identifier = _id(association, 'assignment_id')
+                        if ('assignment_set_id' in association and
+                                _id(association, 'assignment_set_id') != item['id']):
+                            raise CanvasError('Canvas returned a foreign mastery-path association')
+                        assignment_ids.append(identifier)
+                    if len(set(assignment_ids)) != len(assignment_ids):
+                        raise CanvasError('Canvas returned duplicate mastery-path assignments')
+                sets.append({'id': item['id'], 'assignment_ids': assignment_ids})
+            result['assignment_sets'] = sets
     if result.get('awaiting_choice'):
         result['choose_html_url'] = client.host + f'/courses/{course_id}/modules/items/{item_id}/choose'
     return result
@@ -90,7 +109,7 @@ def _association(client, route, asset_type, asset_id, currents):
             raise CanvasError('Canvas returned an occurrence of a different source asset')
 
 
-def sequence(client, course_id, asset_type, asset_id):
+def sequence(client, course_id, asset_type, asset_id, *, include_assignments=False):
     base(course_id, 'course')
     asset_id = _asset(asset_type, asset_id)
     route, context = _context(client, course_id, 'course')
@@ -110,7 +129,8 @@ def sequence(client, course_id, asset_type, asset_id):
         if not isinstance(row, dict) or row.get('current') is None or any(key not in row for key in ('prev', 'next')):
             raise CanvasError('Canvas returned malformed sequence neighbors')
         node = {key: _node(row[key], modules, client, course_id) for key in ('prev', 'current', 'next')}
-        node['mastery_path'] = _mastery(row.get('mastery_path'), course_id, node['current']['id'], client)
+        node['mastery_path'] = _mastery(row.get('mastery_path'), course_id, node['current']['id'], client,
+                                      include_assignments=include_assignments)
         items.append(node)
     currents = [row['current'] for row in items]
     if len({row['id'] for row in currents}) != len(currents) or asset_type == 'ModuleItem' and len(items) > 1:

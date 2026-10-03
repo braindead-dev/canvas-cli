@@ -18,6 +18,7 @@ from . import (
     appointments,
     channels,
     module_items,
+    module_paths,
     page_authoring,
     page_deletion,
     page_duplication,
@@ -44,6 +45,7 @@ class CanvasFixture(unittest.TestCase):
         cls.calls = []
         appointments.initialize(cls)
         module_items.initialize(cls)
+        module_paths.initialize(cls)
         team_appointments.initialize(cls)
         page_authoring.initialize(cls)
         page_history.initialize(cls)
@@ -190,6 +192,8 @@ class CanvasFixture(unittest.TestCase):
                     return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if module_paths.read(cls, self):
+                    return
                 if module_items.read(cls, self):
                     return
                 if page_scheduling.read(cls, self):
@@ -684,6 +688,8 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if module_paths.write(cls, self, body):
+                    return
                 if module_items.write(cls, self, body):
                     return
                 if page_scheduling.write(cls, self, body):

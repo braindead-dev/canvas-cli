@@ -92,6 +92,24 @@ Previews bind own identity, native participation permission, course, module poli
 
 Done/not-done may sync your planner checkbox; completing a module can change downstream availability or publish an existing final grade to the SIS when configured. Policy is shown in the preview. Those downstream/planner/SIS effects are not independently verified, and confirmation is not an atomic lock. No shared module edits, assessment attempts, submissions or grade edits are requested.
 
+## Mastery-path choices
+
+```sh
+canvas module-paths 123 234 345 --format brief
+canvas module-path-select 123 234 345 678 --acknowledge-path-change
+canvas module-path-select 123 234 345 679 --acknowledge-path-change --acknowledge-path-switch
+```
+
+Discovery reports your currently eligible native choices and their assignment IDs, not every instructor rule or future score range. Missing associations or processing flags remain unknown. Nested assignment models, submission answers and supplied launch URLs are not output. Assignment, graded quiz, discussion and page triggers are supported; linked pages are resolved through the paginated metadata list, not a page-view GET.
+
+Selection is [preview-first](safety.md#confirmation) and restricted to the signed-in student. It requires an available course, native participation, exact module/item occurrence, eligible set, and your graded, posted trigger submission. Previews bind identity, complete module inventory, choices/associations and visible trigger grade. Truncated inventories, missing state, foreign parents and changed previews are refused before a POST. No quiz attempt or grade edit is sent.
+
+Switching requires the additional acknowledgement even for a preview. This changes assignment overrides and can remove other assigned paths, retain shared assignments, affect submission availability, recalculate pacing dates and evaluate modules. The preview lists target IDs and conservative **potential** removals from other currently eligible choices; it cannot prove which other sets are assigned or which assignments Canvas will remove. Deleted/unpublished assignments may be omitted from the response.
+
+A compound response acknowledges the request, not a stored choice. A separate own native sequence verifies a consistently reported selection among multiple eligible choices. Canvas infers a single eligible set ID automatically, so that case stays `accepted_choice_unverified` even if it reports selected. Old/unknown readback also stays unverified: changes may be delayed/cached, concurrent or unapplied. Inspect `module-paths` and Canvas before deciding what to do; the CLI never resends automatically. Missing processing is not “finished.” Assignment availability, due dates, downstream progress and configured SIS effects are not independently verified. Confirmation is not an atomic lock and there is no automatic rollback.
+
+Already-reported choices are refused by default. Use `--reapply-selected-path` only to deliberately reapply that same set, including a pending single automatic path, after checking Canvas. This still requires the full assignment-change acknowledgement and a fresh preview/digest; it can recompute assignment overrides/dates and remove other assigned paths. It does not prove that a background job completed.
+
 ## Turn in work deliberately
 
 ```sh
@@ -113,3 +131,5 @@ Comments are not submissions. Group/graded work may have a shared audience; revi
 [Assignments](https://developerdocs.instructure.com/services/canvas/resources/assignments), [Submissions](https://developerdocs.instructure.com/services/canvas/resources/submissions), [Modules](https://developerdocs.instructure.com/services/canvas/resources/modules), [New Quizzes](https://developerdocs.instructure.com/services/canvas/resources/new_quizzes).
 
 [Native module events and Horizon reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/context_module_items_api_controller.rb), [Sequence association and ten-occurrence limit](https://github.com/instructure/canvas-lms/blob/master/app/helpers/application_helper.rb).
+
+[Own eligible mastery sets and posted grades](https://github.com/instructure/canvas-lms/blob/master/app/models/conditional_release/service.rb), [Native switching, assignment overrides and pacing effects](https://github.com/instructure/canvas-lms/blob/master/app/models/conditional_release/override_handler.rb).

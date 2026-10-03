@@ -139,6 +139,15 @@ def execute(client, args):
     if args.command == 'module-sequence':
         from .module_navigation import sequence
         return sequence(client, args.course_id, args.asset_type, args.asset_id)
+    if args.command in ('module-paths', 'module-path-select'):
+        from . import module_paths
+        if args.command == 'module-paths':
+            return module_paths.read(client, args.course_id, args.module_id, args.item_id, max_pages=args.max_pages)
+        return module_paths.select(client, args.course_id, args.module_id, args.item_id, args.set_id,
+                                   acknowledge_change=args.acknowledge_path_change,
+                                   acknowledge_switch=args.acknowledge_path_switch,
+                                   reapply_selected=args.reapply_selected_path,
+                                   max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('module-item', 'module-item-done', 'module-item-not-done', 'module-item-mark-read'):
         from . import module_items
         if args.command == 'module-item':

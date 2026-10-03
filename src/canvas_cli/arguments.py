@@ -295,6 +295,20 @@ def parser():
                 item.add_argument('--acknowledge-content-viewed', action='store_true',
                                   help='Use only after accessing the content separately; the CLI does not open it')
             _confirmation(item)
+    for name in ('module-paths', 'module-path-select'):
+        paths = sub.add_parser(name, help='Inspect own eligible mastery paths or preview selecting/switching a native choice')
+        paths.add_argument('course_id', type=identifier)
+        paths.add_argument('module_id', type=identifier)
+        paths.add_argument('item_id', type=identifier)
+        if name == 'module-path-select':
+            paths.add_argument('set_id', type=identifier)
+            paths.add_argument('--acknowledge-path-change', action='store_true',
+                               help='Acknowledge own assignment overrides, availability/dates and module-progress effects')
+            paths.add_argument('--acknowledge-path-switch', action='store_true',
+                               help='Required when switching an existing choice; other path assignments can be removed')
+            paths.add_argument('--reapply-selected-path', action='store_true',
+                               help='Deliberately reapply the already-reported set, including a pending automatic path; never automatic retry')
+            _confirmation(paths)
     exports = sub.add_parser('exports', help='List authorized course export jobs without signed download URLs')
     exports.add_argument('course', type=identifier)
     export_status = sub.add_parser('export-status', help='Read one export job without creating a new job')
