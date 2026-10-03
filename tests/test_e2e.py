@@ -35,6 +35,12 @@ class E2E(unittest.TestCase):
         cls.entry = {'id': 301, 'user_id': 7, 'message': '<p>Synthetic original entry</p>',
                      'updated_at': '2026-10-02T12:00:00Z'}
         cls.topic_state = {'subscribed': False, 'read_state': 'unread'}
+        cls.personal_file = {'id': 881, 'folder_id': 91, 'display_name': 'synthetic-personal.txt',
+                             'size': 20, 'uuid': 'synthetic-file-verifier', 'updated_at': '2026-10-02T12:00:00Z'}
+        cls.personal_root = {'id': 91, 'context_type': 'User', 'context_id': 7, 'name': 'Root',
+                             'parent_folder_id': None, 'for_submissions': False}
+        cls.personal_destination = {**cls.personal_root, 'id': 92, 'name': 'Notes', 'parent_folder_id': 91}
+        cls.personal_children = []
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -60,6 +66,8 @@ class E2E(unittest.TestCase):
                 if self.path == '/api/v1/courses/102/pages?per_page=100':
                     self.send_response(404); self.end_headers(); return
                 if self.path.startswith('/api/v1/courses/102/pages?per_page=100&search_term='):
+                    self.send_response(404); self.end_headers(); return
+                if self.path == '/api/v1/files/881' and cls.personal_file is None:
                     self.send_response(404); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -167,6 +175,19 @@ class E2E(unittest.TestCase):
                     data = [{'id': 777, 'display_name': 'synthetic.txt', 'size': 22}]
                 elif self.path == '/api/v1/users/self/profile':
                     data = {'id': 7, 'name': 'Synthetic Student'}
+                elif self.path == '/api/v1/files/881':
+                    data = cls.personal_file
+                elif self.path in ('/api/v1/folders/91', '/api/v1/users/self/folders/root'):
+                    data = cls.personal_root
+                elif self.path == '/api/v1/folders/92':
+                    data = cls.personal_destination
+                elif self.path == '/api/v1/users/self/folders?per_page=100':
+                    self.send_header('Link', '</api/v1/users/self/folders?page=2>; rel="next"')
+                    data = [cls.personal_root]
+                elif self.path == '/api/v1/users/self/folders?page=2':
+                    data = [cls.personal_destination, *cls.personal_children]
+                elif self.path == '/api/v1/folders/92/folders?per_page=100':
+                    data = cls.personal_children
                 elif self.path == '/api/v1/courses/105/content_exports?per_page=100':
                     self.send_header('Link', '</api/v1/courses/105/content_exports?page=2>; rel="next"')
                     data = [{'id': 51, 'user_id': 7, 'export_type': 'zip', 'workflow_state': 'exporting'}]
@@ -308,6 +329,24 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path in ('/api/v1/files/881', '/api/v1/folders/92/copy_file', '/api/v1/folders/92/folders'):
+                    cls.personal_write = body
+                    if self.path.endswith('/folders'):
+                        data = {**cls.personal_destination, 'id': 94, 'parent_folder_id': 92, 'name': body['name']}
+                        cls.personal_children.append(data)
+                    elif self.path.endswith('/copy_file'):
+                        data = {**cls.personal_file, 'id': 882, 'folder_id': 92}
+                    elif self.command == 'DELETE':
+                        data = cls.personal_file.copy()
+                        cls.personal_file = None
+                    else:
+                        cls.personal_file = {**cls.personal_file,
+                                             'display_name': body.get('name', cls.personal_file['display_name']),
+                                             'folder_id': int(body.get('parent_folder_id', cls.personal_file['folder_id'])),
+                                             'updated_at': '2026-10-02T13:00:00Z'}
+                        data = cls.personal_file
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 state_paths = ('/api/v1/courses/101/discussion_topics/202', '/api/v1/groups/11/discussion_topics/203')
                 if any(self.path == prefix + suffix for prefix in state_paths
                        for suffix in ('/read', '/subscribed', '/entries/301/read')):
@@ -576,6 +615,62 @@ class E2E(unittest.TestCase):
                             self.assertEqual(self.topic_state['read_state'], 'unread' if method == 'DELETE' else 'read')
         finally:
             self.__class__.entry, self.__class__.topic_state = original_entry, original_state
+
+    def test_personal_file_organization_and_subfolder_creation_over_tls(self):
+        original_file, original_children = self.personal_file.copy(), self.personal_children.copy()
+        try:
+            root = self.invoke('my-root')
+            self.assertEqual(root.returncode, 0, root.stderr)
+            self.assertEqual(json.loads(root.stdout)['id'], 91)
+            listing = self.invoke('my-folders')
+            self.assertEqual(listing.returncode, 0, listing.stderr)
+            self.assertEqual([row['id'] for row in json.loads(listing.stdout)], [91, 92])
+            commands = [('my-folder-create', '92', '--name', 'Synthetic child'),
+                        ('my-file-copy', '881', '--folder', '92'),
+                        ('my-file-edit', '881', '--name', 'revised.txt', '--folder', '92'),
+                        ('my-file-delete', '881', '--permanent')]
+            for command in commands:
+                with self.subTest(command=command):
+                    before = len(self.calls)
+                    preview = self.invoke(*command)
+                    self.assertEqual(preview.returncode, 0, preview.stderr)
+                    data = json.loads(preview.stdout)
+                    self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                    denied = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                    self.assertNotEqual(denied.returncode, 0)
+                    self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                    sent = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+                    self.assertEqual(sent.returncode, 0, sent.stderr)
+                    self.assertEqual(self.personal_write, data['body'] or {})
+                    self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                                     [(data['method'], data['route'])])
+                    if command[0] == 'my-file-copy': self.assertEqual(self.personal_file, original_file)
+                    if command[0] == 'my-file-edit':
+                        reread = self.invoke('file-info', '881')
+                        self.assertEqual(json.loads(reread.stdout)['display_name'], 'revised.txt')
+                        self.assertEqual(json.loads(reread.stdout)['folder_id'], 92)
+            deleted = self.invoke('file-info', '881')
+            self.assertNotEqual(deleted.returncode, 0)
+            self.assertIn('HTTP 404', deleted.stderr)
+            self.assertEqual(self.personal_children[0]['parent_folder_id'], 92)
+        finally:
+            self.__class__.personal_file, self.__class__.personal_children = original_file, original_children
+
+    def test_personal_file_delete_requires_ack_and_foreign_destinations_are_refused(self):
+        original = self.personal_destination.copy()
+        try:
+            before = len(self.calls)
+            result = self.invoke('my-file-delete', '881')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('--permanent', result.stderr)
+            self.assertEqual(len(self.calls), before)
+            self.__class__.personal_destination = {**original, 'context_type': 'Course'}
+            result = self.invoke('my-file-copy', '881', '--folder', '92')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('own accessible personal', result.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            self.__class__.personal_destination = original
 
     def test_planner_pagination_and_read_only_personal_notes(self):
         before = len(self.calls)

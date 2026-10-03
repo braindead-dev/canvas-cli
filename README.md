@@ -277,6 +277,23 @@ Use ISO timestamps with seconds and `Z` or an explicit UTC offset for timed even
 
 The read-only `calendar` command also accepts repeated `--group` filters. `--undated` returns only undated items; `--all` returns dated and undated items. Neither can be combined with a date window, since Canvas would ignore it. `event ID` reads one numeric calendar event ID without changing it; assignment calendar entries remain available through `calendar --type assignment`.
 
+## Personal Canvas file organization
+
+`my-root` returns your personal root folder ID and `my-folders` lists your paginated personal folders. `my-folder-create PARENT_ID --name NAME` creates one subfolder after an account-bound preview and matching confirmation. It refuses an existing same-named child, changed sibling inventory, inaccessible folders, other users' folders, course/group folders and submission folders. Use numeric IDs from your own inventory, not a guessed course folder.
+
+`my-file-edit FILE_ID --name NAME --folder DESTINATION_ID` renames and/or moves a personal file. Either option can be used alone. `my-file-copy FILE_ID --folder DESTINATION_ID` copies an accessible file into your personal folder without modifying the source; a readable course file can be copied if Canvas permits it. Both use `on_duplicate=rename`, never overwrite. Canvas may append a qualifier to resolve a collision, so inspect the actual name in the result. These commands do not change publication, visibility, sharing or lock settings. Preview fingerprints bind file metadata and destination/account; they do not prove unchanged binary bytes.
+
+`my-file-delete FILE_ID --permanent` previews **irreversible file removal**, not a recoverable trash action. Execution still requires `--yes --confirm DIGEST`; no deletion is sent by default. It only accepts a file in your own accessible non-submission folder, does not expose Canvas's privileged `replace` option, and cannot be combined with edits/copying. Deleting a referenced file can break links. Submitted files may be protected further by Canvas. These new commands have unit and stateful synthetic HTTPS tests only; no live file was created, moved, copied or deleted. [Canvas's file API](https://developerdocs.instructure.com/services/canvas/resources/files) documents these operations and the irreversible deletion behavior.
+
+```sh
+canvas-pocket my-root
+canvas-pocket my-folders --format brief
+canvas-pocket my-folder-create 123 --name 'Study notes'
+canvas-pocket my-file-edit 456 --name revised.txt --folder 123
+canvas-pocket my-file-copy 456 --folder 123
+# Every write is a preview until repeated with --yes --confirm DIGEST.
+```
+
 ## Planner checkboxes
 
 `planner-override-create TYPE ITEM_ID` previews a completion/dismissal override for one item uniquely identified in your own paginated planner feed. Use the exact `plannable_type`/`plannable_id` from `planner`, and `--start`/`--end` if it falls outside the default window. All ten documented types are supported, including personal notes, calendar events, assignments, discussion topics, announcements, pages and quiz metadata. No question content is fetched and no assessment attempt is started. Existing overrides are not duplicated; the command directs you to edit the existing ID instead. Canvas can normalize quiz/discussion/page assignments to their linked planner object; the returned associated assignment must match before the CLI reports success.

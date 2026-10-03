@@ -317,6 +317,24 @@ def parser():
     grades.add_argument('course', type=identifier)
     for name in ('folders', 'sections', 'outline', 'tabs', 'front-page'):
         sub.add_parser(name).add_argument('course', type=identifier)
+    sub.add_parser('my-folders', help='List your paginated personal Canvas folders')
+    sub.add_parser('my-root', help='Read your personal root folder ID')
+    personal_folder = sub.add_parser('my-folder-create', help='Preview one subfolder in your personal Canvas files')
+    personal_folder.add_argument('parent', type=identifier)
+    personal_folder.add_argument('--name', required=True)
+    personal_folder.add_argument('--yes', action='store_true')
+    personal_folder.add_argument('--confirm')
+    for name in ('my-file-edit', 'my-file-copy', 'my-file-delete'):
+        s = sub.add_parser(name, help='Preview organizing a personal Canvas file without overwriting or sharing')
+        s.add_argument('file', type=identifier)
+        if name != 'my-file-delete':
+            s.add_argument('--folder', type=identifier, required=name == 'my-file-copy')
+        if name == 'my-file-edit':
+            s.add_argument('--name')
+        if name == 'my-file-delete':
+            s.add_argument('--permanent', action='store_true', help='Acknowledge irreversible file destruction')
+        s.add_argument('--yes', action='store_true')
+        s.add_argument('--confirm')
     for name in ('folder', 'folder-files', 'folder-folders'):
         sub.add_parser(name).add_argument('folder', type=identifier)
     topic = sub.add_parser('topic', help='Read one discussion topic')
@@ -368,7 +386,8 @@ def parser():
             s.add_argument('--confirm', help='Digest returned by the preview')
             s.add_argument('--yes', action='store_true', help='Post only if the fresh preview matches --confirm')
     for name in ('entry', 'entry-edit', 'entry-delete'):
-        s = sub.add_parser(name, help='Read or preview changing one of your own discussion entries')
+        s = sub.add_parser(name, help='Read one visible discussion entry' if name == 'entry' else
+                           'Preview editing or deleting one of your own discussion entries')
         s.add_argument('course', type=identifier, metavar='CONTEXT_ID')
         s.add_argument('topic', type=identifier)
         s.add_argument('entry', type=identifier)
@@ -684,6 +703,18 @@ def run(args):
         route = f'/api/v1/folders/{args.folder}'
         return (client.request(route)[0] if args.command == 'folder' else
                 client.list(route + ('/files' if args.command == 'folder-files' else '/folders') + '?per_page=100', args.max_pages))
+    if args.command in ('my-folders', 'my-root'):
+        from .personal_files import folders
+        return folders(client, args.max_pages, root=args.command == 'my-root')
+    if args.command == 'my-folder-create':
+        from .personal_files import create_folder
+        return create_folder(client, args.parent, args.name, max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+    if args.command in ('my-file-edit', 'my-file-copy', 'my-file-delete'):
+        from .personal_files import change_file
+        return change_file(client, args.file, name=getattr(args, 'name', None),
+                           destination=getattr(args, 'folder', None), delete=args.command == 'my-file-delete',
+                           permanent=getattr(args, 'permanent', False), copy=args.command == 'my-file-copy',
+                           yes=args.yes, confirm=args.confirm)
     base = f'/api/v1/courses/{args.course}'
     if args.command == 'grades':
         profile = client.request('/api/v1/users/self/profile')[0]
@@ -816,6 +847,12 @@ def brief(data):
         state = data['discussion_state']
         return (f"Discussion {state['topic_id']}: {state['action']}" +
                 (f" (entry {state['entry_id']})" if state.get('entry_id') else '') + f"\n{data['note']}")
+    if isinstance(data, dict) and 'personal_file' in data:
+        file = data['personal_file']
+        return f"File {file['id']}: {file.get('display_name') or 'Untitled'}\n{data['note']}"
+    if isinstance(data, dict) and 'personal_folder' in data:
+        folder = data['personal_folder']
+        return f"Folder {folder['id']}: {folder['name']}\n{data['note']}"
     if isinstance(data, dict) and 'entry' in data and 'note' in data:
         return f"Entry {data['entry']['id']} updated.\n{data['note']}"
     if isinstance(data, dict) and data.get('deleted') and 'entry_id' in data:
