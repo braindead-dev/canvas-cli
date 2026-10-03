@@ -1,5 +1,7 @@
 """Efficient own-course submission reads with opt-in history and private content."""
 
+import math
+import re
 from urllib.parse import urlencode
 
 from .client import CanvasError
@@ -37,16 +39,46 @@ def _item(row, assignment_id, user_id, content, *, history=False):
     return redact(result)
 
 
+def _rubric(value, include_text):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise CanvasError('Canvas returned invalid indexed rubric feedback')
+    result = {}
+    for criterion, row in value.items():
+        if (not isinstance(criterion, str) or not criterion or len(criterion) > 255 or
+                re.search(r'[\x00-\x1f\x7f]', criterion) or not isinstance(row, dict)):
+            raise CanvasError('Canvas returned invalid rubric criterion feedback')
+        item = {}
+        for key in ('rating_id', 'points') + (('comments',) if include_text else ()):
+            if key not in row:
+                continue
+            field = row[key]
+            if key == 'points':
+                valid = field is None or type(field) is int or type(field) is float and math.isfinite(field)
+            else:
+                valid = field is None or isinstance(field, str)
+            if not valid:
+                raise CanvasError('Canvas returned invalid rubric feedback fields')
+            item[key] = field
+        result[criterion] = item
+    return result
+
+
 def read(client, course_id, max_pages=100, *, assignment_ids=None, state=None,
-         include_history=False, include_comments=False, include_content=False):
+         include_history=False, include_comments=False, include_content=False,
+         include_rubric=False, include_feedback_text=False):
     _number(course_id)
     if assignment_ids is not None and not isinstance(assignment_ids, (list, tuple)):
         raise CanvasError('Assignment filters must be a list of positive numeric IDs')
     selected = list(dict.fromkeys(_number(value) for value in assignment_ids or []))
     if state is not None and state not in STATES:
         raise CanvasError('Unsupported native submission workflow state')
-    if any(type(flag) is not bool for flag in (include_history, include_comments, include_content)):
+    if any(type(flag) is not bool for flag in (include_history, include_comments, include_content,
+                                             include_rubric, include_feedback_text)):
         raise CanvasError('Submission association flags must be explicit booleans')
+    if include_feedback_text and not (include_comments or include_rubric):
+        raise CanvasError('Feedback text requires requested comment or rubric associations')
     identity = account(client)
     query = [('student_ids[]', str(identity['user_id'])), ('include[]', 'assignment'), ('per_page', '100')]
     query.extend(('assignment_ids[]', value) for value in selected)
@@ -56,6 +88,8 @@ def read(client, course_id, max_pages=100, *, assignment_ids=None, state=None,
         query.append(('include[]', 'submission_history'))
     if include_comments:
         query.append(('include[]', 'submission_comments'))
+    if include_rubric:
+        query.append(('include[]', 'rubric_assessment'))
     rows = client.list(f'/api/v1/courses/{course_id}/students/submissions?' + urlencode(query), max_pages)
     output, seen = [], set()
     for row in rows:
@@ -76,14 +110,21 @@ def read(client, course_id, max_pages=100, *, assignment_ids=None, state=None,
                                        assignment.get('course_id') is not None and (
                                            type(assignment['course_id']) is not int or str(assignment['course_id']) != course_id)):
             raise CanvasError('Canvas returned a different assignment or course association')
+        if (row.get('assignment_visible') is not None and type(row['assignment_visible']) is not bool or
+                assignment and assignment.get('published') is not None and type(assignment['published']) is not bool):
+            raise CanvasError('Canvas returned invalid submission visibility metadata')
         readable = row.get('assignment_visible') is not False and (not assignment or assignment.get('published') is not False)
         content = include_content and readable
+        feedback_text = (include_content or include_feedback_text) and readable
         item = _item(row, assignment_id, identity['user_id'], content)
         item['assignment'] = ({key: assignment.get(key) for key in
-                               ('id', 'course_id', 'name', 'due_at', 'published', 'html_url')}
+                               ('id', 'course_id', 'name', 'due_at', 'published', 'html_url',
+                                'points_possible', 'grading_type', 'omit_from_final_grade')}
                               if assignment else None)
         if include_content and not readable:
             item['content_withheld'] = 'Assignment is not currently visible/published; no bodies or attachments exposed.'
+        if include_feedback_text and not readable:
+            item['feedback_text_withheld'] = 'Assignment is not currently visible/published; no feedback text exposed.'
         if include_history:
             history = row.get('submission_history')
             if history is not None and not isinstance(history, list):
@@ -96,14 +137,21 @@ def read(client, course_id, max_pages=100, *, assignment_ids=None, state=None,
                 raise CanvasError('Canvas returned invalid submission comments')
             item['submission_comments'] = ([{key: comment[key] for key in
                                              ('id', 'author_id', 'created_at', 'edited_at') +
-                                             (('comment', 'media_comment', 'attachments') if content else ())
+                                             (('comment', 'media_comment', 'attachments') if feedback_text else ())
                                              if key in comment} for comment in comments] if comments is not None else None)
+        if include_rubric:
+            item['rubric_assessment'] = _rubric(row.get('rubric_assessment'), feedback_text) if readable else None
+            if not readable:
+                item['rubric_assessment_withheld'] = 'Assignment is not currently visible/published; rubric feedback withheld.'
         output.append(redact(item))
     return {**identity, 'course_id': int(course_id), 'submissions': output,
             'assignment_ids': [int(value) for value in selected], 'workflow_state': state,
             'include_history': include_history, 'include_comments': include_comments, 'include_content': include_content,
+            'include_rubric': include_rubric, 'include_feedback_text': include_feedback_text,
             'complete_for_endpoint': True, 'complete_coursework_inventory': False,
             'note': 'Own native submission records only, with all pages followed. Missing associations remain unknown. '
-                    'History and bodies may contain private academic data; grades can describe an earlier attempt '
+                    'History and bodies may contain private academic data; rubric criteria/ratings are native IDs, '
+                    'not descriptions or proof of grade weighting. Feedback-only text does not include submitted answers. '
+                    'Grades can describe an earlier attempt '
                     'when grade_matches_current_submission is false. GET only; no read_status inclusion, '
                     'assessment attempts, grading or submission writes.'}

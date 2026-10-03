@@ -91,3 +91,40 @@ class SubmissionReadTests(unittest.TestCase):
         self.client.list.side_effect = CanvasError('Denied', status=403)
         with self.assertRaises(CanvasError):
             read(self.client, '101')
+
+    def test_indexed_rubric_metadata_and_feedback_only_text_are_separate_from_submitted_content(self):
+        self.row['rubric_assessment'] = {'_criterion': {'rating_id': 'rating1', 'points': 0,
+                                                       'comments': 'Private rubric comment', 'unknown': 'never echo'}}
+        result = read(self.client, '101', include_rubric=True)
+        self.assertEqual(result['submissions'][0]['rubric_assessment'], {'_criterion': {'rating_id': 'rating1', 'points': 0}})
+        self.assertNotIn('Private', str(result))
+        result = read(self.client, '101', include_rubric=True, include_comments=True, include_feedback_text=True)
+        self.assertIn('Private rubric comment', str(result))
+        self.assertIn('Private feedback', str(result))
+        self.assertNotIn('Private submitted work', str(result))
+        self.assertNotIn('never echo', str(result))
+        self.assertNotIn('submission_history', result['submissions'][0])
+
+    def test_rubric_missing_hidden_malformed_and_visibility_flags_are_not_silent_content_leaks(self):
+        item = read(self.client, '101', include_rubric=True)['submissions'][0]
+        self.assertIsNone(item['rubric_assessment'])
+        for rubric in ([], {'': {}}, {'a': []}, {'a': {'points': True}}, {'a': {'points': float('nan')}},
+                       {'a': {'rating_id': 1}}, {'a': {'comments': False}}, {'has\nnewline': {}}):
+            self.client.list.return_value = [{**self.row, 'rubric_assessment': rubric}]
+            with self.subTest(rubric=rubric), self.assertRaises(CanvasError):
+                read(self.client, '101', include_rubric=True, include_feedback_text=True)
+        self.client.list.return_value = [{**self.row, 'assignment_visible': False, 'rubric_assessment': 'unreadable private rubric'}]
+        item = read(self.client, '101', include_rubric=True, include_feedback_text=True)['submissions'][0]
+        self.assertIn('rubric_assessment_withheld', item)
+        self.assertNotIn('unreadable private rubric', str(item))
+        for patch in ({'assignment_visible': 0}, {'assignment': {**self.row['assignment'], 'published': 'false'}}):
+            self.client.list.return_value = [{**self.row, **patch}]
+            with self.assertRaises(CanvasError):
+                read(self.client, '101', include_content=True)
+        self.client.request.reset_mock()
+        self.client.list.reset_mock()
+        for options in ({'include_rubric': 1}, {'include_feedback_text': True}, {'include_feedback_text': 'true'}):
+            with self.subTest(options=options), self.assertRaises(CanvasError):
+                read(self.client, '101', **options)
+        self.client.request.assert_not_called()
+        self.client.list.assert_not_called()

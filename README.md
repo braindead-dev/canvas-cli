@@ -107,6 +107,10 @@ canvas-pocket work --days 30
 canvas-pocket submissions 123 --state submitted
 canvas-pocket submissions 123 --assignment 456 --include-history
 canvas-pocket submissions 123 --include-comments --include-content
+canvas-pocket submissions 123 --include-rubric
+canvas-pocket feedback 123 --format brief
+canvas-pocket feedback 123 --include-text --assignment 456
+canvas-pocket feedback 123 --since 2026-10-01T00:00:00Z --timezone America/Los_Angeles
 canvas-pocket --format brief missing --timezone America/Los_Angeles
 canvas-pocket missing --course 123 --course 456 --submittable --current-grading-period
 canvas-pocket missing --include-planner
@@ -450,6 +454,14 @@ canvas-pocket entry-delete 123 456 789 --context group
 `topic-subscribe`/`topic-unsubscribe` change only your notifications for one topic. `topic-mark-read`/`topic-mark-unread` change only your read marker for the initial topic text, not all replies. `entry-mark-read`/`entry-mark-unread` change your marker for one visible entry, including another author's post, without changing its content. They all take context/topic IDs, entry commands also take an entry ID, and `--context group` selects group routes. Every change is separately previewed and digest-confirmed; ordinary reads never call these mutation endpoints. Explicit subscription changes remain possible for a closed topic, subject to Canvas access controls.
 
 For entry markers, optional `--forced-read-state` sets Canvas's manual override and `--no-forced-read-state` clears it. Omit both to leave the override unchanged. Changing any current target/account/state invalidates confirmation. Initial-post restrictions still block entry lookups; topic-text and subscription operations do not read entries at all. The API's empty HTTP 204 acknowledges success; it does not mean content was read by a person or coursework completed. These state controls have synthetic HTTPS coverage only.
+
+## Own feedback
+
+`feedback COURSE_ID` assembles your own reported grades, submission-comment metadata and native indexed rubric points/rating IDs after fully paginating the own-submission endpoint. `--include-text` opts into comment and rubric feedback only, not submitted answers, prior attempts, media/provider data or attachment links. Repeat `--assignment` to narrow the native request. `submissions --include-rubric` also exposes the association directly; rubric text there requires the existing broader `--include-content` opt-in.
+
+The view sorts native reassignment flags first, grades that do not match the current attempt next, and then reported timestamps newest first. These are review cues, not an invented workload priority or proof an assignment is complete. It reports raw scores and points possible without estimating course grades/weighting, and preserves unknown associations instead of calling them zero comments/no rubric. Native criterion/rating IDs are not rubric descriptions. Comments can be yours or peers', not necessarily instructor feedback.
+
+`--since` is an inclusive local filter on reported grading, posting and comment-created/edited timestamps, with seconds and an explicit offset required. Feedback with uncertain dates stays included and counted. It is not a complete change/audit log; unavailable or unreported associations remain unknown. `--timezone local` (default) or an IANA zone controls human-readable times, not deadlines. Feedback text and rubric results are withheld for explicitly invisible/unpublished assignments. Malformed, foreign-owner or truncated inventories fail without partial output. All calls are GETs: no `include[]=read_status`, read-marker changes, assessment attempts, grading or submissions. Tests use synthetic HTTPS records; no real feedback was marked read. See [Canvas's paginated submissions API](https://developerdocs.instructure.com/services/canvas/resources/submissions#method.submissions_api.for_students) and [native indexed rubric serialization](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/rubric_assessment.rb).
 
 ## Own profile
 

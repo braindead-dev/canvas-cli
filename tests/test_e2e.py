@@ -890,6 +890,126 @@ class E2E(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
 
+    def test_feedback_summary_follows_pages_with_own_grade_comments_and_rubric_but_never_answers(self):
+        original = list(self.student_submissions)
+        try:
+            type(self).student_submissions = [{**original[0], 'grade': 'B+', 'score': 8.5,
+                'graded_at': '2026-10-01T18:00:00Z', 'posted_at': '2026-10-01T19:00:00Z',
+                'assignment': {**original[0]['assignment'], 'points_possible': 10},
+                'submission_comments': [{'id': 41, 'author_id': 8, 'created_at': '2026-10-02T19:00:00Z',
+                                         'comment': 'Synthetic feedback-only comment',
+                                         'attachments': [{'url': 'https://example.edu/synthetic-private-feedback-attachment'}]}],
+                'rubric_assessment': {'_criterion': {'points': 8.5, 'rating_id': 'rating1',
+                                                      'comments': 'Synthetic rubric-only comment',
+                                                      'private': 'synthetic-private-rubric-extra'}}}]
+            before = len(self.calls)
+            result = self.invoke('feedback', '101', '--timezone', 'America/Los_Angeles', '--format', 'brief')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Grade does not match the current attempt', result.stdout)
+            self.assertIn('score 8.5 / 10', result.stdout)
+            self.assertIn('12:00 PM PDT', result.stdout)
+            self.assertNotIn('feedback-only comment', result.stdout)
+            self.assertNotIn('rubric-only comment', result.stdout)
+            self.assertNotIn('Synthetic private submitted body', result.stdout)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            routes = [route for _, route in self.calls[before:]]
+            self.assertEqual(len(routes), 3)
+            query = parse_qs(urlsplit(routes[1]).query)
+            self.assertEqual(query['student_ids[]'], ['7'])
+            self.assertEqual(query['include[]'], ['assignment', 'submission_comments', 'rubric_assessment'])
+            self.assertNotIn('read_status', routes[1])
+            result = self.invoke('feedback', '101', '--include-text', '--assignment', '88')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            item = json.loads(result.stdout)['feedback'][0]
+            self.assertEqual(item['comments'][0]['comment'], 'Synthetic feedback-only comment')
+            self.assertEqual(item['rubric_assessment']['_criterion']['comments'], 'Synthetic rubric-only comment')
+            self.assertNotIn('Synthetic private submitted body', result.stdout)
+            self.assertNotIn('Synthetic first attempt', result.stdout)
+            self.assertNotIn('synthetic-private', result.stdout)
+            self.assertNotIn('attachment', str(item['comments']))
+        finally:
+            type(self).student_submissions = original
+
+    def test_feedback_since_priority_uncertain_dates_and_empty_native_inventory_over_tls(self):
+        original = list(self.student_submissions)
+        try:
+            base = {'user_id': 7, 'score': 0, 'grade': '0', 'workflow_state': 'graded',
+                    'grade_matches_current_submission': True, 'submission_comments': [], 'rubric_assessment': {}}
+            type(self).student_submissions = [
+                {**base, 'assignment_id': 88, 'assignment': {'id': 88}, 'graded_at': '2026-10-01T00:00:00Z'},
+                {**base, 'assignment_id': 89, 'assignment': {'id': 89}, 'graded_at': '2026-10-03T00:00:00Z', 'redo_request': True},
+                {**base, 'assignment_id': 90, 'assignment': {'id': 90}, 'graded_at': None, 'grade_matches_current_submission': False},
+                {'user_id': 7, 'assignment_id': 91, 'assignment': {'id': 91}, 'submission_comments': []},
+            ]
+            result = self.invoke('feedback', '101', '--since', '2026-10-02T00:00:00Z')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual([row['assignment_id'] for row in data['feedback']], [89, 90])
+            self.assertEqual(data['excluded_before_since'], 1)
+            self.assertEqual(data['excluded_no_reported_feedback'], 1)
+            self.assertEqual(data['included_uncertain_dates'], 1)
+            self.assertFalse(data['complete_coursework_inventory'])
+            result = self.invoke('feedback', '101', '--assignment', '92', '--format', 'brief')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('not proof of completed coursework', result.stdout)
+        finally:
+            type(self).student_submissions = original
+
+    def test_feedback_truncation_foreign_owner_malformed_rubric_and_hidden_assignment_fail_safely(self):
+        original = list(self.student_submissions)
+        try:
+            result = self.invoke('feedback', '101', '--max-pages', '1')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('page limit', result.stderr.lower())
+            self.assertEqual(result.stdout, '')
+            for patch in ({'user_id': 8}, {'score': True}, {'rubric_assessment': {'a': {'points': True}}},
+                          {'graded_at': 'not a timestamp'}):
+                type(self).student_submissions = [{**original[0], **patch}]
+                result = self.invoke('feedback', '101', '--include-text')
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertEqual(result.stdout, '')
+                self.assertNotIn('Synthetic private', result.stderr)
+            type(self).student_submissions = [{**original[0], 'assignment_visible': False,
+                                               'rubric_assessment': {'a': {'comments': 'Synthetic hidden rubric', 'points': 10}}}]
+            result = self.invoke('feedback', '101', '--include-text')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            item = json.loads(result.stdout)['feedback'][0]
+            self.assertIn('feedback_text_withheld', item)
+            self.assertIsNone(item['rubric_assessment'])
+            self.assertNotIn('Synthetic hidden rubric', result.stdout)
+            self.assertNotIn('Synthetic private feedback', result.stdout)
+            before = len(self.calls)
+            for arguments in (('--since', '2026-10-02'), ('--since', '2026-10-02T00:00:00'),
+                              ('--timezone', 'invalid/synthetic')):
+                result = self.invoke('feedback', '101', *arguments)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(self.calls[before:], [])
+        finally:
+            type(self).student_submissions = original
+
+    def test_bulk_rubric_association_is_opt_in_and_metadata_first_over_tls(self):
+        original = list(self.student_submissions)
+        try:
+            type(self).student_submissions = [{**original[0], 'rubric_assessment': {
+                '_criterion': {'rating_id': 'rating1', 'points': 0, 'comments': 'Synthetic private rubric comment'}}}]
+            result = self.invoke('submissions', '101')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn('rubric_assessment', result.stdout)
+            before = len(self.calls)
+            result = self.invoke('submissions', '101', '--include-rubric')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            item = json.loads(result.stdout)['submissions'][0]
+            self.assertEqual(item['rubric_assessment'], {'_criterion': {'rating_id': 'rating1', 'points': 0}})
+            self.assertNotIn('Synthetic private', result.stdout)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            query = parse_qs(urlsplit(self.calls[before + 1][1]).query)
+            self.assertEqual(query['include[]'], ['assignment', 'rubric_assessment'])
+            result = self.invoke('submissions', '101', '--include-rubric', '--include-content')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Synthetic private rubric comment', result.stdout)
+        finally:
+            type(self).student_submissions = original
+
     def test_own_profile_is_metadata_first_with_explicit_bio_email_and_no_feed_secrets(self):
         before = len(self.calls)
         result = self.invoke('profile', '--format', 'brief')

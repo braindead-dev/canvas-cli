@@ -17,7 +17,7 @@ def describe():
             'planner-overrides', 'planner-override', 'module-progress', 'overview', 'deadlines', 'work', 'agenda', 'missing',
             'exports', 'export-status',
             'news', 'linked-files', 'assignments', 'assignment',
-            'assignment-groups', 'assignment-group', 'submission', 'submissions', 'grades', 'peer-reviews',
+            'assignment-groups', 'assignment-group', 'submission', 'submissions', 'feedback', 'grades', 'peer-reviews',
             'syllabus', 'tabs', 'front-page', 'modules', 'module-items', 'outline', 'pages', 'page',
             'files', 'my-files', 'file-info', 'folders', 'my-folders', 'folder', 'folder-files', 'folder-folders',
             'file-quota',

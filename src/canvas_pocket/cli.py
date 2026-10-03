@@ -461,7 +461,14 @@ def parser():
     submissions.add_argument('--state', choices=('submitted', 'unsubmitted', 'graded', 'pending_review'))
     submissions.add_argument('--include-history', action='store_true')
     submissions.add_argument('--include-comments', action='store_true', help='Comment metadata; bodies require --include-content')
+    submissions.add_argument('--include-rubric', action='store_true', help='Native indexed rubric points/rating IDs; text requires --include-content')
     submissions.add_argument('--include-content', action='store_true', help='Opt in to private bodies, attachment links and feedback text')
+    feedback = sub.add_parser('feedback', help='Own reported grades/comments/rubric results, not submitted answers or a completion checklist')
+    feedback.add_argument('course', type=identifier)
+    feedback.add_argument('--assignment', type=identifier, action='append', help='Limit to an assignment; repeatable')
+    feedback.add_argument('--include-text', action='store_true', help='Opt in to feedback text only, never submitted answers or attachment links')
+    feedback.add_argument('--since', help='Reported timestamps since ISO time with seconds and explicit offset; unknown dates stay included')
+    feedback.add_argument('--timezone', default='local', help='local or an IANA display time zone')
     peer_reviews = sub.add_parser('peer-reviews', help='Read reviews of your submission, not a complete list of reviews you owe')
     peer_reviews.add_argument('course', type=identifier)
     peer_reviews.add_argument('assignment', type=identifier)
@@ -1146,7 +1153,11 @@ def run(args):
         from .submissions import read
         return read(client, args.course, args.max_pages, assignment_ids=args.assignment, state=args.state,
                     include_history=args.include_history, include_comments=args.include_comments,
-                    include_content=args.include_content)
+                    include_content=args.include_content, include_rubric=args.include_rubric)
+    if args.command == 'feedback':
+        from .feedback_read import read
+        return read(client, args.course, args.max_pages, assignment_ids=args.assignment, include_text=args.include_text,
+                    since=args.since, time_zone=args.timezone)
     if args.command == 'peer-reviews':
         from .peer_reviews import read
         return read(client, args.course, args.assignment, args.max_pages, scope=args.scope,
@@ -1355,6 +1366,34 @@ def brief(data):
                          f"{row.get('workflow_state') or 'unknown'} | attempt {row.get('attempt', 'unknown')}")
             if row.get('grade_matches_current_submission') is False:
                 lines.append('  Grade does not match the current submission attempt.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'feedback' in data:
+        lines = [f"Own reported feedback: course {data['course_id']}"]
+        for row in data['feedback']:
+            lines.append(f"{row['assignment_id']} | {row.get('assignment_name') or '(unknown title)'} | "
+                         f"{row.get('latest_feedback_display') or 'date unknown'}")
+            if row.get('redo_request') is True:
+                lines.append('  Native reassignment flag is set; check the instructor instructions.')
+            if row['grade_applicability'] == 'earlier_attempt':
+                lines.append('  Grade does not match the current attempt.')
+            if row.get('grade') is not None or row.get('score') is not None:
+                lines.append(f"  Grade {row.get('grade', 'unknown')}; score {row.get('score', 'unknown')} / "
+                             f"{row.get('points_possible') if row.get('points_possible') is not None else 'unknown'}")
+            lines.append(f"  Comments: {row['comment_count'] if row['comment_count'] is not None else 'unknown'}; "
+                         f"rubric criteria: {len(row['rubric_assessment']) if row['rubric_assessment'] is not None else 'unknown'}")
+            for comment in row['comments']:
+                if comment.get('comment') is not None:
+                    lines.append('  ' + comment['comment'])
+            for criterion, assessment in (row['rubric_assessment'] or {}).items():
+                lines.append(f"  Criterion {criterion}: {assessment.get('points', 'unknown')} points" +
+                             (f"; {assessment['comments']}" if assessment.get('comments') is not None else ''))
+            if row['timestamp_coverage_uncertain']:
+                lines.append('  Some feedback timestamps are unknown.')
+            if row.get('assignment_url'):
+                lines.append('  ' + row['assignment_url'])
+        if not data['feedback']:
+            lines.append('No feedback reported for these filters; this is not proof of completed coursework.')
         lines.append(data['note'])
         return '\n'.join(lines)
     if isinstance(data, dict) and 'activity_summary' in data:
