@@ -74,6 +74,10 @@ class E2E(unittest.TestCase):
         cls.group_page = {'page_id': 411, 'url': 'welcome', 'title': 'Group welcome', 'published': True,
                           'body': '<p>Synthetic group page body</p>', 'secure_params': 'synthetic-private-page-verifier'}
         cls.storage_quota = {'quota': 1000, 'quota_used': 20}
+        cls.upload_scoped_record = None
+        cls.upload_denied = False
+        cls.upload_ack_patch = {}
+        cls.upload_readback_patch = {}
         cls.activity_hidden_ids = set()
         cls.activity_items = [
             {'id': 71, 'type': 'Conversation', 'conversation_id': 12, 'title': 'Synthetic activity message',
@@ -278,7 +282,10 @@ class E2E(unittest.TestCase):
                     data = [{'id': 401, 'message': 'Newest'},
                             {'id': 400, 'message': 'Older'}]
                 elif self.path == '/api/v1/files/777/create_success':
-                    data = {'id': 777, 'display_name': 'synthetic.txt'}
+                    data = ({**cls.upload_scoped_record, **cls.upload_ack_patch} if cls.upload_scoped_record else
+                            {'id': 777, 'display_name': 'synthetic.txt'})
+                elif self.path in ('/api/v1/courses/101/files/777', '/api/v1/groups/11/files/777', '/api/v1/users/self/files/777'):
+                    data = {**(cls.upload_scoped_record or {}), **cls.upload_readback_patch}
                 elif self.path == '/api/v1/files/777':
                     data = {'id': 777, 'display_name': 'synthetic.txt', 'size': 22,
                             'uuid': 'synthetic-uuid', 'locked_for_user': False}
@@ -293,7 +300,7 @@ class E2E(unittest.TestCase):
                     data = cls.personal_file
                 elif self.path in ('/api/v1/folders/91', '/api/v1/users/self/folders/root'):
                     data = cls.personal_root
-                elif self.path == '/api/v1/folders/92':
+                elif self.path in ('/api/v1/folders/92', '/api/v1/users/self/folders/92'):
                     data = cls.personal_destination
                 elif self.path == '/api/v1/users/self/folders?per_page=100':
                     self.send_header('Link', '</api/v1/users/self/folders?page=2>; rel="next"')
@@ -430,9 +437,9 @@ class E2E(unittest.TestCase):
                                                           'body': 'Synthetic hidden group page'}]}[resource]
                 elif self.path == '/api/v1/groups/11/files/891':
                     data = {**cls.group_file, 'url': f'https://localhost:{cls.server.server_port}/storage/synthetic-file'}
-                elif self.path == '/api/v1/groups/11/folders/root':
+                elif self.path in ('/api/v1/groups/11/folders/root', '/api/v1/groups/11/folders/95'):
                     data = cls.group_folder
-                elif self.path == '/api/v1/courses/101/folders/root':
+                elif self.path in ('/api/v1/courses/101/folders/root', '/api/v1/courses/101/folders/96'):
                     data = {**cls.group_folder, 'id': 96, 'context_type': 'Course', 'context_id': 101}
                 elif self.path in ('/api/v1/groups/11/pages/welcome', '/api/v1/groups/11/pages/411', '/api/v1/groups/11/front_page'):
                     data = cls.group_page
@@ -685,8 +692,15 @@ class E2E(unittest.TestCase):
                     self.wfile.write(json.dumps({'id': 51, 'user_id': 7, 'workflow_state': 'exporting',
                                                 'export_type': body['export_type']}).encode()); return
                 if self.path in ('/api/v1/users/self/files',
+                                 '/api/v1/courses/101/files', '/api/v1/groups/11/files',
                                  '/api/v1/courses/101/assignments/89/submissions/self/files'):
+                    if cls.upload_denied:
+                        self.send_response(403); self.end_headers(); return
                     cls.upload_initial = body
+                    cls.upload_scoped_record = ({'id': 777, 'display_name': body['name'], 'size': body['size'],
+                                                 'folder_id': body['parent_folder_id'],
+                                                 'url': 'https://storage.example.edu/file?signature=synthetic-private-upload'}
+                                                if 'parent_folder_id' in body else None)
                     suffix = ('-created' if body['name'] == 'created.txt' else
                               '-foreign' if body['name'] == 'foreign.txt' else '')
                     self.send_response(200); self.end_headers()
@@ -2320,6 +2334,97 @@ class E2E(unittest.TestCase):
         self.assertEqual(self.calls[-3:], [
             ('POST', '/api/v1/users/self/files'), ('POST', '/storage/upload'),
             ('GET', '/api/v1/files/777/create_success')])
+
+    def test_scoped_uploads_verify_shared_contexts_and_own_folder_end_to_end(self):
+        original = self.upload_scoped_record
+        source = Path(self.tmp.name) / 'shared.txt'
+        source.write_text('Synthetic shared file')
+        commands = [
+            (('upload-context', '101', '--context', 'course'), '/api/v1/courses/101', 96),
+            (('upload-context', '11', '--context', 'group', '--folder', '95'), '/api/v1/groups/11', 95),
+            (('upload-personal', '--folder', '92'), '/api/v1/users/self', 92)]
+        try:
+            for prefix, route, folder_id in commands:
+                with self.subTest(command=prefix):
+                    command = (*prefix, '--file', str(source))
+                    before = len(self.calls)
+                    preview = self.invoke(*command)
+                    self.assertEqual(preview.returncode, 0, preview.stderr)
+                    data = json.loads(preview.stdout)
+                    self.assertEqual(data['init_route'], route + '/files')
+                    self.assertEqual(data['destination']['folder']['id'], folder_id)
+                    self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                    sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                    self.assertEqual(sent.returncode, 0, sent.stderr)
+                    self.assertEqual(json.loads(sent.stdout)['uploaded_file_id'], 777)
+                    self.assertIn('no assignment submitted', json.loads(sent.stdout)['note'])
+                    self.assertNotIn('synthetic-private-upload', sent.stdout + sent.stderr)
+                    self.assertEqual(self.upload_initial['parent_folder_id'], folder_id)
+                    self.assertEqual(self.upload_initial['on_duplicate'], 'rename')
+                    self.assertIsNone(self.storage_auth)
+                    self.assertIn(b'Synthetic shared file', self.storage_body)
+                    self.assertEqual(self.calls[-4:], [('POST', route + '/files'), ('POST', '/storage/upload'),
+                                                      ('GET', '/api/v1/files/777/create_success'),
+                                                      ('GET', route + '/files/777')])
+        finally:
+            type(self).upload_scoped_record = original
+
+    def test_scoped_upload_stale_and_foreign_folder_previews_never_write(self):
+        original = self.group_folder.copy()
+        source = Path(self.tmp.name) / 'scoped-stale.txt'
+        source.write_text('Synthetic scoped file')
+        command = ('upload-context', '11', '--context', 'group', '--file', str(source))
+        try:
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            self.group_folder['name'] = 'Synthetic renamed folder'
+            before = len(self.calls)
+            sent = self.invoke(*command, '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+            self.assertEqual(sent.returncode, 1)
+            self.assertIn('Preview changed', sent.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            self.group_folder['context_type'] = 'User'
+            refused = self.invoke(*command)
+            self.assertEqual(refused.returncode, 1)
+            self.assertIn('outside the requested context', refused.stderr)
+            before = len(self.calls)
+            invalid = self.invoke('upload-context', '11', '--file', str(source))
+            self.assertEqual(invalid.returncode, 2)
+            self.assertEqual(self.calls[before:], [])
+        finally:
+            type(self).group_folder = original
+
+    def test_scoped_upload_denial_and_ambiguous_confirmation_never_retry(self):
+        original = self.upload_scoped_record
+        source = Path(self.tmp.name) / 'scoped-uncertain.txt'
+        source.write_text('Synthetic uncertain file')
+        command = ('upload-context', '11', '--context', 'group', '--file', str(source))
+        try:
+            for phase in ('denied', 'confirmation', 'readback'):
+                preview = self.invoke(*command)
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                if phase == 'denied':
+                    type(self).upload_denied = True
+                elif phase == 'confirmation':
+                    type(self).upload_ack_patch = {'folder_id': 96}
+                else:
+                    type(self).upload_readback_patch = {'size': 1}
+                before = len(self.calls)
+                sent = self.invoke(*command, '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+                self.assertEqual(sent.returncode, 1)
+                posts = [route for method, route in self.calls[before:] if method == 'POST']
+                self.assertEqual(posts, ['/api/v1/groups/11/files'] if phase == 'denied' else
+                                 ['/api/v1/groups/11/files', '/storage/upload'])
+                self.assertIn('denied access' if phase == 'denied' else 'may have succeeded', sent.stderr)
+                self.assertNotIn('synthetic-private-upload', sent.stderr + sent.stdout)
+                type(self).upload_denied = False
+                type(self).upload_ack_patch = {}
+                type(self).upload_readback_patch = {}
+        finally:
+            type(self).upload_scoped_record = original
+            type(self).upload_denied = False
+            type(self).upload_ack_patch = {}
+            type(self).upload_readback_patch = {}
 
     def test_assignment_upload_is_not_assignment_submission(self):
         source = Path(self.tmp.name) / 'synthetic.txt'

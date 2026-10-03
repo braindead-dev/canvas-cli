@@ -368,6 +368,7 @@ def parser():
     batch.add_argument('--yes', action='store_true', help='Download after reviewing a preview')
     personal_upload = sub.add_parser('upload-personal', help='Preview uploading a file to your Canvas Files')
     personal_upload.add_argument('--file', required=True, type=Path)
+    personal_upload.add_argument('--folder', type=identifier, help='Existing own folder ID; preview verifies its context')
     personal_upload.add_argument('--max-bytes', type=int, default=25 * 1024 * 1024)
     personal_upload.add_argument('--confirm', help='Digest returned by the preview')
     personal_upload.add_argument('--yes', action='store_true', help='Upload only with a matching preview digest')
@@ -378,6 +379,14 @@ def parser():
     assignment_upload.add_argument('--max-bytes', type=int, default=25 * 1024 * 1024)
     assignment_upload.add_argument('--confirm', help='Digest returned by the preview')
     assignment_upload.add_argument('--yes', action='store_true', help='Upload only with a matching preview digest')
+    context_upload = sub.add_parser('upload-context', help='Preview a shared course/group file upload, not an assignment submission')
+    context_upload.add_argument('context_id', type=identifier)
+    context_upload.add_argument('--context', required=True, choices=('course', 'group'))
+    context_upload.add_argument('--folder', type=identifier, help='Existing folder ID; otherwise the exact context root')
+    context_upload.add_argument('--file', required=True, type=Path)
+    context_upload.add_argument('--max-bytes', type=int, default=25 * 1024 * 1024)
+    context_upload.add_argument('--confirm', help='Digest returned by the preview')
+    context_upload.add_argument('--yes', action='store_true', help='Upload only with a matching account/file/folder preview')
     for name in ('assignment', 'page', 'module-items'):
         s = sub.add_parser(name, help='Read one resource or list module items')
         s.add_argument('course', type=identifier, metavar='CONTEXT_ID' if name == 'page' else None)
@@ -695,12 +704,15 @@ def run(args):
         directory = args.directory or config_path().parent / 'snapshots'
         return sync_course(client, args.course, args.max_pages, directory,
                            include_linked_files=args.include_linked_files)
-    if args.command in ('upload-personal', 'upload-assignment-file'):
+    if args.command in ('upload-personal', 'upload-assignment-file', 'upload-context'):
         from .upload import upload
         return upload(client, args.file, args.max_bytes,
                       args.course if args.command == 'upload-assignment-file' else None,
                       args.assignment if args.command == 'upload-assignment-file' else None,
-                      args.yes, args.confirm)
+                      args.yes, args.confirm,
+                      context_type=args.context if args.command == 'upload-context' else None,
+                      context_id=args.context_id if args.command == 'upload-context' else None,
+                      folder_id=getattr(args, 'folder', None))
     if args.command in ('submit-url', 'submit-text'):
         from .submit import submit
         source = args.url_file if args.command == 'submit-url' else args.text_file
