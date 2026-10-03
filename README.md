@@ -32,6 +32,11 @@ canvas-pocket courses
 canvas-pocket schema group-users
 canvas-pocket schema --search upload
 canvas-pocket courses --active
+canvas-pocket profile --format brief
+canvas-pocket profile --include-bio --include-email
+canvas-pocket profile-set --timezone America/Los_Angeles
+canvas-pocket profile-set --short-name 'Example display name' --acknowledge-shared-profile
+canvas-pocket profile-set --bio-file biography.txt --acknowledge-shared-profile
 canvas-pocket doctor 123
 canvas-pocket find 123 --query 'paper'
 canvas-pocket find 123 --query 'lab' --area assignments
@@ -445,6 +450,16 @@ canvas-pocket entry-delete 123 456 789 --context group
 `topic-subscribe`/`topic-unsubscribe` change only your notifications for one topic. `topic-mark-read`/`topic-mark-unread` change only your read marker for the initial topic text, not all replies. `entry-mark-read`/`entry-mark-unread` change your marker for one visible entry, including another author's post, without changing its content. They all take context/topic IDs, entry commands also take an entry ID, and `--context group` selects group routes. Every change is separately previewed and digest-confirmed; ordinary reads never call these mutation endpoints. Explicit subscription changes remain possible for a closed topic, subject to Canvas access controls.
 
 For entry markers, optional `--forced-read-state` sets Canvas's manual override and `--no-forced-read-state` clears it. Omit both to leave the override unchanged. Changing any current target/account/state invalidates confirmation. Initial-post restrictions still block entry lookups; topic-text and subscription operations do not read entries at all. The API's empty HTTP 204 acknowledges success; it does not mean content was read by a person or coursework completed. These state controls have synthetic HTTPS coverage only.
+
+## Own profile
+
+`profile` reads your own display names, title, pronunciation, pronouns, time zone and locale metadata when Canvas reports them. `--include-bio` and `--include-email` explicitly opt into your biography and primary email. Calendar-feed secrets, login/SIS/LTI identifiers, avatar URLs, service links and unknown fields are never printed by this command. This is the whitelisted alternative to the expert `me`/`get` raw responses; it is still private account data, not something to publish.
+
+`profile-set` previews only selected own names, title, biography, pronunciation, pronouns or IANA time zone. Unlike course nicknames, names and profile text are shared with peers and graders, so they require `--acknowledge-shared-profile`; a time-zone-only update does not. Use `--bio-file` for UTF-8 text; an empty file clears the bio. Empty text clears optional title/pronunciation/pronouns, but names cannot be empty. Local input limits are 255 characters for single-line fields and 10000 characters/40000 UTF-8 bytes for a bio; Canvas may impose further limits. Locale, email, login, avatar, account status and session changes are not exposed.
+
+Execution requires a fresh account/profile/content-bound preview and matching `--yes --confirm DIGEST`. The unselected bio participates in a revision hash without being printed. Input files are re-read for every invocation, and Canvas's SIS-stickiness override is explicitly disabled. Native institution permissions, profile-feature settings, pronoun choices or SIS-managed fields may refuse/ignore edits; the preview does not prove permission. Name edits may also cause Canvas to derive related names. A time-zone preference affects display, not actual due instants.
+
+The CLI does not trust a generic successful update response: it checks the returned own-user ID and performs a subsequent own-profile GET to verify every selected field. Partial, normalized-but-different or unverified results produce a post-write warning rather than false success; no write is retried automatically. Read-back is not an atomic lock or a guarantee against later institution/SIS changes. These commands have unit and stateful synthetic HTTPS tests only; no real profile was changed. See the [native user-edit API](https://developerdocs.instructure.com/services/canvas/resources/users#method.users.update) and [profile serialization](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/user_profile.rb).
 
 ## Personal calendar
 

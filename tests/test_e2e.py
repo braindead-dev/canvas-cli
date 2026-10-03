@@ -56,6 +56,17 @@ class E2E(unittest.TestCase):
         cls.custom_colors = {'course_101': '#abc'}
         cls.user_settings = {'manual_mark_as_read': False, 'collapse_global_nav': True,
                              'collapse_course_nav': False, 'hide_dashcard_color_overlays': False}
+        cls.own_profile = {'id': 7, 'name': 'Synthetic Student', 'short_name': 'Synthetic',
+                           'sortable_name': 'Student, Synthetic', 'title': None, 'bio': 'Synthetic private old biography',
+                           'pronunciation': None, 'pronouns': 'they/them', 'time_zone': 'America/Denver',
+                           'locale': None, 'effective_locale': 'en', 'primary_email': 'synthetic-profile@example.edu',
+                           'login_id': 'synthetic-private-profile-login', 'sis_user_id': 'synthetic-private-profile-sis',
+                           'calendar': {'ics': 'https://example.edu/feeds/synthetic-private-profile-secret.ics'}}
+        cls.profile_denied = False
+        cls.profile_ack = 'normal'
+        cls.profile_ignored_fields = set()
+        cls.profile_fail_readback = False
+        cls.profile_written = False
         cls.dashboard_positions = {'course_101': 1, 'course_102': 2, 'group_12': '9'}
         cls.communication_channels = [
             {'id': 19, 'user_id': 7, 'type': 'email', 'position': 1, 'workflow_state': 'active',
@@ -159,6 +170,8 @@ class E2E(unittest.TestCase):
                     return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if self.path == '/api/v1/users/self/profile' and cls.profile_fail_readback and cls.profile_written:
+                    self.send_response(403); self.end_headers(); return
                 if self.path == '/api/v1/redirect':
                     self.send_response(302)
                     self.send_header('Location', '/api/v1/users/self/profile')
@@ -381,7 +394,7 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/users/self/files?per_page=100' or self.path == '/api/v1/users/self/files?per_page=100&search_term=synthetic':
                     data = [{'id': 777, 'display_name': 'synthetic.txt', 'size': 22}]
                 elif self.path == '/api/v1/users/self/profile':
-                    data = {'id': 7, 'name': 'Synthetic Student'}
+                    data = cls.own_profile
                 elif self.path == '/api/v1/files/881':
                     data = cls.personal_file
                 elif self.path in ('/api/v1/folders/91', '/api/v1/users/self/folders/root'):
@@ -630,6 +643,18 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path == '/api/v1/users/self':
+                    if cls.profile_denied:
+                        self.send_response(403); self.end_headers(); return
+                    if self.command != 'PUT' or body.get('override_sis_stickiness') is not False:
+                        self.send_response(400); self.end_headers(); return
+                    cls.profile_write = body
+                    cls.profile_written = True
+                    cls.own_profile.update({key: value for key, value in body['user'].items()
+                                            if key not in cls.profile_ignored_fields})
+                    data = cls.own_profile if cls.profile_ack == 'normal' else {'private': 'Synthetic never log profile error'}
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path in ('/api/v1/courses/102/enrollments/99/accept', '/api/v1/courses/102/enrollments/99/reject'):
                     if cls.invitation_denied:
                         self.send_response(403); self.end_headers(); return
@@ -864,6 +889,155 @@ class E2E(unittest.TestCase):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
+
+    def test_own_profile_is_metadata_first_with_explicit_bio_email_and_no_feed_secrets(self):
+        before = len(self.calls)
+        result = self.invoke('profile', '--format', 'brief')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Synthetic Student', result.stdout)
+        self.assertNotIn('Synthetic private old biography', result.stdout)
+        self.assertNotIn('synthetic-profile@example.edu', result.stdout)
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile')])
+        result = self.invoke('profile', '--include-bio', '--include-email')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)['own_profile']
+        self.assertEqual(data['bio'], self.own_profile['bio'])
+        self.assertEqual(data['primary_email'], self.own_profile['primary_email'])
+        self.assertNotIn('synthetic-private-profile', result.stdout)
+
+    def test_profile_edits_are_preview_first_shared_acknowledged_and_readback_verified(self):
+        original = self.own_profile.copy()
+        try:
+            before = len(self.calls)
+            command = ('profile-set', '--short-name', 'Synthetic new display', '--acknowledge-shared-profile')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            self.assertTrue(data['shared_profile_change'])
+            self.assertEqual(data['body'], {'user': {'short_name': 'Synthetic new display'}, 'override_sis_stickiness': False})
+            self.assertNotIn('Synthetic private old biography', preview.stdout)
+            self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile')])
+            result = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('verified by read-back', result.stdout)
+            self.assertEqual(self.profile_write, data['body'])
+            self.assertEqual(self.own_profile['short_name'], 'Synthetic new display')
+            self.assertEqual(self.own_profile['bio'], original['bio'])
+            self.assertEqual(self.calls[-3:], [('GET', '/api/v1/users/self/profile'), ('PUT', '/api/v1/users/self'),
+                                              ('GET', '/api/v1/users/self/profile')])
+            # Own display timezone alone has no shared-profile acknowledgement requirement.
+            command = ('profile-set', '--timezone', 'America/Los_Angeles')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            self.assertFalse(data['shared_profile_change'])
+            result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(json.loads(result.stdout)['read_back_verified'])
+        finally:
+            type(self).own_profile = original
+            type(self).profile_written = False
+
+    def test_profile_bio_file_is_exact_reloaded_utf8_bounded_and_optional_clear_works(self):
+        original = self.own_profile.copy()
+        path = Path(self.tmp.name) / 'synthetic-profile-bio.txt'
+        try:
+            path.write_text('New synthetic biography\nSecond line 🌿\n', encoding='utf-8')
+            command = ('profile-set', '--bio-file', str(path), '--title', '', '--acknowledge-shared-profile')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            self.assertEqual(data['body']['user']['bio'], path.read_text(encoding='utf-8'))
+            path.write_text('Changed input before confirmation', encoding='utf-8')
+            before = len(self.calls)
+            result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Preview changed', result.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            path.write_bytes(b'\xff')
+            before = len(self.calls)
+            result = self.invoke(*command)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('UTF-8', result.stderr)
+            self.assertEqual(self.calls[before:], [])
+            path.write_bytes(b'x' * 40001)
+            result = self.invoke(*command)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('size bounds', result.stderr)
+            self.assertEqual(self.calls[before:], [])
+            path.write_text('', encoding='utf-8')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['profile_changes'], {'bio': '', 'title': ''})
+        finally:
+            type(self).own_profile = original
+            type(self).profile_written = False
+
+    def test_profile_bad_flags_foreign_or_changed_state_never_write(self):
+        original = self.own_profile.copy()
+        try:
+            before = len(self.calls)
+            for command in (('profile-set',), ('profile-set', '--name', 'New'),
+                            ('profile-set', '--name', '', '--acknowledge-shared-profile'),
+                            ('profile-set', '--timezone', 'invalid/synthetic'),
+                            ('profile-set', '--timezone', 'UTC', '--yes')):
+                result = self.invoke(*command)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(self.calls[before:], [])
+            command = ('profile-set', '--name', 'New synthetic name', '--acknowledge-shared-profile')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            for patch in ({'id': 8}, {'bio': 'Changed revision'}, {'name': 'Changed revision'}):
+                type(self).own_profile = {**original, **patch}
+                before = len(self.calls)
+                result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('Preview changed', result.stderr)
+                self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile')])
+        finally:
+            type(self).own_profile = original
+
+    def test_profile_native_denial_partial_update_and_readback_failure_are_not_retried(self):
+        original = self.own_profile.copy()
+        try:
+            for mode in ('denied', 'ambiguous', 'ignored', 'readback_denied'):
+                type(self).own_profile = original.copy()
+                type(self).profile_written = False
+                type(self).profile_denied = False
+                type(self).profile_ack = 'normal'
+                type(self).profile_ignored_fields = set()
+                type(self).profile_fail_readback = False
+                command = ('profile-set', '--name', 'New synthetic name', '--short-name', 'Synthetic new display',
+                           '--acknowledge-shared-profile')
+                preview = self.invoke(*command)
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                digest = json.loads(preview.stdout)['confirm']
+                type(self).profile_denied = mode == 'denied'
+                type(self).profile_ack = 'ambiguous' if mode == 'ambiguous' else 'normal'
+                type(self).profile_ignored_fields = {'name'} if mode == 'ignored' else set()
+                type(self).profile_fail_readback = mode == 'readback_denied'
+                before = len(self.calls)
+                result = self.invoke(*command, '--yes', '--confirm', digest)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertEqual(result.stdout, '')
+                self.assertNotIn('Synthetic never log profile error', result.stderr)
+                self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [('PUT', '/api/v1/users/self')])
+                if mode != 'denied':
+                    self.assertIn('Some edits may have applied', result.stderr)
+                    self.assertEqual(self.own_profile['short_name'], 'Synthetic new display')
+                else:
+                    self.assertEqual(self.own_profile, original)
+        finally:
+            type(self).own_profile = original
+            type(self).profile_written = False
+            type(self).profile_denied = False
+            type(self).profile_ack = 'normal'
+            type(self).profile_ignored_fields = set()
+            type(self).profile_fail_readback = False
 
     def test_machine_schemas_work_without_auth_or_network_and_keep_write_safety_visible(self):
         before = len(self.calls)

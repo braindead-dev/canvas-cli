@@ -65,6 +65,18 @@ def parser():
     courses = sub.add_parser('courses')
     courses.add_argument('--active', action='store_true', help='Only current active enrollments')
     sub.add_parser('me')
+    own_profile = sub.add_parser('profile', help='Read whitelisted own-profile metadata, not secret feed or login fields')
+    own_profile.add_argument('--include-bio', action='store_true', help='Opt in to your own biography text')
+    own_profile.add_argument('--include-email', action='store_true', help='Opt in to your own primary email address')
+    own_profile = sub.add_parser('profile-set', help='Preview selected own-profile edits with explicit shared-audience acknowledgement')
+    for field in ('name', 'short-name', 'sortable-name', 'title', 'pronunciation', 'pronouns'):
+        own_profile.add_argument('--' + field, help='Selected profile text; empty clears optional fields, not names')
+    own_profile.add_argument('--bio-file', type=Path, help='UTF-8 biography file; empty file clears, local limit 10000 characters')
+    own_profile.add_argument('--timezone', help='IANA time zone; changes date display, not deadlines')
+    own_profile.add_argument('--acknowledge-shared-profile', action='store_true',
+                             help='Required for names/profile text visible to peers and graders')
+    own_profile.add_argument('--confirm', help='Digest returned by the preview')
+    own_profile.add_argument('--yes', action='store_true', help='Execute only if the fresh preview matches --confirm')
     favorites = sub.add_parser('favorites', help='Displayed favorite courses/groups, which may be Canvas defaults')
     favorites.add_argument('--context', choices=('course', 'group'), default='course')
     for name in ('favorite-add', 'favorite-remove', 'favorites-reset'):
@@ -676,6 +688,26 @@ def run(args):
     if not token:
         raise CanvasError('No credential found. Run auth login again.')
     client = Client(host, token)
+    if args.command in ('profile', 'profile-set'):
+        from . import profile
+        if args.command == 'profile':
+            return profile.read(client, include_bio=args.include_bio, include_email=args.include_email)
+        changes = {key: getattr(args, key) for key in ('name', 'short_name', 'sortable_name', 'title',
+                                                      'pronunciation', 'pronouns') if getattr(args, key) is not None}
+        if args.bio_file is not None:
+            # Bound memory before parsing; re-read for every preview/confirmation invocation.
+            with args.bio_file.open('rb') as source:
+                content = source.read(40001)
+            if len(content) > 40000:
+                raise CanvasError('Biography file exceeds local UTF-8 size bounds')
+            try:
+                changes['bio'] = content.decode('utf-8')
+            except UnicodeError:
+                raise CanvasError('Biography file must be UTF-8 text') from None
+        if args.timezone is not None:
+            changes['time_zone'] = args.timezone
+        return profile.change(client, changes, acknowledge_shared=args.acknowledge_shared_profile,
+                              yes=args.yes, confirm=args.confirm)
     if args.command in ('event', 'event-create', 'event-edit', 'event-delete'):
         from . import events
         if args.command == 'event':
@@ -1194,6 +1226,12 @@ def brief(data):
     if isinstance(data, dict) and 'permissions' in data and 'context_type' in data:
         return (f"Native permissions ({data['context_type']} {data[data['context_type'] + '_id']})\n" +
                 '\n'.join(f"{key}: {str(value).lower()}" for key, value in data['permissions'].items()) + f"\n{data['note']}")
+    if isinstance(data, dict) and ('own_profile' in data or 'profile_changes' in data):
+        record = data.get('own_profile', data.get('profile_changes'))
+        lines = ['Own Canvas profile' if 'own_profile' in data else 'Selected profile fields verified by read-back']
+        lines.extend(f'{key}: {value if value is not None else "(unset)"}' for key, value in record.items())
+        lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'enrollments' in data and 'user_id' in data:
         lines = ['Own Canvas enrollments (not official university registration)']
         for row in data['enrollments']:
