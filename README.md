@@ -39,6 +39,16 @@ canvas-pocket favorites-reset --context course
 canvas-pocket groups
 canvas-pocket course-groups 123
 canvas-pocket my-files --search 'paper'
+canvas-pocket nicknames
+canvas-pocket nickname 123
+canvas-pocket nickname-set 123 --name 'My short course name'
+canvas-pocket nickname-clear 123
+canvas-pocket nicknames-reset
+canvas-pocket colors
+canvas-pocket color 123
+canvas-pocket color-set 123 --hex '#abc123'
+canvas-pocket color-set 456 --context group --hex 'abc'
+canvas-pocket color-set 789 --context user --hex '123abc'  # 789 must be your own user ID
 canvas-pocket file-info 789
 canvas-pocket inbox --scope unread --course 123
 canvas-pocket conversation 456
@@ -277,6 +287,12 @@ Discussion-post and text-entry submission inputs are plain UTF-8 text, safely es
 `favorites` defaults to courses; `--context group` selects groups. This read-only list can be Canvas's automatic default selection, not proof that every item was explicitly starred. `favorite-add`, `favorite-remove` and `favorites-reset` change only your own favorites, never enrollment, membership or course content. They preview the current account, exact context/target and full paginated displayed selection, then require `--yes --confirm DIGEST`.
 
 Adding the first custom favorite can replace the default displayed selection. Removing a course with no custom favorites can first save the other default courses as favorites. Removing the last custom favorite or resetting can make defaults appear again. Reset clears **all custom favorites of the selected type**, not just the listed IDs. Canvas enforces membership/permissions, and inaccessible targets are not bypassed. An acknowledged remove may be a no-op if there was no explicit favorite; the output does not falsely claim that a displayed default disappeared. Course/group lifecycle and pagination have synthetic HTTPS coverage only. See the [official Favorites API](https://developerdocs.instructure.com/services/canvas/resources/favorites).
+
+## Own display preferences
+
+`nicknames` lists your saved course aliases with full pagination; `nickname COURSE` shows the actual course name and your optional alias. `nickname-set COURSE --name NAME`, `nickname-clear COURSE` and `nicknames-reset` are preview-first writes requiring `--yes --confirm DIGEST`. Set changes only the calling user's nickname, not the shared course name. Clearing one restores its actual name in your subsequent API responses; resetting clears **all** your course nicknames, not just one course. Names must be nonempty, shorter than 60 characters and free of control characters. An absent nickname is not silently treated as a successful removal.
+
+`colors` and `color ITEM --context course|group|user` report only saved custom colors; an unset custom value is `null`, not a claim about the default UI color. `color-set` accepts a three- or six-digit RGB hex value, previews the exact target and current preference, then requires matching confirmation. User-context changes are restricted to your own personal calendar. Colors affect only your display preferences; there is no documented color-clear endpoint, so Pocket does not invent one. These actions have synthetic HTTPS lifecycle tests, not live write validation. See the [official Users and course-nickname API](https://developerdocs.instructure.com/services/canvas/resources/users).
 
 ## Discussion contexts and entry changes
 

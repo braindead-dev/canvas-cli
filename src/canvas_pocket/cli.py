@@ -74,6 +74,26 @@ def parser():
         favorite.add_argument('--context', choices=('course', 'group'), default='course')
         favorite.add_argument('--confirm', help='Digest returned by the preview')
         favorite.add_argument('--yes', action='store_true', help='Apply only if --confirm matches the fresh preview')
+    sub.add_parser('nicknames', help='List your saved course nicknames')
+    nickname = sub.add_parser('nickname', help='Read your nickname and the actual course name')
+    nickname.add_argument('course', type=identifier)
+    for name in ('nickname-set', 'nickname-clear', 'nicknames-reset'):
+        preference = sub.add_parser(name, help='Preview own course nickname changes, never rename a shared course')
+        if name != 'nicknames-reset':
+            preference.add_argument('course', type=identifier)
+        if name == 'nickname-set':
+            preference.add_argument('--name', required=True, help='Nonempty nickname shorter than 60 characters')
+        preference.add_argument('--confirm', help='Digest returned by the preview')
+        preference.add_argument('--yes', action='store_true')
+    sub.add_parser('colors', help='Read your saved custom calendar/dashboard colors')
+    for name in ('color', 'color-set'):
+        preference = sub.add_parser(name, help='Read or preview your own color for an explicit context')
+        preference.add_argument('item', type=identifier, help='Numeric course, group or own user ID')
+        preference.add_argument('--context', choices=('course', 'group', 'user'), default='course')
+        if name == 'color-set':
+            preference.add_argument('--hex', required=True, help='Three- or six-digit RGB code, optionally prefixed with #')
+            preference.add_argument('--confirm', help='Digest returned by the preview')
+            preference.add_argument('--yes', action='store_true')
     sub.add_parser('groups', help='Your active Canvas groups')
     group = sub.add_parser('group', help='One visible group')
     group.add_argument('group', type=identifier)
@@ -675,6 +695,23 @@ def run(args):
         from .favorites import change
         return change(client, args.command.rsplit('-', 1)[1], getattr(args, 'item', None),
                       context_type=args.context, max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+    if args.command in ('nicknames', 'nickname', 'nickname-set', 'nickname-clear', 'nicknames-reset'):
+        from . import preferences
+        if args.command == 'nicknames':
+            return preferences.nicknames(client, args.max_pages)
+        if args.command == 'nickname':
+            return preferences.nickname(client, args.course)
+        return preferences.change_nickname(client, getattr(args, 'course', None), getattr(args, 'name', None),
+                                           clear=args.command == 'nickname-clear', reset=args.command == 'nicknames-reset',
+                                           max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+    if args.command in ('colors', 'color', 'color-set'):
+        from . import preferences
+        if args.command == 'colors':
+            return preferences.colors(client)
+        if args.command == 'color':
+            return preferences.color(client, args.item, args.context)
+        return preferences.change_color(client, args.item, args.hex, context_type=args.context,
+                                        yes=args.yes, confirm=args.confirm)
     if args.command == 'groups':
         return client.list('/api/v1/users/self/groups?per_page=100', args.max_pages)
     if args.command == 'group':
@@ -912,6 +949,13 @@ def brief(data):
         thread = data['inbox_change']
         action = 'removed from your view' if data['deleted_from_own_view'] else thread['workflow_state']
         return f"Inbox {thread['id']}: {action}\nStarred: {thread['starred']}; subscribed: {thread['subscribed']}\n{data['note']}"
+    if isinstance(data, dict) and 'nickname_change' in data:
+        record = data['nickname_change']
+        return (f"Nickname {record['course_id']}: {record['nickname'] or '(cleared)'}" if record else
+                'All own course nicknames cleared.') + f"\n{data['note']}"
+    if isinstance(data, dict) and 'color_change' in data:
+        record = data['color_change']
+        return f"Color {record['asset_string']}: {record['hexcode']}\n{data['note']}"
     if isinstance(data, dict) and 'peer_reviews' in data:
         lines = [f"Peer reviews: {data.get('assignment_name') or data['assignment_id']} ({data['scope']})"]
         for review in data['peer_reviews']:

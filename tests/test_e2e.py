@@ -49,6 +49,8 @@ class E2E(unittest.TestCase):
         cls.inbox_state = {'workflow_state': 'unread', 'starred': False, 'subscribed': True,
                            'private': False, 'message_count': 1}
         cls.inbox_messages = [{'id': 31, 'author_id': 7, 'body': 'Synthetic private message'}]
+        cls.course_nicknames = {101: 'Synthetic nickname', 102: 'Another nickname'}
+        cls.custom_colors = {'course_101': '#abc'}
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -331,6 +333,18 @@ class E2E(unittest.TestCase):
                     data = {**cls.event, 'id': 62, 'context_code': 'course_101'}
                 elif self.path == '/api/v1/users/self/groups?per_page=100':
                     data = [{'id': 11, 'name': 'Synthetic group'}]
+                elif self.path == '/api/v1/users/self/course_nicknames?per_page=100':
+                    self.send_header('Link', '</api/v1/users/self/course_nicknames?page=2>; rel="next"')
+                    data = []
+                elif self.path == '/api/v1/users/self/course_nicknames?page=2':
+                    data = [{'course_id': row['id'], 'name': row['name'], 'nickname': cls.course_nicknames[row['id']]}
+                            for row in cls.favorite_defaults['course'] if row['id'] in cls.course_nicknames]
+                elif self.path.startswith('/api/v1/users/self/course_nicknames/'):
+                    item = int(self.path.rsplit('/', 1)[1])
+                    course = next(row for row in cls.favorite_defaults['course'] if row['id'] == item)
+                    data = {'course_id': item, 'name': course['name'], 'nickname': cls.course_nicknames.get(item)}
+                elif self.path == '/api/v1/users/self/colors':
+                    data = {'custom_colors': cls.custom_colors}
                 elif self.path == '/api/v1/users/self/favorites/courses?per_page=100':
                     self.send_header('Link', '</api/v1/users/self/favorites/courses?page=2>; rel="next"')
                     data = []
@@ -372,6 +386,27 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path.startswith('/api/v1/users/self/course_nicknames'):
+                    cls.preference_write = body
+                    if self.path == '/api/v1/users/self/course_nicknames':
+                        cls.course_nicknames.clear()
+                        data = {'message': 'OK'}
+                    else:
+                        item = int(self.path.rsplit('/', 1)[1])
+                        if self.command == 'DELETE':
+                            cls.course_nicknames.pop(item, None)
+                        else:
+                            cls.course_nicknames[item] = body['nickname']
+                        course = next(row for row in cls.favorite_defaults['course'] if row['id'] == item)
+                        data = {'course_id': item, 'name': course['name'], 'nickname': cls.course_nicknames.get(item)}
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
+                if self.path.startswith('/api/v1/users/self/colors/'):
+                    asset = self.path.rsplit('/', 1)[1]
+                    cls.preference_write = body
+                    cls.custom_colors[asset] = body['hexcode']
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps({'hexcode': cls.custom_colors[asset]}).encode()); return
                 if self.path == '/api/v1/conversations/12':
                     cls.inbox_write = body
                     if self.command == 'DELETE':
@@ -516,6 +551,84 @@ class E2E(unittest.TestCase):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
+
+    def test_nickname_lifecycle_is_account_bound_and_preserves_actual_course_name(self):
+        original = self.course_nicknames.copy()
+        try:
+            listing = self.invoke('nicknames')
+            self.assertEqual(listing.returncode, 0, listing.stderr)
+            self.assertEqual([row['course_id'] for row in json.loads(listing.stdout)], [101, 102])
+            commands = [('nickname-set', '101', '--name', 'Synthetic alias'),
+                        ('nickname-clear', '101'), ('nicknames-reset',)]
+            for command in commands:
+                before = len(self.calls)
+                preview = self.invoke(*command)
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                data = json.loads(preview.stdout)
+                refused = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                sent = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+                self.assertEqual(sent.returncode, 0, sent.stderr)
+                self.assertIn('nicknames' if command[0] == 'nicknames-reset' else 'Nickname', sent.stdout)
+                self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                                 [(data['method'], data['route'])])
+                self.assertEqual(self.preference_write, data['body'] or {})
+                current = self.invoke('nickname', '101')
+                self.assertEqual(current.returncode, 0, current.stderr)
+                current = json.loads(current.stdout)
+                self.assertEqual(current['name'], 'Synthetic course')
+                self.assertEqual(current['nickname'], 'Synthetic alias' if command[0] == 'nickname-set' else None)
+            self.assertEqual(self.course_nicknames, {})
+        finally:
+            type(self).course_nicknames = original
+
+    def test_nickname_reset_refuses_changed_or_truncated_inventory_over_tls(self):
+        original = self.course_nicknames.copy()
+        try:
+            preview = self.invoke('nicknames-reset')
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            type(self).course_nicknames[102] = 'Changed after preview'
+            before = len(self.calls)
+            changed = self.invoke('nicknames-reset', '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+            self.assertNotEqual(changed.returncode, 0)
+            self.assertIn('Preview changed', changed.stderr)
+            truncated = self.invoke('nicknames-reset', '--max-pages', '1')
+            self.assertNotEqual(truncated.returncode, 0)
+            self.assertIn('Page limit', truncated.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).course_nicknames = original
+
+    def test_course_group_and_personal_calendar_colors_over_tls(self):
+        original = self.custom_colors.copy()
+        try:
+            for context, item in [('course', '101'), ('group', '11'), ('user', '7')]:
+                command = ('color-set', item, '--context', context, '--hex', 'AABBCC')
+                before = len(self.calls)
+                preview = self.invoke(*command)
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                data = json.loads(preview.stdout)
+                self.assertEqual(data['body'], {'hexcode': '#aabbcc'})
+                refused = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                self.assertEqual(sent.returncode, 0, sent.stderr)
+                self.assertTrue(json.loads(sent.stdout)['acknowledged'])
+                self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [('PUT', data['route'])])
+                current = self.invoke('color', item, '--context', context)
+                self.assertEqual(current.returncode, 0, current.stderr)
+                self.assertEqual(json.loads(current.stdout)['hexcode'], '#aabbcc')
+            current = self.invoke('color', '102')
+            self.assertIsNone(json.loads(current.stdout)['hexcode'])
+            before = len(self.calls)
+            denied = self.invoke('color-set', '8', '--context', 'user', '--hex', 'abc')
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertIn('own personal calendar', denied.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).custom_colors = original
 
     def test_favorites_changes_are_preview_first_and_reset_restores_defaults(self):
         original = {context: ids.copy() for context, ids in self.favorite_ids.items()}
