@@ -14,7 +14,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import appointments, channels, page_authoring, page_history, team_appointments
+from . import (
+    appointments,
+    channels,
+    page_authoring,
+    page_deletion,
+    page_history,
+    team_appointments,
+)
 
 
 @unittest.skipUnless(shutil.which('openssl'), 'openssl required for local TLS fixture')
@@ -36,6 +43,7 @@ class CanvasFixture(unittest.TestCase):
         team_appointments.initialize(cls)
         page_authoring.initialize(cls)
         page_history.initialize(cls)
+        page_deletion.initialize(cls)
         cls.event = {'id': 61, 'context_code': 'user_7', 'title': 'Synthetic event',
                      'start_at': '2026-10-05T09:00:00-07:00', 'end_at': '2026-10-05T10:00:00-07:00',
                      'all_day': False, 'workflow_state': 'active', 'updated_at': '2026-10-01T12:00:00Z'}
@@ -176,6 +184,8 @@ class CanvasFixture(unittest.TestCase):
                     return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if page_deletion.read(cls, self):
+                    return
                 if page_history.read(cls, self):
                     return
                 if page_authoring.read(cls, self):
@@ -662,6 +672,8 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if page_deletion.write(cls, self, body):
+                    return
                 if page_history.write(cls, self, body):
                     return
                 if page_authoring.write(cls, self, body):

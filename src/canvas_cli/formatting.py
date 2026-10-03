@@ -36,6 +36,15 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'deleted_page' in data:
+        page = data['deleted_page']
+        lines = [f"Shared {data['context_type']} page {page['page_id']} deleted | {page['title']}",
+                 f"Removed from page inventory; exact-ID read returned {data['exact_id_read_status']}."]
+        if data['original_url_resolution']['status'] == 'resolves_to_another_page':
+            lines.append(f"The old URL now resolves to page {data['original_url_resolution']['page_id']}; that page was not deleted.")
+        if data['linked_assignment_id'] is not None:
+            lines.append(f"Linked wiki assignment {data['linked_assignment_id']} independently returned 404.")
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'restored_page' in data:
         row = data['restored_page']
         lines = [f"Shared {data['context_type']} page {row['page_id']} restored from revision {data['selected_revision_id']}",

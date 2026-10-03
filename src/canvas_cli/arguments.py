@@ -442,6 +442,13 @@ def parser():
     context_upload.add_argument('--file', required=True, type=Path)
     context_upload.add_argument('--max-bytes', type=int, default=25 * 1024 * 1024)
     _confirmation(context_upload)
+    page_deletion = sub.add_parser('page-delete', help='Preview native shared wiki deletion, including explicitly acknowledged assignment cascades')
+    page_deletion.add_argument('context_id', type=identifier)
+    page_deletion.add_argument('page_id', type=identifier, help='Exact numeric page ID, never an ambiguous slug')
+    page_deletion.add_argument('--context', required=True, choices=('course', 'group'))
+    page_deletion.add_argument('--acknowledge-page-deletion', action='store_true', help='Required even for previews; deletes shared content and can affect module links')
+    page_deletion.add_argument('--acknowledge-linked-assignment-deletion', action='store_true', help='Required when a reported linked wiki assignment will also be deleted')
+    _confirmation(page_deletion)
     for name in ('page-revisions', 'page-revision', 'page-restore'):
         history = sub.add_parser(name, help=('Preview restoring one shared RCE page revision with exact-ID verification'
                                              if name == 'page-restore' else 'Inspect native-authorized RCE wiki history; content/editors are opt-in'))

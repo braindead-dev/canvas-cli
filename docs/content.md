@@ -67,7 +67,7 @@ Creation uses POST, never replacement. Existing title matches are counted; Canva
 
 Exact page ID, selected metadata, fresh identity/permissions and separate acknowledgement/readback are verified. Stored HTML may be sanitized or rewritten; `html_matches_request` distinguishes literal equality and JSON includes the stored body when requested. Unobserved changes, conflicting readbacks, denied verification and foreign acknowledgements are uncertain outcomes, never automatically retried. Previous bodies/editors/history are fingerprinted or omitted, not dumped in previews.
 
-Block-editor/Horizon payloads, deletion and scheduling changes remain separate work. Authorized RCE drafts can be edited without bypassing publication; existing publication schedules are preserved, and future-scheduled pages refuse implicit publication/front-page changes.
+Block-editor/Horizon authoring and scheduling changes remain separate work. Authorized RCE drafts can be edited without bypassing publication; existing publication schedules are preserved, and future-scheduled pages refuse implicit publication/front-page changes.
 
 ## Inspect and restore page history
 
@@ -85,6 +85,24 @@ Restore uses [confirmation](safety.md#confirmation) and one native POST to an ex
 Renaming a front page can deselect it; `--acknowledge-front-page-change` is required for that risk. Links/modules can also be affected. Separate page/revision/front-page readbacks verify the observed result; no automatic front-page repair or rollback is issued. A current-revision no-op does not falsely claim a new revision. Native HTML/URL normalization is labeled (`html_matches_revision`, `url_matches_revision`), not treated as literal equivalence. Title collisions, ignored changes, lost permissions or inconsistent readbacks are uncertain outcomes. Check Canvas before repeating. Neither confirmation nor readback prevents concurrent edits during execution.
 
 [Native Pages API](https://developerdocs.instructure.com/services/canvas/resources/pages), [revision authorization/restore implementation](https://github.com/instructure/canvas-lms/blob/master/app/controllers/wiki_pages_api_controller.rb), [title/URL/front-page/version behavior](https://github.com/instructure/canvas-lms/blob/master/app/models/wiki_page.rb), [HTML rewriting](https://github.com/instructure/canvas-lms/blob/master/lib/api.rb).
+
+## Delete a shared wiki page
+
+```sh
+canvas page-delete 123 789 --context course --acknowledge-page-deletion
+canvas page-delete 456 789 --context group --acknowledge-page-deletion
+canvas page-delete 123 789 --context course --acknowledge-page-deletion --acknowledge-linked-assignment-deletion
+```
+
+This is native soft deletion of shared content, not a private note, permanent erasure, or a promise of recovery. Use [confirmation](safety.md#confirmation) after reviewing the preview. The exact numeric page ID avoids native numeric-slug ambiguity. Manage Wiki Delete is required separately from editing/ownership/history permission; native role, blueprint and OAuth restrictions still apply. Front pages are refused without automatic unsetting or replacement.
+
+If the native Page API reports a linked wiki assignment, deletion can also delete that assignment and affect its gradebook presence. The separate cascade acknowledgement is required even for a preview. Its exact course association, type and metadata are checked independently. Only one Page DELETE is sent, never a second assignment DELETE. Links/module entries may be affected; this is not proof of every downstream consequence or physical removal of grades/submissions.
+
+Previews bind the account, context, delete permission, latest revision, content fingerprint, full paginated page inventory and any reported assignment. RCE HTML and readable native block/external payloads are fingerprinted, not exposed or replayed as edits; this does not add block-editor authoring. Page/assignment GET can record module read progress; latest-revision GET can repair legacy imported YAML. No incomplete inventory or unreadable content is treated as safe deletion evidence.
+
+Verification combines exact-ID acknowledgement, inventory removal, an inaccessible exact ID, old-URL resolution, stable account/permission and an unchanged front page. Native exact-ID lookup can include deleted records and return **403**, so 403 alone is not success. An old numeric slug may resolve to another existing page; that rebound is verified against the inventory and reported, never deleted. A reported linked assignment must independently return **404**; denied or still-readable assignment access is uncertain. Inconsistent/lost readback is uncertain, with no automatic retry, rollback or undelete. Confirmation/readback are not an atomic lock against concurrent changes.
+
+[Native delete and front-page restrictions](https://github.com/instructure/canvas-lms/blob/master/app/controllers/wiki_pages_api_controller.rb), [exact-ID/slug lookup](https://github.com/instructure/canvas-lms/blob/master/app/models/wiki.rb), [native assignment cascade](https://github.com/instructure/canvas-lms/blob/master/lib/submittable.rb), [soft-deletion implementation](https://github.com/instructure/canvas-lms/blob/master/lib/canvas/soft_deletable.rb).
 
 ## Private snapshots
 

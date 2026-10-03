@@ -39,6 +39,7 @@ tests/
     channels.py      focused synthetic contact routes and state
     page_authoring.py  shared RCE wiki routes and state
     page_history.py   native history and exact-revision restore routes
+    page_deletion.py  native soft-delete evidence and assignment cascades
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 

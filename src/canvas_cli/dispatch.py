@@ -9,6 +9,12 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'page-delete':
+        from .page_deletion import delete
+        return delete(client, args.context_id, args.page_id, context_type=args.context,
+                      acknowledge=args.acknowledge_page_deletion,
+                      acknowledge_assignment=args.acknowledge_linked_assignment_deletion,
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('page-revisions', 'page-revision', 'page-restore'):
         from . import page_history
         if args.command == 'page-restore':
