@@ -144,6 +144,20 @@ def parser():
     group.add_argument('group', type=identifier)
     course_groups = sub.add_parser('course-groups', help='Visible groups in a course')
     course_groups.add_argument('course', type=identifier)
+    from .enrollments import STATES, TYPES
+    enrollments = sub.add_parser('enrollments', help='Paginated own Canvas membership metadata, not official university registration')
+    enrollments.add_argument('--type', dest='types', choices=TYPES, action='append', default=[])
+    enrollments.add_argument('--state', dest='states', choices=STATES, action='append', default=[])
+    enrollments.add_argument('--course', type=identifier, action='append', default=[], help='Local course filter after full own pagination')
+    enrollments.add_argument('--term', type=identifier, help='Native numeric enrollment-term ID, never a SIS ID')
+    for name in ('enrollment-accept', 'enrollment-reject'):
+        invitation = sub.add_parser(name, help='Preview responding only to an exact pending own Canvas invitation')
+        invitation.add_argument('course', type=identifier)
+        invitation.add_argument('enrollment', type=identifier)
+        invitation.add_argument('--acknowledge-canvas-enrollment', action='store_true', required=True,
+                                help='Acknowledge a Canvas membership/access change, not official university registration')
+        invitation.add_argument('--confirm', help='Digest returned by the preview')
+        invitation.add_argument('--yes', action='store_true')
     permissions = sub.add_parser('permissions', help='Read exact own native context rights, not an admin-role inference')
     permissions.add_argument('context_id', type=identifier)
     permissions.add_argument('--context', choices=('course', 'group'), default='course')
@@ -885,6 +899,14 @@ def run(args):
         return client.request(f'/api/v1/groups/{args.group}')[0]
     if args.command == 'course-groups':
         return client.list(f'/api/v1/courses/{args.course}/groups?per_page=100', args.max_pages)
+    if args.command == 'enrollments':
+        from .enrollments import read
+        return read(client, args.max_pages, types=args.types, states=args.states, courses=args.course, term=args.term)
+    if args.command in ('enrollment-accept', 'enrollment-reject'):
+        from .enrollments import respond
+        return respond(client, args.course, args.enrollment, args.command.split('-')[1],
+                       acknowledge=args.acknowledge_canvas_enrollment, max_pages=args.max_pages,
+                       yes=args.yes, confirm=args.confirm)
     if args.command == 'permissions':
         from .access import read
         return read(client, args.context_id, args.context, names=args.permissions)
@@ -1154,6 +1176,16 @@ def brief(data):
     if isinstance(data, dict) and 'permissions' in data and 'context_type' in data:
         return (f"Native permissions ({data['context_type']} {data[data['context_type'] + '_id']})\n" +
                 '\n'.join(f"{key}: {str(value).lower()}" for key, value in data['permissions'].items()) + f"\n{data['note']}")
+    if isinstance(data, dict) and 'enrollments' in data and 'user_id' in data:
+        lines = ['Own Canvas enrollments (not official university registration)']
+        for row in data['enrollments']:
+            lines.append(f"{row['id']} | course {row['course_id']} | {row.get('type') or 'unknown role'} | "
+                         f"{row.get('enrollment_state') or 'unknown state'}" +
+                         (f" | section {row['course_section_id']}" if 'course_section_id' in row else ''))
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'invitation_response' in data:
+        return f"Canvas invitation {data['enrollment_id']} (course {data['course_id']}): {data['invitation_response']} acknowledged\n{data['note']}"
     if isinstance(data, dict) and ('group_categories' in data or 'group_category' in data):
         categories = data.get('group_categories', [data.get('group_category')])
         lines = [f"Course {data['course_id']} group-set metadata"]

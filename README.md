@@ -38,6 +38,11 @@ canvas-pocket favorite-remove 456 --context group
 canvas-pocket favorites-reset --context course
 canvas-pocket groups
 canvas-pocket course-groups 123
+canvas-pocket enrollments
+canvas-pocket enrollments --state invited
+canvas-pocket enrollments --type StudentEnrollment --state current_and_concluded --course 123
+canvas-pocket enrollment-accept 123 456 --acknowledge-canvas-enrollment  # pending own invitation only; preview
+canvas-pocket enrollment-reject 123 456 --acknowledge-canvas-enrollment
 canvas-pocket permissions 123 --permission read_roster --permission send_messages
 canvas-pocket permissions 789 --context group --permission join --permission leave
 canvas-pocket group-categories 123
@@ -331,6 +336,10 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
 
 ## Rosters and own group membership
+
+`enrollments` reads **only your own** paginated user-enrollment endpoint, preserving separate sections/roles in one course. Repeated `--type`/`--state` use native filters, including documented user-only synthetic states; `--term` accepts a numeric Canvas term ID, never a SIS identifier. Repeated `--course` filters locally after complete pagination. Default states remain native, normally active/invited, not all history. Grades, other user/observer associations, SIS data and activity analytics are omitted. **Canvas membership is not official university registration** and cannot establish credits, waitlist position or tuition-waiver eligibility.
+
+`enrollment-accept COURSE ENROLLMENT --acknowledge-canvas-enrollment` and `enrollment-reject` respond only to the exact pending **own** invitation, discovered via full own-invitation pagination and verified by course/user/enrollment IDs. They require a fresh account/invitation-bound preview and matching `--yes --confirm DIGEST`. Active, missing, foreign and already rejected records are refused; no administrative new enrollment, role edit or university course drop is exposed. Accepting changes Canvas membership/access; rejecting can hide coursework and may require another invitation or instructor help. These are not registrar/waitlist/billing actions. Native self-enrollment restrictions still apply. Preflight is not an atomic server lock: the native accept endpoint can revive a concurrently rejected invitation, so review the warning. Acknowledgement is not an independent readback. Ambiguous completion is never retried or body-logged. Inventory and invitation lifecycles have synthetic HTTPS coverage only, not live write validation. See the [official Enrollments API](https://developerdocs.instructure.com/services/canvas/resources/enrollments) and [native invitation behavior](https://github.com/instructure/canvas-lms/blob/master/app/controllers/enrollments_api_controller.rb).
 
 `permissions CONTEXT --context course|group --permission KEY` queries exact native rights for the signed-in user. Repeat `--permission` for distinct lowercase keys. It reports only explicit booleans returned by Canvas; a missing/nonboolean result is an error, not an assumed denial. A native `false` can mean denied, unsupported or feature-disabled, and a `true` is not a guarantee that a later action succeeds. No role, scope or permission is changed. See the [official permission endpoint](https://developerdocs.instructure.com/services/canvas/resources/groups#method.groups.permissions).
 

@@ -94,6 +94,17 @@ class E2E(unittest.TestCase):
                                 'name': 'Synthetic project team', 'members_count': 3,
                                 'leader': {'id': 8, 'name': 'synthetic-private-category-leader'}}]
         cls.category_denied = False
+        cls.own_enrollments = [{'id': 77, 'course_id': 101, 'user_id': 7, 'course_section_id': 31,
+                                'type': 'StudentEnrollment', 'enrollment_state': 'active',
+                                'grades': {'current_score': 100}, 'sis_user_id': 'synthetic-private-own-enrollment-sis',
+                                'user': {'email': 'synthetic-private-own-enrollment-contact@example.edu'}},
+                               {'id': 78, 'course_id': 101, 'user_id': 7, 'course_section_id': 32,
+                                'type': 'TaEnrollment', 'enrollment_state': 'active'}]
+        cls.enrollment_invitation = {'id': 99, 'course_id': 102, 'user_id': 7, 'course_section_id': 33,
+                                     'type': 'StudentEnrollment', 'enrollment_state': 'invited',
+                                     'updated_at': '2026-10-02T12:00:00Z'}
+        cls.invitation_denied = False
+        cls.invitation_ack = 'normal'
         cls.roster_users = [
             {'id': 7, 'name': 'Synthetic teacher', 'email': 'synthetic-roster-contact@example.edu',
              'sis_user_id': 'synthetic-private-roster-sis', 'login_id': 'synthetic-private-roster-login',
@@ -173,7 +184,17 @@ class E2E(unittest.TestCase):
                     self.send_response(404); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
-                if self.path.startswith('/api/v1/courses/101/permissions?'):
+                if self.path.startswith('/api/v1/users/self/enrollments?'):
+                    if 'page=2' not in self.path:
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = []
+                    else:
+                        query = parse_qs(urlsplit(self.path).query)
+                        types = query.get('type[]', [])
+                        states = query.get('state[]', ['active', 'invited'])
+                        data = [row for row in [*cls.own_enrollments, cls.enrollment_invitation]
+                                if (not types or row['type'] in types) and row['enrollment_state'] in states]
+                elif self.path.startswith('/api/v1/courses/101/permissions?'):
                     data = {'read_roster': True, 'send_messages': False, 'private': 'synthetic-private-permission-metadata'}
                 elif self.path.startswith('/api/v1/courses/101/group_categories?'):
                     if 'page=2' not in self.path:
@@ -609,6 +630,15 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path in ('/api/v1/courses/102/enrollments/99/accept', '/api/v1/courses/102/enrollments/99/reject'):
+                    if cls.invitation_denied:
+                        self.send_response(403); self.end_headers(); return
+                    if self.command != 'POST' or cls.enrollment_invitation['enrollment_state'] != 'invited':
+                        self.send_response(400); self.end_headers(); return
+                    cls.enrollment_invitation['enrollment_state'] = 'active' if self.path.endswith('/accept') else 'rejected'
+                    data = {'success': True} if cls.invitation_ack == 'normal' else {'private': 'Synthetic never log invitation error'}
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path in ('/api/v1/groups/11/memberships', '/api/v1/groups/11/users/self'):
                     if cls.membership_denied:
                         self.send_response(403); self.end_headers(); return
@@ -834,6 +864,119 @@ class E2E(unittest.TestCase):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
+
+    def test_own_enrollments_paginate_native_filters_keep_sections_and_omit_private_data(self):
+        before = len(self.calls)
+        result = self.invoke('enrollments')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual([row['id'] for row in data['enrollments']], [77, 78, 99])
+        self.assertTrue(data['complete_for_endpoint'])
+        self.assertNotIn('synthetic-private-own', result.stdout)
+        self.assertNotIn('grades', str(data['enrollments']))
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile'),
+                                             ('GET', '/api/v1/users/self/enrollments?per_page=100'),
+                                             ('GET', '/api/v1/users/self/enrollments?per_page=100&page=2')])
+        result = self.invoke('enrollments', '--type', 'StudentEnrollment', '--state', 'active',
+                             '--state', 'invited', '--term', '12', '--course', '102', '--format', 'brief')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('99 | course 102', result.stdout)
+        self.assertNotIn('77 | course', result.stdout)
+        self.assertIn('not official university registration', result.stdout)
+        query = parse_qs(urlsplit(self.calls[-1][1]).query)
+        self.assertEqual(query['type[]'], ['StudentEnrollment'])
+        self.assertEqual(query['state[]'], ['active', 'invited'])
+        self.assertEqual(query['enrollment_term_id'], ['12'])
+        self.assertNotIn('user_id', query)
+
+    def test_own_invitation_accept_reject_lifecycles_require_acknowledgement_and_fresh_digest(self):
+        original = self.enrollment_invitation.copy()
+        try:
+            before = len(self.calls)
+            result = self.invoke('enrollment-accept', '102', '99')
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(self.calls[before:], [])
+            for action, expected in (('accept', 'active'), ('reject', 'rejected')):
+                type(self).enrollment_invitation = original.copy()
+                command = ('enrollment-' + action, '102', '99', '--acknowledge-canvas-enrollment')
+                before = len(self.calls)
+                preview = self.invoke(*command)
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                data = json.loads(preview.stdout)
+                self.assertEqual(data['invitation']['user_id'], 7)
+                self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                refused = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                self.assertEqual(refused.returncode, 1)
+                self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                result = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(action + ' acknowledged', result.stdout)
+                self.assertEqual(self.enrollment_invitation['enrollment_state'], expected)
+                self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [('POST', data['route'])])
+                result = self.invoke(*command)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('not returned as an invitation', result.stderr)
+        finally:
+            type(self).enrollment_invitation = original
+
+    def test_own_enrollment_foreign_truncated_and_stale_states_never_authorize_invitation_writes(self):
+        original_invite, original_rows = self.enrollment_invitation.copy(), list(self.own_enrollments)
+        try:
+            command = ('enrollment-accept', '102', '99', '--acknowledge-canvas-enrollment')
+            before = len(self.calls)
+            preview = self.invoke(*command)
+            digest = json.loads(preview.stdout)['confirm']
+            self.enrollment_invitation['updated_at'] = '2026-10-02T13:00:00Z'
+            result = self.invoke(*command, '--yes', '--confirm', digest)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Preview changed', result.stderr)
+            type(self).enrollment_invitation = original_invite.copy()
+            self.enrollment_invitation['user_id'] = 8
+            result = self.invoke(*command)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('outside the requested course/user', result.stderr)
+            self.assertEqual(result.stdout, '')
+            type(self).enrollment_invitation = original_invite.copy()
+            for commands in (('enrollments', '--max-pages', '1'), (*command, '--max-pages', '1')):
+                result = self.invoke(*commands)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('Page limit', result.stderr)
+                self.assertEqual(result.stdout, '')
+            self.own_enrollments.append(original_rows[0])
+            result = self.invoke('enrollments')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('duplicate', result.stderr)
+            self.assertEqual(result.stdout, '')
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).enrollment_invitation = original_invite
+            type(self).own_enrollments = original_rows
+
+    def test_ambiguous_or_denied_invitation_response_is_not_retried_or_logged(self):
+        original = self.enrollment_invitation.copy()
+        try:
+            for action in ('accept', 'reject'):
+                for mode in ('denied', 'ambiguous'):
+                    type(self).enrollment_invitation = original.copy()
+                    command = ('enrollment-' + action, '102', '99', '--acknowledge-canvas-enrollment')
+                    preview = self.invoke(*command)
+                    self.assertEqual(preview.returncode, 0, preview.stderr)
+                    data = json.loads(preview.stdout)
+                    type(self).invitation_denied = mode == 'denied'
+                    type(self).invitation_ack = mode
+                    before = len(self.calls)
+                    result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stdout, '')
+                    self.assertNotIn('Synthetic never log', result.stderr)
+                    self.assertIn('denied access' if mode == 'denied' else 'may have succeeded', result.stderr)
+                    self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [('POST', data['route'])])
+                    type(self).invitation_denied = False
+                    type(self).invitation_ack = 'normal'
+        finally:
+            type(self).enrollment_invitation = original
+            type(self).invitation_denied = False
+            type(self).invitation_ack = 'normal'
 
     def test_permission_views_have_exact_native_booleans_and_explicit_context_over_tls(self):
         before = len(self.calls)

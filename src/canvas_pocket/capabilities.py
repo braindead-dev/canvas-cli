@@ -7,6 +7,7 @@ def describe():
             'courses', 'doctor', 'find', 'me', 'favorites', 'groups', 'group', 'course-groups',
             'course-users', 'group-users', 'group-membership',
             'permissions', 'group-categories', 'group-category', 'category-groups',
+            'enrollments',
             'nicknames', 'nickname', 'colors', 'color',
             'settings', 'dashboard-positions',
             'channels',
@@ -38,6 +39,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'enrollment-accept/enrollment-reject (exact pending own Canvas invitation only; explicit membership acknowledgement, fresh account/invitation-bound preview and matching digest required; not official university registration)',
             'group-join/group-leave (own student-organized/community groups only; explicit native permission, account/group/current-membership-bound preview and matching digest required)',
             'favorite-add/favorite-remove/favorites-reset (own course/group favorites; account-bound preview, displayed-default warning and matching digest required)',
             'nickname-set/nickname-clear/nicknames-reset/color-set (own display preferences; account-bound preview and matching digest required, no shared course renaming)',
