@@ -210,6 +210,24 @@ After the **same job** reports `exported` with an available attachment, `export-
 
 `tabs COURSE` lists visible course navigation labels and Canvas paths, including external-tool tabs, without launching those tools. `front-page COURSE` reads the published course home page where Canvas provides one. External tools such as Zoom or Piazza need their own authorization and are not controlled through these commands.
 
+### Group content and storage metadata
+
+`files`, `folders`, `pages`, `page`, `tabs`, `front-page` and `download` accept `--context group`, using an explicit group ID instead of a course ID. Course behavior stays the default. Each group read first verifies the authorized group record, and native scoped routes keep group files/pages separate from course content. Group collection output is an endpoint-coverage envelope with metadata in `items`, not a claim that every external-tool resource was discovered. File lists omit download/viewer URLs and uploader associations; page indexes omit bodies and exclude explicitly unpublished/hidden/locked pages. Folder records must match the exact group context. Hidden navigation paths are omitted and external tabs are never launched. Full page reads accept a single slug or numeric page ID and preserve access/publication checks.
+
+`download GROUP FILE --context group --output /private/path/file.pdf` obtains metadata through the native group-file route and reuses the credential-free binary transport, overwrite/Git guards, private permissions, byte limit and size check. An unavailable or mismatched file is refused; no global-file-ID fallback bypasses group scope. `--best-effort`, `--quick` and `--all-pages` course fallbacks do not apply to group spaces, which do not have the same modules model. Denied group listings remain errors, not a fabricated complete empty inventory.
+
+`root-folder CONTEXT --context course|group|user` reads the native root-folder metadata and verifies its context and root association. `file-quota CONTEXT --context course|group|user` reports native quota/used/remaining bytes, including an over-quota flag. User-context reads require your signed-in numeric user ID; they never accept another user's storage. A positive remaining quota does not establish permission to upload. These are GET-only operations with no membership, uploads, publication or enrollment changes; Canvas may record content-access analytics. Group support and quota/root reads have synthetic HTTPS coverage only. See the [official Files/Folders API](https://developerdocs.instructure.com/services/canvas/resources/files), [Pages API](https://developerdocs.instructure.com/services/canvas/resources/pages) and [Tabs API](https://developerdocs.instructure.com/services/canvas/resources/tabs).
+
+```sh
+canvas-pocket files 123 --context group --format brief
+canvas-pocket folders 123 --context group
+canvas-pocket pages 123 --context group
+canvas-pocket page 123 welcome --context group
+canvas-pocket tabs 123 --context group
+canvas-pocket root-folder 123 --context group
+canvas-pocket file-quota 123 --context group
+```
+
 `linked-files` discovers links in readable syllabus, modules, module pages, assignments, announcements and discussion prompts, useful when a course's Files tab is hidden. It skips explicitly unpublished, hidden or locked sources; it does not read student discussion entries, is not a complete inventory, and reports when a linked file is hidden or locked for the user. `--all-pages` adds accessible published pages outside modules. `--quick` skips per-file metadata requests, so availability is unknown, but is substantially faster for courses with many files. Requests remain sequential to avoid Canvas's [parallel-request throttling penalty](https://developerdocs.instructure.com/services/canvas/basics/file.throttling). Downloads use an explicit output path, refuse overwrites and Git-checkout destinations, remove failed partial files, compare received bytes with Canvas's advertised file size when available, default to a 100 MiB limit and never send the API token to file storage. Signed download URLs are not logged. `syllabus` returns the course's syllabus body, not all linked documents. `me` returns your private profile; `auth status` only reports authentication validity.
 
 `files COURSE` preserves Canvas's raw Files list. If that list is denied, `files COURSE --best-effort` falls back to `linked-files` and returns an explicit `complete: false` envelope. It never claims that linked files are every file in the course. `--quick` and `--all-pages` work with the fallback option.

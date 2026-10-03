@@ -350,8 +350,9 @@ def parser():
     markdown = sub.add_parser('snapshot-markdown', help='Render a private snapshot as readable Markdown, offline')
     markdown.add_argument('snapshot', type=Path)
     markdown.add_argument('--output', required=True, type=Path)
-    s = sub.add_parser('download', help='Download one accessible course file without overwriting')
-    s.add_argument('course', type=identifier)
+    s = sub.add_parser('download', help='Download one accessible course/group file without overwriting')
+    s.add_argument('course', type=identifier, metavar='CONTEXT_ID')
+    s.add_argument('--context', choices=('course', 'group'), default='course')
     s.add_argument('file', type=identifier)
     s.add_argument('--output', required=True, type=Path)
     s.add_argument('--max-bytes', type=int, default=100 * 1024 * 1024)
@@ -379,8 +380,10 @@ def parser():
     assignment_upload.add_argument('--yes', action='store_true', help='Upload only with a matching preview digest')
     for name in ('assignment', 'page', 'module-items'):
         s = sub.add_parser(name, help='Read one resource or list module items')
-        s.add_argument('course', type=identifier)
+        s.add_argument('course', type=identifier, metavar='CONTEXT_ID' if name == 'page' else None)
         s.add_argument('item', type=str if name == 'page' else identifier)
+        if name == 'page':
+            s.add_argument('--context', choices=('course', 'group'), default='course')
     submission = sub.add_parser('submission', help='Read your own assignment submission and feedback')
     submission.add_argument('course', type=identifier)
     submission.add_argument('assignment', type=identifier)
@@ -422,7 +425,17 @@ def parser():
     grades = sub.add_parser('grades', help='Read only your own course enrollment and visible grade')
     grades.add_argument('course', type=identifier)
     for name in ('folders', 'sections', 'outline', 'tabs', 'front-page'):
-        sub.add_parser(name).add_argument('course', type=identifier)
+        content = sub.add_parser(name)
+        content.add_argument('course', type=identifier,
+                             metavar='CONTEXT_ID' if name in ('folders', 'tabs', 'front-page') else None)
+        if name in ('folders', 'tabs', 'front-page'):
+            content.add_argument('--context', choices=('course', 'group'), default='course')
+    for name in ('root-folder', 'file-quota'):
+        content = sub.add_parser(name, help=('Read the authorized native root folder for an explicit context' if name == 'root-folder' else
+                                            'Read native storage quota and used bytes, not upload permission'))
+        content.add_argument('context_id', type=identifier)
+        content.add_argument('--context', choices=('course', 'group', 'user'), default='course',
+                             help='User context requires your own numeric ID; no other-user reads')
     sub.add_parser('my-folders', help='List your paginated personal Canvas folders')
     sub.add_parser('my-root', help='Read your personal root folder ID')
     personal_folder = sub.add_parser('my-folder-create', help='Preview one subfolder in your personal Canvas files')
@@ -474,8 +487,8 @@ def parser():
                  'new-quizzes'):
         listing = sub.add_parser(name)
         listing.add_argument('course', type=identifier,
-                             metavar='CONTEXT_ID' if name in ('discussions', 'announcements') else None)
-        if name in ('discussions', 'announcements'):
+                             metavar='CONTEXT_ID' if name in ('discussions', 'announcements', 'files', 'pages') else None)
+        if name in ('discussions', 'announcements', 'files', 'pages'):
             listing.add_argument('--context', choices=('course', 'group'), default='course')
         if name == 'pages':
             listing.add_argument('--best-effort', action='store_true',
@@ -839,6 +852,16 @@ def run(args):
         if not isinstance(data, dict) or str(data.get('id')) != args.file:
             raise CanvasError('Canvas returned a different file; refusing output')
         return data
+    if args.command in ('root-folder', 'file-quota'):
+        from .group_content import quota, root
+        return (root if args.command == 'root-folder' else quota)(client, args.context_id, args.context)
+    if args.command in ('files', 'folders', 'pages', 'page', 'tabs', 'front-page') and args.context == 'group':
+        from . import group_content
+        if any(getattr(args, key, False) for key in ('best_effort', 'quick', 'all_pages')):
+            raise CanvasError('Course module/linked-content fallbacks do not apply to group spaces; use the native group listing')
+        if args.command in ('page', 'front-page'):
+            return group_content.page(client, args.course, getattr(args, 'item', None))
+        return group_content.listing(client, args.course, args.command, args.max_pages)
     if args.command == 'inbox':
         query = [('per_page', '100')]
         if args.scope:
@@ -992,7 +1015,11 @@ def run(args):
                     comments=args.include_comments, users=args.include_users)
     if args.command == 'download':
         from .download import download
-        metadata = client.request(base + f'/files/{args.file}')[0]
+        if args.context == 'group':
+            from .group_content import file_metadata
+            metadata = file_metadata(client, args.course, args.file)
+        else:
+            metadata = client.request(base + f'/files/{args.file}')[0]
         if not isinstance(metadata, dict) or str(metadata.get('id')) != args.file:
             raise CanvasError('Canvas returned a different file; refusing download')
         if metadata.get('locked_for_user') or metadata.get('hidden_for_user'):
@@ -1046,6 +1073,16 @@ def brief(data):
             lines.append('No matching commands. Try help without --search.')
         lines.append(data['note'])
         return '\n'.join(lines)
+    if isinstance(data, dict) and data.get('context_type') == 'group' and 'resource' in data and 'items' in data:
+        return (f"Group {data['group_id']} {data['resource']}: {data.get('group_name') or '(unnamed)'}\n" +
+                brief(data['items']) + f"\n{data['note']}")
+    if isinstance(data, dict) and 'quota_bytes' in data:
+        return (f"Storage ({data['context_type']} {data[data['context_type'] + '_id']}): "
+                f"{data['used_bytes']} / {data['quota_bytes']} bytes; {data['remaining_bytes']} remaining" +
+                (' (over quota)' if data['over_quota'] else '') + f"\n{data['note']}")
+    if isinstance(data, dict) and 'root_folder' in data:
+        row = data['root_folder']
+        return f"Root ({data['context_type']} {data[data['context_type'] + '_id']}): {row['id']} {row.get('name') or ''}\n{data['note']}"
     if isinstance(data, dict) and 'calendar_event' in data:
         event = data['calendar_event']
         when = (event.get('all_day_date') or event.get('start_at')) if event.get('all_day') else event.get('start_at')

@@ -67,6 +67,13 @@ class E2E(unittest.TestCase):
             'new_announcement': {'notification': 'new_announcement', 'category': 'announcement', 'frequency': 'daily'},
             'submission_comment': {'notification': 'submission_comment', 'category': 'submission_comment', 'frequency': 'never'}}
         cls.notification_ack_shape = 'normal'
+        cls.group_folder = {'id': 95, 'context_type': 'Group', 'context_id': 11, 'name': 'Group files',
+                            'parent_folder_id': None, 'files_count': 1, 'folders_count': 0}
+        cls.group_file = {'id': 891, 'folder_id': 95, 'display_name': 'synthetic-group.txt', 'size': 20,
+                          'locked_for_user': False, 'hidden_for_user': False}
+        cls.group_page = {'page_id': 411, 'url': 'welcome', 'title': 'Group welcome', 'published': True,
+                          'body': '<p>Synthetic group page body</p>', 'secure_params': 'synthetic-private-page-verifier'}
+        cls.storage_quota = {'quota': 1000, 'quota_used': 20}
         cls.activity_hidden_ids = set()
         cls.activity_items = [
             {'id': 71, 'type': 'Conversation', 'conversation_id': 12, 'title': 'Synthetic activity message',
@@ -411,6 +418,30 @@ class E2E(unittest.TestCase):
                     data = {**cls.event, 'id': 62, 'context_code': 'course_101'}
                 elif self.path == '/api/v1/users/self/groups?per_page=100':
                     data = [{'id': 11, 'name': 'Synthetic group'}]
+                elif self.path.startswith(('/api/v1/groups/11/files?', '/api/v1/groups/11/folders?', '/api/v1/groups/11/pages?')):
+                    resource = urlsplit(self.path).path.rsplit('/', 1)[1]
+                    if 'page=2' not in self.path:
+                        self.send_header('Link', f'</api/v1/groups/11/{resource}?page=2>; rel="next"')
+                        data = []
+                    else:
+                        data = {'files': [{**cls.group_file, 'url': 'https://storage.example.edu/?token=synthetic-private'}],
+                                'folders': [cls.group_folder],
+                                'pages': [cls.group_page, {'page_id': 412, 'url': 'draft', 'published': False,
+                                                          'body': 'Synthetic hidden group page'}]}[resource]
+                elif self.path == '/api/v1/groups/11/files/891':
+                    data = {**cls.group_file, 'url': f'https://localhost:{cls.server.server_port}/storage/synthetic-file'}
+                elif self.path == '/api/v1/groups/11/folders/root':
+                    data = cls.group_folder
+                elif self.path == '/api/v1/courses/101/folders/root':
+                    data = {**cls.group_folder, 'id': 96, 'context_type': 'Course', 'context_id': 101}
+                elif self.path in ('/api/v1/groups/11/pages/welcome', '/api/v1/groups/11/pages/411', '/api/v1/groups/11/front_page'):
+                    data = cls.group_page
+                elif self.path == '/api/v1/groups/11/tabs?per_page=100':
+                    data = [{'id': 'home', 'label': 'Home', 'type': 'internal', 'html_url': '/groups/11'},
+                            {'id': 'hidden', 'label': 'Synthetic hidden tab', 'hidden': True},
+                            {'id': 'external', 'label': 'External tool', 'type': 'external', 'html_url': 'https://tool.example.edu/'}]
+                elif self.path in ('/api/v1/courses/101/files/quota', '/api/v1/groups/11/files/quota', '/api/v1/users/self/files/quota'):
+                    data = cls.storage_quota
                 elif self.path == '/api/v1/users/self/course_nicknames?per_page=100':
                     self.send_header('Link', '</api/v1/users/self/course_nicknames?page=2>; rel="next"')
                     data = []
@@ -800,6 +831,104 @@ class E2E(unittest.TestCase):
             self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         finally:
             type(self).user_settings = original
+
+    def test_group_content_reads_have_explicit_namespace_and_no_course_module_fallback(self):
+        before = len(self.calls)
+        for resource in ('files', 'folders', 'pages', 'tabs'):
+            result = self.invoke(resource, '11', '--context', 'group')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data['group_id'], 11)
+            self.assertTrue(data['complete_for_endpoint'])
+            self.assertNotIn('synthetic-private', result.stdout)
+            self.assertNotIn('Synthetic hidden group page', result.stdout)
+            self.assertNotIn('Synthetic group page body', result.stdout)
+            self.assertNotIn('Synthetic hidden tab', result.stdout)
+            if resource != 'tabs':
+                capped = self.invoke(resource, '11', '--context', 'group', '--max-pages', '1')
+                self.assertNotEqual(capped.returncode, 0)
+                self.assertEqual(capped.stdout, '')
+                self.assertIn('Page limit', capped.stderr)
+        for command in (('page', '11', 'welcome'), ('page', '11', '411'), ('front-page', '11')):
+            result = self.invoke(*command, '--context', 'group')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Synthetic group page body', result.stdout)
+            self.assertNotIn('synthetic-private-page-verifier', result.stdout)
+        brief = self.invoke('files', '11', '--context', 'group', '--format', 'brief')
+        self.assertIn('Group 11 files', brief.stdout)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        self.assertFalse(any('/courses/' in path for _, path in self.calls[before:]))
+        before = len(self.calls)
+        for resource in ('files', 'pages'):
+            result = self.invoke(resource, '11', '--context', 'group', '--best-effort')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '')
+            self.assertIn('do not apply to group spaces', result.stderr)
+        self.assertEqual(self.calls[before:], [])
+
+    def test_context_root_and_storage_quota_reads_verify_own_user_and_folder_association(self):
+        original_folder = self.group_folder.copy()
+        original_quota = self.storage_quota.copy()
+        try:
+            for context, item in (('course', '101'), ('group', '11'), ('user', '7')):
+                result = self.invoke('root-folder', item, '--context', context)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                data = json.loads(result.stdout)
+                self.assertEqual(data['root_folder']['context_type'], context.title())
+                self.assertEqual(data['root_folder']['context_id'], int(item))
+                result = self.invoke('file-quota', item, '--context', context, '--format', 'brief')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('20 / 1000 bytes; 980 remaining', result.stdout)
+            before = len(self.calls)
+            result = self.invoke('file-quota', '8', '--context', 'user')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '')
+            self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile')])
+            self.group_folder['context_id'] = 12
+            result = self.invoke('root-folder', '11', '--context', 'group')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '')
+            self.assertIn('outside the requested context', result.stderr)
+            self.storage_quota['quota_used'] = -1
+            result = self.invoke('file-quota', '11', '--context', 'group')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '')
+        finally:
+            type(self).group_folder = original_folder
+            type(self).storage_quota = original_quota
+
+    def test_group_file_download_is_scoped_private_and_credential_free_at_storage(self):
+        original = self.group_file.copy()
+        original_page = self.group_page.copy()
+        try:
+            destination = Path(self.tmp.name) / 'group-content-download.txt'
+            before = len(self.calls)
+            result = self.invoke('download', '11', '891', '--context', 'group', '--output', str(destination))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(destination.read_bytes(), b'Synthetic file bytes')
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+            self.assertIsNone(self.storage_download_auth)
+            self.assertNotIn('/storage/', result.stdout)
+            self.assertEqual(self.calls[before:], [('GET', '/api/v1/groups/11'),
+                                                  ('GET', '/api/v1/groups/11/files/891'),
+                                                  ('GET', '/storage/synthetic-file')])
+            for flag in ('locked_for_user', 'hidden_for_user'):
+                self.group_file[flag] = True
+                before = len(self.calls)
+                other = Path(self.tmp.name) / f'group-{flag}.txt'
+                result = self.invoke('download', '11', '891', '--context', 'group', '--output', str(other))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+                self.assertFalse(other.exists())
+                self.assertFalse(any('/storage/' in path for _, path in self.calls[before:]))
+                self.group_file[flag] = False
+            self.group_page['published'] = False
+            result = self.invoke('page', '11', 'welcome', '--context', 'group')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '')
+        finally:
+            type(self).group_file = original
+            type(self).group_page = original_page
 
     def test_own_channels_and_wrapped_preferences_are_private_and_paginated_over_tls(self):
         before = len(self.calls)
