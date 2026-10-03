@@ -94,6 +94,19 @@ def parser():
     inbox.add_argument('--course', type=identifier, help='Filter to a course context')
     conversation = sub.add_parser('conversation', help='Read one Inbox thread without marking it read')
     conversation.add_argument('conversation', type=identifier)
+    edit_inbox = sub.add_parser('inbox-edit', help='Preview own-thread read/archive/star/subscription changes')
+    edit_inbox.add_argument('conversation', type=identifier)
+    edit_inbox.add_argument('--state', choices=('read', 'unread', 'archived'))
+    edit_inbox.add_argument('--starred', action=argparse.BooleanOptionalAction, default=None)
+    edit_inbox.add_argument('--subscribed', action=argparse.BooleanOptionalAction, default=None,
+                            help='Only for a confirmed group conversation')
+    edit_inbox.add_argument('--yes', action='store_true')
+    edit_inbox.add_argument('--confirm', help='Digest returned by the preview')
+    delete_inbox = sub.add_parser('inbox-delete', help='Preview removing all thread messages from your own view')
+    delete_inbox.add_argument('conversation', type=identifier)
+    delete_inbox.add_argument('--permanent', action='store_true', help='Acknowledge no CLI restore; archive preserves messages')
+    delete_inbox.add_argument('--yes', action='store_true')
+    delete_inbox.add_argument('--confirm', help='Digest returned by the preview')
     reply = sub.add_parser('inbox-reply', help='Preview an Inbox reply; sending requires a matching digest')
     reply.add_argument('conversation', type=identifier)
     reply.add_argument('--message-file', required=True, type=Path)
@@ -694,6 +707,12 @@ def run(args):
                        args.course, args.yes, args.confirm)
     if args.command == 'conversation':
         return client.request(f'/api/v1/conversations/{args.conversation}?auto_mark_as_read=false')[0]
+    if args.command in ('inbox-edit', 'inbox-delete'):
+        from .inbox import change
+        return change(client, args.conversation, state=getattr(args, 'state', None),
+                      starred=getattr(args, 'starred', None), subscribed=getattr(args, 'subscribed', None),
+                      delete=args.command == 'inbox-delete', permanent=getattr(args, 'permanent', False),
+                      yes=args.yes, confirm=args.confirm)
     if args.command == 'inbox-reply':
         from .messaging import reply
         return reply(client, args.conversation, args.message_file.read_text(encoding='utf-8'),
@@ -878,6 +897,10 @@ def brief(data):
         target = change.get('target')
         return (f"Favorites ({change['context_type']}): {change['action']}" +
                 (f" {target['id']} {target.get('name') or ''}" if target else '') + f"\n{data['note']}")
+    if isinstance(data, dict) and 'inbox_change' in data:
+        thread = data['inbox_change']
+        action = 'removed from your view' if data['deleted_from_own_view'] else thread['workflow_state']
+        return f"Inbox {thread['id']}: {action}\nStarred: {thread['starred']}; subscribed: {thread['subscribed']}\n{data['note']}"
     if isinstance(data, dict) and 'personal_file' in data:
         file = data['personal_file']
         return f"File {file['id']}: {file.get('display_name') or 'Untitled'}\n{data['note']}"

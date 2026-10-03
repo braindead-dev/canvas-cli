@@ -34,6 +34,7 @@ def describe():
             'entry-edit/entry-delete (own entry only; account-bound preview, matching digest and attachment-loss acknowledgement)',
             'topic-subscribe/topic-unsubscribe/topic-mark-read/topic-mark-unread/entry-mark-read/entry-mark-unread (only own subscription/read markers; account-bound preview and matching digest required)',
             'inbox-reply/inbox-compose (preview and matching digest required)',
+            'inbox-edit/inbox-delete (own read/archive/star/subscription state or own-view removal; account-bound preview, matching digest and permanent-deletion acknowledgement)',
             'submit-url/submit-text/submit-file (preview and matching digest required)',
             'submission-comment (own submission only; account-bound preview and matching digest required)',
             'export-create (asynchronous course export; account-bound preview and matching digest required)',

@@ -46,6 +46,9 @@ class E2E(unittest.TestCase):
                                             {'id': 102, 'name': 'Synthetic second course'}],
                                  'group': [{'id': 11, 'name': 'Synthetic group'},
                                            {'id': 12, 'name': 'Synthetic second group'}]}
+        cls.inbox_state = {'workflow_state': 'unread', 'starred': False, 'subscribed': True,
+                           'private': False, 'message_count': 1}
+        cls.inbox_messages = [{'id': 31, 'author_id': 7, 'body': 'Synthetic private message'}]
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -328,7 +331,7 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/conversations/12?auto_mark_as_read=false':
                     data = {'id': 12, 'subject': 'Synthetic thread',
                             'participants': [{'id': 7, 'name': 'Synthetic recipient'}], 'audience': [7],
-                            'messages': [{'body': 'Synthetic private message'}]}
+                            **cls.inbox_state, 'messages': cls.inbox_messages}
                 elif self.path == '/api/v1/search/recipients?type=user&per_page=100&user_id=7' or self.path.startswith('/api/v1/search/recipients?type=user&per_page=100&search='):
                     data = [{'id': 7, 'name': 'Synthetic recipient', 'type': 'user'}]
                 elif self.path.startswith('/api/v1/announcements?'):
@@ -352,6 +355,16 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path == '/api/v1/conversations/12':
+                    cls.inbox_write = body
+                    if self.command == 'DELETE':
+                        cls.inbox_state['message_count'] = 0
+                        cls.inbox_messages = []
+                    else:
+                        cls.inbox_state.update(body['conversation'])
+                    data = {'id': 12, 'subject': 'Synthetic thread', **cls.inbox_state}
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path.startswith('/api/v1/users/self/favorites/'):
                     namespace = self.path.split('/')[6]
                     context = namespace[:-1]
@@ -1321,6 +1334,81 @@ class E2E(unittest.TestCase):
         self.assertEqual(self.calls[before:], [
             ('GET', '/api/v1/conversations?per_page=100&scope=unread'),
             ('GET', '/api/v1/conversations/12?auto_mark_as_read=false')])
+
+    def test_inbox_organization_changes_only_requested_own_view_fields(self):
+        original, messages = self.inbox_state.copy(), list(self.inbox_messages)
+        try:
+            for options, expected in [(('--state', 'read'), {'workflow_state': 'read'}),
+                                      (('--state', 'unread'), {'workflow_state': 'unread'}),
+                                      (('--state', 'archived'), {'workflow_state': 'archived'}),
+                                      (('--starred', '--no-subscribed'), {'starred': True, 'subscribed': False}),
+                                      (('--no-starred', '--subscribed'), {'starred': False, 'subscribed': True})]:
+                with self.subTest(options=options):
+                    command = ('inbox-edit', '12', *options)
+                    before = len(self.calls)
+                    preview = self.invoke(*command)
+                    self.assertEqual(preview.returncode, 0, preview.stderr)
+                    data = json.loads(preview.stdout)
+                    self.assertEqual(data['body'], {'conversation': expected})
+                    self.assertNotIn('Synthetic private message', preview.stdout)
+                    rejected = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                    self.assertNotEqual(rejected.returncode, 0)
+                    self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                    sent = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+                    self.assertEqual(sent.returncode, 0, sent.stderr)
+                    self.assertIn('acknowledged', sent.stdout)
+                    self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                                     [('PUT', '/api/v1/conversations/12')])
+                    self.assertEqual(self.inbox_write, {'conversation': expected})
+                    current = self.invoke('conversation', '12')
+                    self.assertEqual(current.returncode, 0, current.stderr)
+                    thread = json.loads(current.stdout)
+                    for key, value in expected.items():
+                        self.assertEqual(thread[key], value)
+                    self.assertEqual(thread['messages'], messages)
+        finally:
+            type(self).inbox_state, type(self).inbox_messages = original, messages
+
+    def test_inbox_delete_empties_own_view_only_and_requires_permanent_ack(self):
+        original, messages = self.inbox_state.copy(), list(self.inbox_messages)
+        try:
+            before = len(self.calls)
+            missing = self.invoke('inbox-delete', '12')
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertEqual(self.calls[before:], [])
+            command = ('inbox-delete', '12', '--permanent')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            sent = self.invoke(*command, '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+            self.assertEqual(sent.returncode, 0, sent.stderr)
+            self.assertTrue(json.loads(sent.stdout)['deleted_from_own_view'])
+            self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                             [('DELETE', '/api/v1/conversations/12')])
+            current = json.loads(self.invoke('conversation', '12').stdout)
+            self.assertEqual(current['messages'], [])
+            self.assertEqual(current['message_count'], 0)
+            self.assertFalse(any('/delete_for_all' in route for _, route in self.calls[before:]))
+        finally:
+            type(self).inbox_state, type(self).inbox_messages = original, messages
+
+    def test_inbox_new_message_or_private_thread_refuses_old_preview_or_subscription(self):
+        original, messages = self.inbox_state.copy(), list(self.inbox_messages)
+        try:
+            command = ('inbox-edit', '12', '--no-starred')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            type(self).inbox_messages = messages + [{'id': 32, 'body': 'Synthetic later message'}]
+            before = len(self.calls)
+            changed = self.invoke(*command, '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+            self.assertNotEqual(changed.returncode, 0)
+            self.assertIn('Preview changed', changed.stderr)
+            self.inbox_state['private'] = True
+            refused = self.invoke('inbox-edit', '12', '--no-subscribed')
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn('group conversation', refused.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).inbox_state, type(self).inbox_messages = original, messages
 
     def test_inbox_reply_preview_and_confirm_over_tls(self):
         message = Path(self.tmp.name) / 'inbox-reply.txt'

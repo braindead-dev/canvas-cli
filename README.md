@@ -42,6 +42,10 @@ canvas-pocket my-files --search 'paper'
 canvas-pocket file-info 789
 canvas-pocket inbox --scope unread --course 123
 canvas-pocket conversation 456
+canvas-pocket inbox-edit 456 --state archived
+canvas-pocket inbox-edit 456 --state unread --starred
+canvas-pocket inbox-edit 456 --no-subscribed  # group conversation only
+canvas-pocket inbox-delete 456 --permanent
 canvas-pocket recipients --search 'Example Name' --course 123
 canvas-pocket recipients --user-id 789
 canvas-pocket inbox-compose --recipient 789 --subject 'Question' --message-file message.txt
@@ -252,6 +256,12 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 ```
 
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
+
+## Inbox organization
+
+`inbox-edit` can set `--state read|unread|archived`, `--starred`/`--no-starred` and, for a confirmed group conversation, `--subscribed`/`--no-subscribed`. Only specified fields are sent. Archive preserves messages; setting the state to read or unread brings an archived thread back. Subscription changes affect only your unread flags and Inbox ordering, not other participants or whether you retain access.
+
+`inbox-delete ID --permanent` removes all messages from **your own view**, not other people's copies. There is no Pocket restore command, so use archive if you want to keep the thread. Both commands first read with `auto_mark_as_read=false`, bind the signed-in account/site, current state and a private message-revision digest, then require `--yes --confirm DIGEST`. Previews do not echo message bodies. A new message or changed state invalidates an old preview. No message is sent by these commands, and ordinary reads never issue state edits. State changes, explicit false values, deletion, stale previews and the group-only subscription rule have synthetic HTTPS tests, not live write validation. See the [official Conversations API](https://developerdocs.instructure.com/services/canvas/resources/conversations).
 
 ## Dashboard favorites
 
