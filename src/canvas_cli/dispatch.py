@@ -9,6 +9,12 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'topic-create':
+        from .topic_authoring import create
+        return create(client, args.context_id, context_type=args.context, title=args.title,
+                      message=read_utf8(args.message_file, label='Topic message') if args.message_file else None,
+                      published=args.published, acknowledge_shared=args.acknowledge_shared_topic,
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('topic-edit', 'topic-delete'):
         from .topic_management import change
         source = getattr(args, 'message_file', None)

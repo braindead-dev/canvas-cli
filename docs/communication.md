@@ -54,6 +54,20 @@ Topic subscribe/unsubscribe changes your notifications. Topic markers cover init
 
 Forced-read-state sets a manual override; its explicit negation clears it; omission preserves it. Closed-topic subscription remains subject to access. These are separately confirmed writes; acknowledgement does not prove a person read or completed work.
 
+### Create a discussion prompt
+
+```sh
+canvas topic-create 123 --title 'New topic' --message-file prompt.txt --acknowledge-shared-topic
+canvas topic-create 123 --context group --title 'Team question' --acknowledge-shared-topic
+canvas topic-create 123 --title 'Draft topic' --no-published --acknowledge-shared-topic
+```
+
+Creation uses the dynamic `create_discussion_topic` permission reported by the exact course/group with `include[]=permissions`, not an inferred role or the raw context-permissions endpoint. Native `moderate_forum` determines the default: moderators get a draft, other permitted creators a published topic. Explicit `--published` or `--no-published` binds your choice; drafts require moderation permission and are not necessarily private from moderators.
+
+Title is required; omitted body stays native-empty. Supplied UTF-8 plain text is escaped to HTML. The preview binds account, context, creation/moderation rights, complete accessible topic inventory and exact content/publication choice. One POST must produce a new ID and own author, matching independent topic readback and an inventory entry. Own edit/delete rights need not be enabled to create. Stored text/publication mismatches are labeled, not silently repaired.
+
+Only ordinary ungraded non-anonymous course/group topics are supported. No attachments, assignment/group-set links, section overrides or advanced scheduling/options are requested. Canvas defaults/HTML processing remain native; notifications and ordering effects are not proven. An uncertain result never triggers retry, deletion or rollback. Duplicate titles are allowed and do not prove an existing topic was created.
+
 ### Manage a discussion prompt
 
 ```sh
@@ -104,3 +118,5 @@ Dismiss hides one own notification; dismiss-all with all acknowledgement hides e
 [Conversations](https://developerdocs.instructure.com/services/canvas/resources/conversations), [Recipients](https://developerdocs.instructure.com/services/canvas/resources/search), [Discussions](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics), [Peer reviews](https://developerdocs.instructure.com/services/canvas/resources/peer_reviews), [Announcements](https://developerdocs.instructure.com/services/canvas/resources/announcements), [Activity](https://developerdocs.instructure.com/services/canvas/resources/users).
 
 Prompt-management semantics also follow Instructure's [controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_controller.rb), [API serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/discussion_topics.rb), [API reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_api_controller.rb) and [topic model](https://github.com/instructure/canvas-lms/blob/master/app/models/discussion_topic.rb).
+
+Creation authorization follows the dynamic permissions in the native [course serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/course_json.rb) and [group serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/group.rb), not a role-name guess.

@@ -36,6 +36,13 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'created_topic' in data:
+        row = data['created_topic']
+        lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} created",
+                 row['title'], 'Published' if row['published'] else 'Draft', row['html_url']]
+        if not all(data['stored_fields_match_request'].values()):
+            lines.append('Stored fields differ from the request; inspect Canvas and JSON before using the topic.')
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'edited_topic' in data:
         row = data['edited_topic']
         lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} edited",
@@ -197,7 +204,7 @@ def _brief(data):
             lines.append('No matching commands. Try help without --search.')
         lines.append(data['note'])
         return '\n'.join(lines)
-    if isinstance(data, dict) and 'permissions' in data and 'context_type' in data:
+    if isinstance(data, dict) and 'permissions' in data and 'context_type' in data and not data.get('dry_run'):
         return (f"Native permissions ({data['context_type']} {data[data['context_type'] + '_id']})\n" +
                 '\n'.join(f"{key}: {str(value).lower()}" for key, value in data['permissions'].items()) + f"\n{data['note']}")
     if isinstance(data, dict) and ('own_profile' in data or 'profile_changes' in data):

@@ -29,7 +29,7 @@ def _confirmation(command):
 
 
 def parser():
-    p = argparse.ArgumentParser(description='Canvas API CLI. JSON output may contain private academic data.')
+    p = argparse.ArgumentParser(prog='canvas', description='Canvas API CLI. JSON output may contain private academic data.')
     p.add_argument('--max-pages', type=int, default=100)
     p.add_argument('--format', choices=('json', 'brief'), default='json', help='Output format; JSON is complete')
     sub = p.add_subparsers(dest='command', required=True)
@@ -675,6 +675,15 @@ def parser():
                            help='Acknowledge that Canvas text edits remove the existing attachment')
         if name != 'entry':
             _confirmation(s)
+    creation = sub.add_parser('topic-create', help='Preview one shared ungraded topic using native creation/draft permissions')
+    creation.add_argument('context_id', type=identifier)
+    creation.add_argument('--context', choices=('course', 'group'), default='course')
+    creation.add_argument('--title', required=True)
+    creation.add_argument('--message-file', type=Path, help='Optional UTF-8 plain text escaped to HTML')
+    creation.add_argument('--published', action=argparse.BooleanOptionalAction, default=None,
+                          help='Omitted uses native default: moderator draft, other creator published')
+    creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
+    _confirmation(creation)
     for name in ('topic-edit', 'topic-delete'):
         s = sub.add_parser(name, help='Preview exact ungraded discussion prompt management, not a reply or assignment change')
         s.add_argument('context_id', type=identifier)

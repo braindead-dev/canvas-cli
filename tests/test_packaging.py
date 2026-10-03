@@ -24,3 +24,11 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('usage: canvas auth', result.stdout)
         self.assertNotIn('synthetic-not-used', result.stdout + result.stderr)
+
+    def test_module_invocation_help_still_uses_canvas_not_python_or_package_name(self):
+        environment = {**os.environ, 'CANVAS_ORIGIN': 'http://invalid.example', 'CANVAS_TOKEN': 'synthetic-not-used'}
+        result = subprocess.run([sys.executable, '-m', 'canvas_cli.cli', 'help', 'topic-create', '--format', 'brief'],
+                                env=environment, capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('usage: canvas topic-create', result.stdout)
+        self.assertNotIn('synthetic-not-used', result.stdout + result.stderr)

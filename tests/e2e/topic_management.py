@@ -36,6 +36,9 @@ def initialize(state, *, enabled=False):
     state.topic_attachment_deleted = False
     state.topic_notifications = []
     state.topic_deleted = set()
+    state.topic_create_permission = True
+    state.topic_moderator = state.topic_own_edit = False
+    state.topic_publication_override = None
 
 
 def _route(state, handler):
@@ -56,7 +59,12 @@ def read(state, handler):
     elif prefix is None:
         return False
     elif url.path == prefix:
-        _send(handler, {'id': int(prefix.rsplit('/', 1)[1]), **state.topic_context})
+        row = {'id': int(prefix.rsplit('/', 1)[1]), **state.topic_context}
+        if parse_qs(url.query).get('include[]') == ['permissions']:
+            row['permissions'] = {'create_discussion_topic': state.topic_create_permission, 'create_announcement': False}
+        _send(handler, row)
+    elif url.path == prefix + '/permissions':
+        _send(handler, {'moderate_forum': state.topic_moderator})
     elif url.path == prefix + '/discussion_topics':
         parameters = parse_qs(url.query)
         if parameters.get('only_announcements') != ['false']:
@@ -91,6 +99,33 @@ def write(state, handler, body):
     if parsed is None:
         return False
     url, prefix = parsed
+    if prefix is not None and handler.command == 'POST' and url.path == prefix + '/discussion_topics':
+        if (state.topic_denied or state.topic_create_permission is not True or
+                body.get('published') is False and not state.topic_moderator):
+            _send(handler, {'private': 'synthetic-private-native-creation-denial'}, 403)
+            return True
+        if (set(body) - {'title', 'message', 'published'} or type(body.get('published')) is not bool or
+                parse_qs(url.query) != {'no_verifiers': ['true']}):
+            _send(handler, {'private': 'synthetic-private-native-invalid-creation'}, 400)
+            return True
+        identifier = max(state.managed_topics) + 1
+        row = copy.deepcopy(state.managed_topics[901])
+        row.update(id=identifier, title=body['title'], message=body.get('message'), published=body['published'],
+                   pinned=False, locked=False, position=len(state.managed_topics) + 1, attachments=None,
+                   author={'id': state.topic_viewer}, ungraded_discussion_overrides=[],
+                   permissions={'update': state.topic_own_edit, 'delete': state.topic_own_edit})
+        if state.topic_sanitize and row['message'] is not None:
+            row['message'] = row['message'].replace('<br>', '<br />')
+        if state.topic_publication_override is not None:
+            row['published'] = state.topic_publication_override
+        state.managed_topics[identifier] = row
+        state.topic_written = True
+        state.topic_notifications.append(identifier)
+        response = copy.deepcopy(row)
+        if state.topic_ack_patch is not None:
+            response = {**response, **state.topic_ack_patch} if isinstance(state.topic_ack_patch, dict) else state.topic_ack_patch
+        _send(handler, response)
+        return True
     if prefix is None or not url.path.startswith(prefix + '/discussion_topics/'):
         return False
     identifier = int(url.path.rsplit('/', 1)[1])
