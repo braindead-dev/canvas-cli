@@ -1918,7 +1918,10 @@ class E2E(unittest.TestCase):
 
     def test_capabilities_without_credentials(self):
         r = self.invoke('capabilities')
-        self.assertIn('get', json.loads(r.stdout)['read'])
+        data = json.loads(r.stdout)
+        self.assertNotIn('get', data['read'])
+        self.assertIn('get (expert GET only; native server-side effects may apply)', data['read_with_native_side_effects'])
+        self.assertIn('notification-preferences (GET may materialize default policy records)', data['read_with_native_side_effects'])
         brief = self.invoke('capabilities', '--format', 'brief')
         self.assertEqual(brief.returncode, 0, brief.stderr)
         self.assertIn('Read-only (', brief.stdout)
