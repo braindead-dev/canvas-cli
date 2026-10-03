@@ -67,6 +67,7 @@ class E2E(unittest.TestCase):
         cls.profile_ignored_fields = set()
         cls.profile_fail_readback = False
         cls.profile_written = False
+        cls.sync_switch_viewer = False
         cls.dashboard_positions = {'course_101': 1, 'course_102': 2, 'group_12': '9'}
         cls.communication_channels = [
             {'id': 19, 'user_id': 7, 'type': 'email', 'position': 1, 'workflow_state': 'active',
@@ -290,6 +291,8 @@ class E2E(unittest.TestCase):
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
                              'submission': {'workflow_state': 'unsubmitted'}}]
                 elif self.path == '/api/v1/courses/101?include[]=syllabus_body':
+                    if cls.sync_switch_viewer:
+                        cls.own_profile = {**cls.own_profile, 'id': 8}
                     data = {'id': 101, 'syllabus_body': '<a href="/courses/101/files/7">Syllabus</a>'}
                 elif self.path == '/api/v1/courses/103?include[]=syllabus_body':
                     data = {'id': 103, 'syllabus_body': '<a href="/courses/103/files/8">Reading</a>'}
@@ -1873,6 +1876,55 @@ class E2E(unittest.TestCase):
             self.assertIn('Page limit', capped.stderr)
         self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
 
+    def test_sync_over_tls_separates_viewers_and_preserves_legacy_files(self):
+        directory = Path(self.tmp.name) / 'account-separated-sync'
+        directory.mkdir()
+        legacy = directory / 'legacy-course-101-999999.json'
+        legacy.write_text('Synthetic legacy file is not read or rewritten')
+        original = self.own_profile.copy()
+        before = len(self.calls)
+        try:
+            first = self.invoke('sync', '101', '--directory', str(directory))
+            self.assertEqual(first.returncode, 0, first.stderr)
+            initial = json.loads(first.stdout)
+            type(self).own_profile = {**original, 'id': 8}
+            other = self.invoke('sync', '101', '--directory', str(directory))
+            self.assertEqual(other.returncode, 0, other.stderr)
+            other_data = json.loads(other.stdout)
+            self.assertTrue(other_data['baseline'])
+            self.assertIn('-user-8-course-101-', other_data['saved'])
+            self.assertEqual(json.loads(Path(other_data['saved']).read_text())['viewer_user_id'], 8)
+            type(self).own_profile = original
+            again = self.invoke('sync', '101', '--directory', str(directory))
+            self.assertEqual(again.returncode, 0, again.stderr)
+            self.assertEqual(json.loads(again.stdout)['previous'], initial['saved'])
+            self.assertEqual(legacy.read_text(), 'Synthetic legacy file is not read or rewritten')
+            comparison = self.invoke('snapshot-diff', initial['saved'], other_data['saved'])
+            self.assertEqual(comparison.returncode, 1)
+            self.assertIn('different signed-in viewers', comparison.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).own_profile = original
+
+    def test_sync_over_tls_rejects_account_switch_during_capture_without_new_snapshot(self):
+        directory = Path(self.tmp.name) / 'switched-account-sync'
+        original = self.own_profile.copy()
+        try:
+            baseline = self.invoke('sync', '101', '--directory', str(directory))
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+            saved = json.loads(baseline.stdout)['saved']
+            prior_bytes = Path(saved).read_bytes()
+            type(self).sync_switch_viewer = True
+            failed = self.invoke('sync', '101', '--directory', str(directory))
+            self.assertEqual(failed.returncode, 1)
+            self.assertIn('account changed during capture', failed.stderr)
+            self.assertNotIn('Synthetic page', failed.stdout + failed.stderr)
+            self.assertEqual([str(path.resolve()) for path in directory.glob('*.json')], [saved])
+            self.assertEqual(Path(saved).read_bytes(), prior_bytes)
+        finally:
+            type(self).own_profile = original
+            type(self).sync_switch_viewer = False
+
     def test_notification_batch_is_exact_and_bound_to_channel_and_current_frequencies(self):
         original = {key: row.copy() for key, row in self.notification_preferences.items()}
         original_channels = [row.copy() for row in self.communication_channels]
@@ -2744,6 +2796,21 @@ class E2E(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn('auth login', r.stderr)
         self.assertNotIn('invalid-secret', r.stderr)
+
+    def test_auth_status_refuses_malformed_profile_without_logging_it(self):
+        original = self.own_profile.copy()
+        try:
+            for user_id in (True, '7', 0):
+                type(self).own_profile = {**original, 'id': user_id}
+                before = len(self.calls)
+                result = self.invoke('auth', 'status')
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('did not identify the signed-in user', result.stderr)
+                self.assertEqual(result.stdout, '')
+                self.assertNotIn('synthetic-private-profile', result.stderr)
+                self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile')])
+        finally:
+            type(self).own_profile = original
 
     def test_overview_against_tls_fixture(self):
         r = self.invoke('overview')

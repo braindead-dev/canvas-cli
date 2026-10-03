@@ -12,6 +12,29 @@ from canvas_pocket.snapshot_diff import compare, read
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_diff_refuses_different_viewers_and_malformed_identity(self):
+        base = {'origin': 'https://canvas.example.edu', 'course_id': 12, 'viewer_user_id': 7}
+        with self.assertRaisesRegex(CanvasError, 'different signed-in viewers'):
+            compare(base, {**base, 'viewer_user_id': 8})
+        for viewer in (None, True, '7', 0, -1, 7.0):
+            for old, new in ((base, {**base, 'viewer_user_id': viewer}),
+                             ({**base, 'viewer_user_id': viewer}, base)):
+                with self.subTest(viewer=viewer), self.assertRaisesRegex(CanvasError, 'invalid viewer'):
+                    compare(old, new)
+
+    def test_diff_marks_explicit_legacy_comparison_as_unverified(self):
+        legacy = {'origin': 'https://canvas.example.edu', 'course_id': 12}
+        bound = {**legacy, 'viewer_user_id': 7}
+        verified = compare(bound, bound)
+        self.assertTrue(verified['viewer_identity_verified'])
+        self.assertEqual(verified['viewer_user_id'], 7)
+        for old, new in ((legacy, legacy), (legacy, bound), (bound, legacy)):
+            with self.subTest(old=old, new=new):
+                result = compare(old, new)
+                self.assertFalse(result['viewer_identity_verified'])
+                self.assertIn('unverified', result['viewer_note'])
+                self.assertIn('automatic sync baseline', result['viewer_note'])
+
     def test_secret_fields_and_signed_queries_are_removed(self):
         source = {'secure_params': 'jwt-secret', 'nested': [
             {'access_token': 'private',

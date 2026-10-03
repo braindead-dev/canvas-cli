@@ -1,0 +1,444 @@
+"""Human-readable summaries of already-fetched data; JSON stays complete."""
+
+import json
+
+
+def brief(data):
+    """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and 'help_text' in data:
+        return f"{data['safety']}\n\n{data['help_text'].rstrip()}"
+    if isinstance(data, dict) and 'schema_version' in data and 'commands' in data:
+        lines = [f"Pocket parser schema v{data['schema_version']} (JSON has full argument details)"]
+        for command in data['commands']:
+            lines.append(f"{command['command']} | {command['safety']}")
+            lines.extend('  ' + (' / '.join(argument['flags']) or argument['destination']) +
+                         (' (required)' if argument['required'] else '') for argument in command['arguments'])
+            for selector in command.get('subcommand_selectors', []):
+                lines.append('  subcommands: ' + ', '.join(selector['commands']))
+        if not data['commands']:
+            lines.append('No matching commands.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'command_index' in data:
+        lines = []
+        for category, commands in data['command_index'].items():
+            lines.append(category)
+            lines.extend(f"  {item['command']}  {item['description']}" for item in commands)
+            lines.append('')
+        if not data['command_index']:
+            lines.append('No matching commands. Try help without --search.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'permissions' in data and 'context_type' in data:
+        return (f"Native permissions ({data['context_type']} {data[data['context_type'] + '_id']})\n" +
+                '\n'.join(f"{key}: {str(value).lower()}" for key, value in data['permissions'].items()) + f"\n{data['note']}")
+    if isinstance(data, dict) and ('own_profile' in data or 'profile_changes' in data):
+        record = data.get('own_profile', data.get('profile_changes'))
+        lines = ['Own Canvas profile' if 'own_profile' in data else 'Selected profile fields verified by read-back']
+        lines.extend(f'{key}: {value if value is not None else "(unset)"}' for key, value in record.items())
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'enrollments' in data and 'user_id' in data:
+        lines = ['Own Canvas enrollments (not official university registration)']
+        for row in data['enrollments']:
+            lines.append(f"{row['id']} | course {row['course_id']} | {row.get('type') or 'unknown role'} | "
+                         f"{row.get('enrollment_state') or 'unknown state'}" +
+                         (f" | section {row['course_section_id']}" if 'course_section_id' in row else ''))
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'invitation_response' in data:
+        return f"Canvas invitation {data['enrollment_id']} (course {data['course_id']}): {data['invitation_response']} acknowledged\n{data['note']}"
+    if isinstance(data, dict) and ('group_categories' in data or 'group_category' in data):
+        categories = data.get('group_categories', [data.get('group_category')])
+        lines = [f"Course {data['course_id']} group-set metadata"]
+        for row in categories:
+            signup = (row['self_signup'] or 'disabled') if 'self_signup' in row else 'unknown'
+            lines.append(f"{row['id']} | {row.get('name') or '(unnamed)'} | self-signup {signup}")
+        if 'category_groups' in data:
+            lines.extend(f"  {row['id']} | {row.get('name') or '(unnamed)'} | native count {row.get('members_count', 'unknown')}"
+                         for row in data['category_groups'])
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'returned_user_count' in data and 'users' in data:
+        lines = [f"Visible roster ({data['context_type']} {data[data['context_type'] + '_id']}): {data['returned_user_count']} returned"]
+        for row in data['users']:
+            lines.append(f"{row['id']} | {row.get('name') or row.get('short_name') or '(name unavailable)'}" +
+                         (f" | {row['email']}" if row.get('email') is not None else ''))
+            for enrollment in row.get('enrollments', []):
+                lines.append(f"  {enrollment.get('type') or 'unknown role'} | {enrollment.get('enrollment_state') or 'unknown state'}" +
+                             (f" | section {enrollment['course_section_id']}" if 'course_section_id' in enrollment else ''))
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'membership' in data:
+        item = data['membership']
+        state = item['workflow_state'] if item else 'no active record returned'
+        return f"Own group membership ({data['group_id']}): {state}\n{data['note']}"
+    if isinstance(data, dict) and data.get('context_type') == 'group' and 'resource' in data and 'items' in data:
+        return (f"Group {data['group_id']} {data['resource']}: {data.get('group_name') or '(unnamed)'}\n" +
+                brief(data['items']) + f"\n{data['note']}")
+    if isinstance(data, dict) and 'quota_bytes' in data:
+        return (f"Storage ({data['context_type']} {data[data['context_type'] + '_id']}): "
+                f"{data['used_bytes']} / {data['quota_bytes']} bytes; {data['remaining_bytes']} remaining" +
+                (' (over quota)' if data['over_quota'] else '') + f"\n{data['note']}")
+    if isinstance(data, dict) and 'root_folder' in data:
+        row = data['root_folder']
+        return f"Root ({data['context_type']} {data[data['context_type'] + '_id']}): {row['id']} {row.get('name') or ''}\n{data['note']}"
+    if isinstance(data, dict) and 'calendar_event' in data:
+        event = data['calendar_event']
+        when = (event.get('all_day_date') or event.get('start_at')) if event.get('all_day') else event.get('start_at')
+        return (f"Event {event['id']} [{event.get('workflow_state') or 'unknown'}] {event.get('title') or 'Untitled'}\n"
+                f"{when or 'Undated'}" + (' (all day)' if event.get('all_day') else f" to {event.get('end_at') or 'unknown'}") +
+                f"\n{data['note']}")
+    if isinstance(data, dict) and 'discussion_state' in data:
+        state = data['discussion_state']
+        return (f"Discussion {state['topic_id']}: {state['action']}" +
+                (f" (entry {state['entry_id']})" if state.get('entry_id') else '') + f"\n{data['note']}")
+    if isinstance(data, dict) and 'favorite_change' in data:
+        change = data['favorite_change']
+        target = change.get('target')
+        return (f"Favorites ({change['context_type']}): {change['action']}" +
+                (f" {target['id']} {target.get('name') or ''}" if target else '') + f"\n{data['note']}")
+    if isinstance(data, dict) and 'inbox_change' in data:
+        thread = data['inbox_change']
+        action = 'removed from your view' if data['deleted_from_own_view'] else thread['workflow_state']
+        return f"Inbox {thread['id']}: {action}\nStarred: {thread['starred']}; subscribed: {thread['subscribed']}\n{data['note']}"
+    if isinstance(data, dict) and 'nickname_change' in data:
+        record = data['nickname_change']
+        return (f"Nickname {record['course_id']}: {record['nickname'] or '(cleared)'}" if record else
+                'All own course nicknames cleared.') + f"\n{data['note']}"
+    if isinstance(data, dict) and 'color_change' in data:
+        record = data['color_change']
+        return f"Color {record['asset_string']}: {record['hexcode']}\n{data['note']}"
+    if isinstance(data, dict) and ('settings_change' in data or 'positions_change' in data):
+        changes = data.get('settings_change', data.get('positions_change'))
+        return '\n'.join(f'{key}: {value}' for key, value in changes.items()) + f"\n{data['note']}"
+    if isinstance(data, dict) and 'communication_channels' in data:
+        lines = ['Own communication channels']
+        for row in data['communication_channels']:
+            lines.append(f"{row['id']} | {row['type']} | {row['workflow_state']} | position {row.get('position', 'unknown')}" +
+                         (f" | {row['address']}" if row.get('address') is not None else ''))
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and ('notification_preferences' in data or 'notification_changes' in data):
+        channel = data['channel']
+        lines = [f"Notification {'changes' if 'notification_changes' in data else 'preferences'}: "
+                 f"channel {channel['id']} ({channel['type']}, {channel['workflow_state']})"]
+        for row in data.get('notification_changes', data.get('notification_preferences')):
+            lines.append(f"{row['notification']} | {row['frequency']} | {row['category'] or 'category unknown'}")
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'activity_hidden' in data:
+        record = data['activity_hidden']
+        return f"Activity hide acknowledged: {'all items' if record['all_items'] else record['item_id']}\n{data['note']}"
+    if isinstance(data, dict) and 'missing_assignments' in data:
+        lines = ['Native missing submissions (own account)']
+        for row in data['missing_assignments']:
+            lines.append(f"{row['course_id']}/{row['id']} | {row['due_display']} | {row.get('name') or '(untitled)'}")
+            if row.get('locked_for_user') is True:
+                lines.append('  Locked for this user; do not assume a late submission is possible.')
+            if row.get('planner_override'):
+                lines.append('  Planner marker present; missing submission remains listed by Canvas.')
+            if row.get('html_url'):
+                lines.append('  ' + row['html_url'])
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'own_entry_ratings' in data:
+        lines = [f"Own ratings: {data.get('topic_title') or data['topic_id']}"]
+        if not data['ratings_enabled']:
+            lines.append('Ratings disabled.')
+        for key, rating in data['own_entry_ratings'].items():
+            lines.append(f"{key}: {'liked' if rating == 1 else 'like removed'}")
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'discussion_rating' in data:
+        row = data['discussion_rating']
+        return f"Entry {row['entry_id']}: {'liked' if row['rating'] == 1 else 'like removed'}\n{data['note']}"
+    if isinstance(data, dict) and 'submissions' in data:
+        lines = [f"Own submissions: course {data['course_id']}"]
+        for row in data['submissions']:
+            assignment = row.get('assignment') or {}
+            lines.append(f"{row['assignment_id']} | {assignment.get('name') or '(unknown title)'} | "
+                         f"{row.get('workflow_state') or 'unknown'} | attempt {row.get('attempt', 'unknown')}")
+            if row.get('grade_matches_current_submission') is False:
+                lines.append('  Grade does not match the current submission attempt.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'feedback' in data:
+        lines = [f"Own reported feedback: course {data['course_id']}"]
+        for row in data['feedback']:
+            lines.append(f"{row['assignment_id']} | {row.get('assignment_name') or '(unknown title)'} | "
+                         f"{row.get('latest_feedback_display') or 'date unknown'}")
+            if row.get('redo_request') is True:
+                lines.append('  Native reassignment flag is set; check the instructor instructions.')
+            if row['grade_applicability'] == 'earlier_attempt':
+                lines.append('  Grade does not match the current attempt.')
+            if row.get('grade') is not None or row.get('score') is not None:
+                lines.append(f"  Grade {row.get('grade', 'unknown')}; score {row.get('score', 'unknown')} / "
+                             f"{row.get('points_possible') if row.get('points_possible') is not None else 'unknown'}")
+            lines.append(f"  Comments: {row['comment_count'] if row['comment_count'] is not None else 'unknown'}; "
+                         f"rubric criteria: {len(row['rubric_assessment']) if row['rubric_assessment'] is not None else 'unknown'}")
+            for comment in row['comments']:
+                if comment.get('comment') is not None:
+                    lines.append('  ' + comment['comment'])
+            for criterion, assessment in (row['rubric_assessment'] or {}).items():
+                lines.append(f"  Criterion {criterion}: {assessment.get('points', 'unknown')} points" +
+                             (f"; {assessment['comments']}" if assessment.get('comments') is not None else ''))
+            if row['timestamp_coverage_uncertain']:
+                lines.append('  Some feedback timestamps are unknown.')
+            if row.get('assignment_url'):
+                lines.append('  ' + row['assignment_url'])
+        if not data['feedback']:
+            lines.append('No feedback reported for these filters; this is not proof of completed coursework.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'activity_summary' in data:
+        return '\n'.join(f"{row['type']}" + (f" ({row['notification_category']})" if row.get('notification_category') else '') +
+                         f": {row['unread_count']} unread / {row['count']} notifications"
+                         for row in data['activity_summary']) + f"\n{data['note']}"
+    if isinstance(data, dict) and 'activity' in data:
+        lines = [f"Activity: {data['scope']}"]
+        for row in data['activity']:
+            marker = 'unread' if row.get('read_state') is False else 'read' if row.get('read_state') is True else 'unknown'
+            lines.append(f"{row['id']} | {row['type']} | {marker} | {row.get('title') or '(untitled)'}")
+            if row.get('html_url'):
+                lines.append('  ' + row['html_url'])
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'peer_reviews' in data:
+        lines = [f"Peer reviews: {data.get('assignment_name') or data['assignment_id']} ({data['scope']})"]
+        for review in data['peer_reviews']:
+            assessor = review.get('assessor_id')
+            lines.append(f"{review['id']}  {review.get('workflow_state') or 'unknown'}  "
+                         f"owner {review['user_id']}; assessor {assessor if assessor is not None else 'hidden/unknown'}")
+        if not data['peer_reviews']:
+            lines.append('No reviews returned in this scope; this does not prove there are no reviews you owe.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'personal_file' in data:
+        file = data['personal_file']
+        return f"File {file['id']}: {file.get('display_name') or 'Untitled'}\n{data['note']}"
+    if isinstance(data, dict) and 'personal_folder' in data:
+        folder = data['personal_folder']
+        return f"Folder {folder['id']}: {folder['name']}\n{data['note']}"
+    if isinstance(data, dict) and 'entry' in data and 'note' in data:
+        return f"Entry {data['entry']['id']} updated.\n{data['note']}"
+    if isinstance(data, dict) and data.get('deleted') and 'entry_id' in data:
+        return f"Entry {data['entry_id']} deleted.\n{data['note']}"
+    if isinstance(data, dict) and 'planner_override' in data:
+        override = data['planner_override']
+        return (f"Planner override {override['id']} for {override['plannable_type']} {override['plannable_id']}\n"
+                f"Marked complete: {override['marked_complete']}; dismissed: {override['dismissed']}\n{data['note']}")
+    if isinstance(data, dict) and 'export' in data and isinstance(data['export'], dict):
+        job = data['export']
+        lines = [f"Export {job['id']} [{job.get('workflow_state') or 'unknown'}] "
+                 f"{job.get('export_type') or 'type unknown'}",
+                 f"Download available: {'yes' if job['download_available'] else 'no'}"]
+        if data.get('progress'):
+            progress = data['progress']
+            lines.append(f"Progress {progress['id']} [{progress.get('workflow_state') or 'unknown'}] "
+                         f"{progress.get('completion')}% reported")
+        if data.get('note'):
+            lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'planner_window' in data and 'items' in data:
+        window = data['planner_window']
+        lines = [f"Planner {window['start']} through {window['end']}"]
+        for item in data['items']:
+            content = item.get('plannable') or {}
+            override = item.get('planner_override') or {}
+            label = content.get('title') or content.get('name') or item.get('plannable_id')
+            when = item.get('plannable_date') or content.get('todo_date') or content.get('due_at') or 'undated'
+            status = ' [planner marked complete]' if override.get('marked_complete') is True else ''
+            lines.append(f"{when}  {item.get('plannable_type', 'item')}: {label}{status}")
+        if not data['items']:
+            lines.append('No planner items in this window; other course requirements may still exist.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'module_progress' in data:
+        lines = [f"Module progress for course {data['course_id']}"]
+        for module in data['module_progress']:
+            lines.append(f"{module['id']}  {module.get('name') or 'Module'} [{module.get('state') or 'unknown'}]")
+            counts = module['requirements']
+            if counts is None:
+                lines.append('  Item requirements unavailable; see JSON for details.')
+                continue
+            rule = module.get('requirement_type') or 'not reported'
+            lines.append(f"  {counts['completed']}/{counts['required']} visible requirements completed; "
+                         f"{counts['unknown']} unknown; rule: {rule}")
+            for item in module['items']:
+                locked = ', locked' if item['locked_for_user'] else ''
+                lines.append(f"  {item['id']}  {item.get('title') or 'Item'} [{item['completion']}{locked}]")
+        if not data['complete']:
+            lines.append('Some module item inventories were not read; coverage is partial.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'priority_basis' in data and 'items' in data:
+        lines = [f"Agenda ({data['time_zone']}; next {data['window_days']} days)"]
+        for item in data['items']:
+            note = f"{item['urgency']}, {item['status']}"
+            if item['availability'] not in ('not_specified', 'within_window'):
+                note += f", {item['availability']}"
+            lines.append(f"{item['due_display']}  {item.get('course_name') or item['course_id']}: "
+                         f"{item.get('name') or item['assignment_id']}  [{note}]")
+            if item.get('html_url'):
+                lines.append(f"  {item['html_url']}")
+        if not data['items']:
+            lines.append('No unfinished dated assignments in this window.')
+        if data['undated_count']:
+            line = f"{data['undated_count']} undated visible item(s) are not deadlines."
+            if data['undated'] is None:
+                line += ' Use --include-undated to inspect them.'
+            lines.append(line)
+        if data['undated']:
+            lines.append('Undated visible items (check course instructions):')
+            lines.extend(f"  {item.get('course_name') or item['course_id']}: "
+                         f"{item.get('name') or item['assignment_id']} [{item['status']}]"
+                         for item in data['undated'])
+        if data['unavailable_courses']:
+            lines.append(f"Assignments unavailable for {len(data['unavailable_courses'])} "
+                         'course(s); see JSON for details.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and all(key in data for key in
+                                       ('read', 'local_write', 'canvas_write', 'auth', 'limitations')):
+        sections = (('Read-only', 'read'), ('Local writes', 'local_write'),
+                    ('Canvas writes', 'canvas_write'), ('Authentication', 'auth'),
+                    ('Limitations', 'limitations'))
+        return '\n\n'.join(f'{title} ({len(data[key])})\n' +
+                           '\n'.join(f'  {item}' for item in data[key])
+                           for title, key in sections)
+    if isinstance(data, dict) and 'topic_id' in data and 'entries' in data and 'unavailable' in data:
+        lines = [f"{data.get('title') or 'Discussion'}: {len(data['entries'])} top-level entry(s)."]
+        for entry in data['entries']:
+            lines.append(f"  {entry['id']}  {entry.get('user_name') or 'Unknown author'}  "
+                         f"{len(entry['replies'])} repl{'y' if len(entry['replies']) == 1 else 'ies'}"
+                         + (' (partial)' if not entry['replies_complete'] else ''))
+        if not data['complete']:
+            lines.append('Some replies were unavailable; see JSON for details.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'baseline' in data and 'saved' in data and 'counts' in data:
+        lines = [f"Saved private snapshot: {data['saved']}"]
+        lines.append(f"Viewer {data['user_id']}; origin {data['origin']}; course snapshots are account-separated.")
+        if data['baseline']:
+            lines.append('Baseline created; no earlier snapshot to compare.')
+        else:
+            diff = data['diff']
+            count = len(diff['course_changed_fields']) + sum(
+                len(group[key]) for group in diff['changes'].values()
+                for key in ('added', 'removed', 'changed'))
+            observed = sum(len(items) for items in diff['observed_changes'].values())
+            lines.append(f'{count} change(s) in fully covered resources; '
+                         f'{observed} change(s) observed in partial resources.')
+            if diff['skipped']:
+                lines.append('Some resource inventories were incomplete; see JSON for details.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'pages' in data and 'source' in data and 'complete' in data:
+        lines = [f"{len(data['pages'])} readable page(s) in course {data['course_id']}."]
+        lines.extend(f"{page.get('url')}: {page.get('title') or 'Untitled'}" for page in data['pages'])
+        if not data['complete']:
+            lines.append('Partial coverage: only pages linked from visible modules. See JSON for unavailable resources.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'files' in data and 'source' in data and 'complete' in data:
+        lines = [f"{len(data['files'])} file(s) in course {data['course_id']}", brief(data['files'])]
+        if not data['complete']:
+            lines.append('Partial coverage: files linked from readable course content only.')
+        if data['skipped_sources']:
+            lines.append(f"Skipped {len(data['skipped_sources'])} source(s); see JSON for details.")
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'coverage' in data and 'results' in data:
+        lines = [f"{len(data['results'])} result(s) in course {data['course_id']}."]
+        for item in data['results']:
+            suffix = f"  due {item['due_at']}" if item.get('due_at') else ''
+            lines.append(f"{item['area']} {item['id']}: {item['title']}{suffix}")
+        if not data.get('complete'):
+            missing = ', '.join(area for area, status in data['coverage'].items()
+                                if status != 'searched')
+            lines.append(f'Coverage incomplete: {missing}. See JSON for details.')
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'shown' in data and 'total_matches' in data:
+        lines = [f"{data['total_matches']} match(es) in snapshot; showing {len(data['shown'])}."]
+        if not data.get('snapshot_complete'):
+            lines.append('Snapshot incomplete; more matches may exist in Canvas.')
+        for item in data['shown']:
+            lines.append(f"{item['kind']} {item['id']}: {item['title']}")
+            if item.get('snippet'):
+                lines.append(f"  {item['snippet']}")
+        return '\n'.join(lines)
+    if isinstance(data, list):
+        if not data:
+            return 'No items.'
+        if all(isinstance(item, dict) and 'label' in item and 'html_url' in item for item in data):
+            return '\n'.join(f"{item.get('label') or item.get('id') or 'Untitled'}  "
+                             f"{item.get('html_url') or ''}" for item in data)
+        if all(isinstance(item, dict) and 'items' in item and 'name' in item for item in data):
+            return '\n\n'.join(
+                f"{module['name']}" +
+                ''.join(f"\n  {item.get('id', '')}  {item.get('title', 'item')}"
+                        for item in module['items'])
+                for module in data)
+        if all(isinstance(item, dict) and 'course_id' in item and 'grades' in item for item in data):
+            return '\n'.join(
+                f"Course {item['course_id']}: " +
+                (f"{item['grades'].get('current_grade') or item['grades'].get('current_score')}"
+                 if item.get('grades') and (item['grades'].get('current_grade') is not None or
+                                            item['grades'].get('current_score') is not None)
+                 else 'grade not visible')
+                for item in data)
+        lines = []
+        for item in data:
+            if not isinstance(item, dict):
+                lines.append(str(item))
+                continue
+            number = item.get('id') or item.get('assignment_id') or ''
+            label = (item.get('course_code') or item.get('name') or item.get('title')
+                     or item.get('display_name') or item.get('filename') or item.get('type') or 'item')
+            if item.get('course_code') and item.get('name') and item['name'] != item['course_code']:
+                label += f" — {item['name']}"
+            elif item.get('course_name') and item.get('name'):
+                label = f"{item['course_name']}: {item['name']}"
+            detail = item.get('due_at') or item.get('start_at') or item.get('workflow_state') or ''
+            if item.get('downloadable') is False:
+                detail = 'not downloadable'
+            elif item.get('metadata_not_checked'):
+                detail = 'availability not checked'
+            lines.append('  '.join(str(x) for x in (number, label, detail) if x != ''))
+        return '\n'.join(lines)
+    if isinstance(data, dict) and all(k in data for k in ('courses', 'upcoming', 'todo')):
+        lines = [(title, data[key]) for title, key in
+                 [('Active courses', 'courses'), ('Upcoming', 'upcoming'), ('To do', 'todo')]]
+        if 'deadlines' in data:
+            lines.append(('Deadlines (next 14 days)', data['deadlines']))
+        return '\n\n'.join(f'{title}\n{brief(values)}' for title, values in lines)
+    if isinstance(data, dict) and 'assignments' in data and 'unavailable_courses' in data:
+        if 'status_filter' in data:
+            result = ('\n'.join(
+                f"{item.get('course_name') or item['course_id']}: "
+                f"{item.get('name') or item.get('assignment_id')} "
+                f"[{item['status']}]"
+                + (f"  due {item['due_at']}" if item.get('due_at') else '  no due date')
+                for item in data['assignments']) or 'No assignments.')
+        else:
+            result = brief(data['assignments'])
+        if data['unavailable_courses']:
+            result += f"\nAssignments unavailable for {len(data['unavailable_courses'])} course(s); see JSON for details."
+        return result
+    if isinstance(data, dict) and 'announcements' in data and 'unavailable_courses' in data:
+        result = ('\n'.join(
+            f"{item.get('course_name') or item.get('context_code') or item.get('course_id')}: "
+            f"{item.get('title') or item.get('id')}  "
+            f"{item.get('posted_at') or item.get('created_at') or ''}"
+            for item in data['announcements']) or 'No announcements.')
+        if data['unavailable_courses']:
+            result += f"\nAnnouncements unavailable for {len(data['unavailable_courses'])} course(s); see JSON for details."
+        return result
+    if isinstance(data, dict) and 'files' in data and 'skipped_sources' in data:
+        result = brief(data['files'])
+        if data['skipped_sources']:
+            result += f"\nSkipped {len(data['skipped_sources'])} source(s); see JSON for details."
+        return result
+    if isinstance(data, dict) and 'assignment_id' in data and 'workflow_state' in data:
+        fields = [('Status', data.get('workflow_state')),
+                  ('Submitted', data.get('submitted_at')),
+                  ('Grade', data.get('grade')),
+                  ('Late', data.get('late')),
+                  ('Missing', data.get('missing')),
+                  ('Comments', len(data.get('submission_comments') or []))]
+        return '\n'.join(f'{name}: {value}' for name, value in fields if value is not None)
+    return json.dumps(data, indent=2)

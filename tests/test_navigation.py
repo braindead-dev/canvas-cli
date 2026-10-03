@@ -9,6 +9,23 @@ from canvas_pocket.navigation import command_help, command_schema
 
 
 class NavigationTests(unittest.TestCase):
+    def test_all_canvas_writes_share_the_same_confirmation_flag_contract(self):
+        root = parser()
+        data = command_schema(root)
+        writes = [command for command in data['commands']
+                  if command['safety'] == 'Canvas writes (preview-first)']
+        self.assertGreater(len(writes), 30)
+        for command in writes:
+            arguments = {argument['destination']: argument for argument in command['arguments']}
+            with self.subTest(command=command['command']):
+                self.assertEqual(arguments['yes']['flags'], ['--yes'])
+                self.assertEqual(arguments['yes']['default'], False)
+                self.assertEqual(arguments['yes']['action'], 'StoreTrueAction')
+                self.assertIsNone(arguments['confirm']['default'])
+                self.assertEqual(arguments['confirm']['flags'], ['--confirm'])
+                self.assertEqual(arguments['confirm']['description'], 'Digest returned by the fresh preview')
+                self.assertIn('matches the fresh preview', arguments['yes']['description'])
+
     def test_every_command_is_classified_and_all_help_pages_render(self):
         root = parser()
         action = next(item for item in root._actions if isinstance(item, argparse._SubParsersAction))
@@ -22,8 +39,8 @@ class NavigationTests(unittest.TestCase):
                 self.assertIn('usage:', help_page['help_text'])
                 self.assertIn(name, help_page['help_text'])
 
-    @patch('canvas_pocket.cli.Client')
-    @patch('canvas_pocket.cli.secure_keyring')
+    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_pocket.auth.secure_keyring')
     def test_help_does_not_access_credentials_or_canvas(self, keyring, client):
         result = run(parser().parse_args(['help', 'task-delete']))
         self.assertIn('--confirm', result['help_text'])
@@ -96,9 +113,9 @@ class NavigationTests(unittest.TestCase):
         data = command_schema(synthetic, 'help')['commands'][0]
         self.assertEqual(data['mutually_exclusive_groups'], [{'required': True, 'destinations': ['one', 'two']}])
 
-    @patch('canvas_pocket.cli.Client')
-    @patch('canvas_pocket.cli.secure_keyring')
-    @patch('canvas_pocket.cli.config_path')
+    @patch('canvas_pocket.auth.Client')
+    @patch('canvas_pocket.auth.secure_keyring')
+    @patch('canvas_pocket.auth.config_path')
     def test_schema_and_search_run_offline_without_credentials_or_configuration(self, config, keyring, client):
         data = run(parser().parse_args(['schema', '--search', 'invitation']))
         self.assertIn('enrollment-accept', [row['command'] for row in data['commands']])

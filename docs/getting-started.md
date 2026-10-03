@@ -1,0 +1,63 @@
+# Setup and authentication
+
+[Documentation](README.md) · [Safety](safety.md)
+
+## Install
+
+Python 3.10+ and a supported OS keyring are required. Install [pipx](https://pipx.pypa.io/) separately if needed.
+
+```sh
+pipx install git+https://github.com/braindead-dev/canvas-pocket.git
+canvas-pocket auth login --origin https://canvas.example.edu
+canvas-pocket auth status
+canvas-pocket courses --active --format brief
+```
+
+This is a developer preview; no npm/PyPI release is published.
+
+## Personal-token login
+
+Create a token in your own Canvas **Account → Settings → Approved Integrations**, if permitted. Choose an expiration date and revoke unused tokens.
+
+Login requires an interactive terminal and prompts without echoing the token. Credentials go into your OS keyring; configuration stores only the Canvas origin. Passwords, cookies, and browser sessions are not imported.
+
+Supported backends are macOS Keychain, Windows Credential Locker, Secret Service, and KWallet. Unsupported/plaintext/fallback backends fail closed. Linux may require explicitly selecting a secure backend.
+
+`auth logout` removes the local keyring entry, not the server token. Revoke it in Canvas to invalidate it. Environment credentials are not removed by logout.
+
+## Headless use
+
+Supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a secret manager/process environment. They override saved authentication. Never put tokens in arguments, shell history, repository files, or bug reports.
+
+Configuration lives at `$XDG_CONFIG_HOME/canvas-pocket/config.json`, or `~/.config/canvas-pocket/config.json` when unset. Credentials are separate.
+
+## Output and discovery
+
+JSON is complete; `--format brief` is a human summary. `--format` and `--max-pages` work before or after commands.
+
+```sh
+canvas-pocket help --search feedback --format brief
+canvas-pocket help feedback --format brief
+canvas-pocket schema feedback
+```
+
+Help/schema run offline without configuration, keyring, or network. The versioned schema derives flags, positionals, choices, defaults, accumulation, exclusion groups, and nested auth commands from the actual parser.
+
+It is not a standard JSON Schema or authorization/execution contract. Runtime identity, scope, bounds, access, and confirmation checks remain mandatory.
+
+## Troubleshooting
+
+| Result | Next step |
+| --- | --- |
+| 401 | Reauthenticate; credential missing/expired/invalid |
+| 403 | Check permissions, publication, scopes, and institution settings, not just credentials |
+| 404 | Endpoint/resource unavailable in this context, not necessarily nonexistent |
+| 429 | Back off; no aggressive automatic retry |
+| Page limit | Inventory incomplete; increase `--max-pages` deliberately |
+| Uncertain write | Check Canvas first; the change may have applied |
+
+## OAuth status
+
+[Canvas permits personal tokens for development testing](https://developerdocs.instructure.com/services/canvas/oauth2/file.oauth). Multiuser apps require OAuth and an institution-enabled developer key.
+
+Universal one-click login is not implemented. An adapter needs registered redirects, state validation, secure storage, and refresh handling. Never embed a client secret in an open-source desktop client or replace OAuth with cookie scraping.

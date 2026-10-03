@@ -75,21 +75,21 @@ class PageIndexTests(unittest.TestCase):
     def test_cli_flag_preserves_default_raw_list(self):
         client = Mock()
         client.list.return_value = [{'url': 'intro', 'published': True}]
-        import canvas_pocket.cli as cli
-        original = cli.Client
-        original_load = cli.load
-        original_keyring = cli.secure_keyring
+        import canvas_pocket.auth as auth
+        original = auth.Client
+        original_load = auth.load
+        original_keyring = auth.secure_keyring
         try:
-            cli.Client = lambda _host, _token: client
-            cli.load = lambda: 'https://canvas.example.edu'
-            cli.secure_keyring = lambda: Mock(get_password=lambda *_: 'test-token')
+            auth.Client = lambda _host, _token: client
+            auth.load = lambda: 'https://canvas.example.edu'
+            auth.secure_keyring = lambda: Mock(get_password=lambda *_: 'test-token')
             self.assertEqual(run(parser().parse_args(['pages', '12'])),
                              [{'url': 'intro', 'published': True}])
             self.assertEqual(run(parser().parse_args(['pages', '12', '--best-effort']))['complete'], True)
         finally:
-            cli.Client = original
-            cli.load = original_load
-            cli.secure_keyring = original_keyring
+            auth.Client = original
+            auth.load = original_load
+            auth.secure_keyring = original_keyring
 
 
 if __name__ == '__main__':

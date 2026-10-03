@@ -48,6 +48,17 @@ def content(kind, item):
 def compare(old, new):
     if old.get('origin') != new.get('origin') or old.get('course_id') != new.get('course_id'):
         raise CanvasError('Snapshots must have the same Canvas origin and course ID')
+    viewers = []
+    for snapshot in (old, new):
+        if 'viewer_user_id' not in snapshot:
+            viewers.append(None)
+        elif type(snapshot['viewer_user_id']) is int and snapshot['viewer_user_id'] > 0:
+            viewers.append(snapshot['viewer_user_id'])
+        else:
+            raise CanvasError('Snapshot has invalid viewer identity metadata')
+    viewer_verified = all(viewer is not None for viewer in viewers)
+    if viewer_verified and viewers[0] != viewers[1]:
+        raise CanvasError('Snapshots have different signed-in viewers; refusing mixed-account comparison')
     course_fields = ('name', 'course_code', 'syllabus_body', 'start_at', 'end_at')
     course_changes = [field for field in course_fields
                       if old.get('course', {}).get(field) != new.get('course', {}).get(field)]
@@ -88,6 +99,11 @@ def compare(old, new):
                         for identity in changed],
         }
     return {'origin': new['origin'], 'course_id': new['course_id'],
+            'viewer_user_id': viewers[1], 'viewer_identity_verified': viewer_verified,
+            'viewer_note': ('Both snapshots report the same viewer; file metadata is not proof of current authorization.'
+                            if viewer_verified else
+                            'At least one legacy snapshot has no viewer identity; this explicitly selected offline '
+                            'comparison is unverified and must not be used as an automatic sync baseline.'),
             'older_captured_at': old.get('captured_at'), 'newer_captured_at': new.get('captured_at'),
             'course_changed_fields': course_changes, 'changes': changes,
             'observed_changes': observed_changes, 'skipped': skipped}
