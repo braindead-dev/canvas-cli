@@ -1,4 +1,4 @@
-"""Exact native ungraded-topic edits/deletion, not replies or assignment administration."""
+"""Exact native ungraded-topic text/state/deletion, not assignment administration."""
 
 from .client import CanvasError
 from .discussion import _message
@@ -9,7 +9,10 @@ from .writes import account, check_flags, confirmed, digest
 FIELDS = ('id', 'title', 'published', 'locked', 'pinned', 'position', 'created_at', 'posted_at',
           'last_reply_at', 'delayed_post_at', 'lock_at', 'todo_date', 'discussion_type',
           'discussion_subentry_count', 'require_initial_post', 'is_section_specific',
-          'allow_rating', 'only_graders_can_rate', 'sort_order', 'sort_order_locked', 'expanded', 'expanded_locked')
+          'allow_rating', 'only_graders_can_rate', 'sort_order', 'sort_order_locked', 'expanded', 'expanded_locked',
+          'can_unpublish', 'can_lock', 'comments_disabled')
+ACTIONS = {'publish': ('published', True), 'unpublish': ('published', False),
+           'close': ('locked', True), 'open': ('locked', False), 'pin': ('pinned', True), 'unpin': ('pinned', False)}
 WARNING = ('Changes a shared discussion prompt, not your reply or a private note. Native updates can '
            'sanitize/rewrite HTML, notify people, update activity/module/pacing/blueprint associations and '
            'record access. Deletion soft-deletes the topic and removes module tags/section visibility; '
@@ -20,6 +23,12 @@ WARNING = ('Changes a shared discussion prompt, not your reply or a private note
            'overwritten. No read-marker, reply, grade or submission write; no automatic retry or rollback.')
 UNCERTAIN = ('Could not verify the discussion-topic change. It may already have succeeded; check Canvas '
              'before repeating. No automatic retry, cleanup, rollback or private response-body logging.')
+STATE_WARNING = ('Native state controls affect the shared topic and its audience. Published does not mean '
+                 'available now: opening dates, course/module access and future jobs still apply. Draft eligibility '
+                 'is the reported can_unpublish flag, not a guessed role or total reply count. Closing affects replies, '
+                 'not topic deletion. Reopening a closed topic can clear lock_at. Pin/unpin moves the topic to the '
+                 'bottom of its native ordering scope and can shift other positions. Only accessible inventory '
+                 'changes are observed, not all hidden topics or causal proof. No retry, cleanup or rollback.')
 
 
 def _parent(row, item, context_type):
@@ -84,7 +93,8 @@ def _topic(row, item, topic_id, context_type):
     if row.get('position') is not None and (type(row['position']) is not int or row['position'] < 0):
         raise CanvasError('Canvas returned malformed topic ordering')
     if (any(row.get(key) is not None and type(row[key]) is not bool for key in
-            ('allow_rating', 'only_graders_can_rate', 'sort_order_locked', 'expanded', 'expanded_locked')) or
+            ('allow_rating', 'only_graders_can_rate', 'sort_order_locked', 'expanded', 'expanded_locked',
+             'can_unpublish', 'can_lock', 'comments_disabled')) or
             any(row.get(key) is not None and not isinstance(row[key], str) for key in ('discussion_type', 'sort_order'))):
         raise CanvasError('Canvas returned malformed topic options')
     return {**{key: row.get(key) for key in FIELDS}, 'author_id': author_id,
@@ -140,8 +150,17 @@ def _changes(title, message):
     return changes
 
 
+def _inventory_delta(before, after):
+    old = {row['id']: row for row in before}
+    new = {row['id']: row for row in after}
+    return {'added_ids': sorted(new.keys() - old.keys()), 'removed_ids': sorted(old.keys() - new.keys()),
+            'changed': [{'id': identifier, 'fields': [key for key in old[identifier] if old[identifier][key] != new[identifier][key]]}
+                        for identifier in sorted(old.keys() & new.keys()) if old[identifier] != new[identifier]]}
+
+
 def change(client, item, topic_id, *, context_type='course', title=None, message=None, delete=False,
-           acknowledge_shared=False, acknowledge_removal=False, max_pages=100, yes=False, confirm=None):
+           action=None, acknowledge_shared=False, acknowledge_removal=False, acknowledge_ordering=False,
+           acknowledge_schedule_removal=False, max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     if context_type not in ('course', 'group'):
         raise CanvasError('Topic management requires a course or group context')
@@ -152,26 +171,48 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
         raise CanvasError('Use --acknowledge-shared-topic; deletion also requires --acknowledge-topic-removal, including previews')
     if type(max_pages) is not int or max_pages < 1:
         raise CanvasError('Topic inventory limit must be a positive integer')
-    if delete and (title is not None or message is not None):
-        raise CanvasError('Topic deletion cannot include content edits')
-    changes = None if delete else _changes(title, message)
+    if (type(acknowledge_ordering) is not bool or type(acknowledge_schedule_removal) is not bool or
+            action is not None and (not isinstance(action, str) or action not in ACTIONS)):
+        raise CanvasError('Select a known topic state action and explicit boolean acknowledgements')
+    if (delete and (title is not None or message is not None or action is not None) or
+            action is not None and (title is not None or message is not None)):
+        raise CanvasError('Topic deletion and state controls cannot include other operations or content edits')
+    if ((action in ('pin', 'unpin')) != acknowledge_ordering or
+            acknowledge_schedule_removal and action != 'open'):
+        raise CanvasError('Pin/unpin requires --acknowledge-topic-ordering-change; schedule-removal acknowledgement is only for opening')
+    changes = dict([ACTIONS[action]]) if action is not None else None if delete else _changes(title, message)
     identity = account(client)
     route, context = _scope(client, item, context_type)
     before = _read(client, route, item, topic_id, context_type)
     permission = 'delete' if delete else 'update'
     if before['permissions'][permission] is not True:
         raise CanvasError('Canvas does not permit this exact discussion-topic ' + permission)
+    if action == 'unpublish' and before['can_unpublish'] is not True:
+        raise CanvasError('Canvas did not report native eligibility to move this exact topic to draft')
+    if action == 'close' and before['can_lock'] is not True:
+        raise CanvasError('Canvas did not report native eligibility to close this exact topic')
+    clears_schedule = action == 'open' and before['locked'] and before['lock_at'] is not None
+    if clears_schedule and not acknowledge_schedule_removal:
+        raise CanvasError('Opening this closed topic clears its closing date; use --acknowledge-closing-schedule-removal, including previews')
     if not delete and all(before['message_digest'] == digest(value) if key == 'message' else before[key] == value
                           for key, value in changes.items()):
-        raise CanvasError('The selected topic text already matches; no edit needed')
+        raise CanvasError('The selected topic state already matches; no state update needed' if action is not None else
+                          'The selected topic text already matches; no edit needed')
     inventory = _inventory(client, route, item, context_type, max_pages)
     listed = {key: before[key] for key in ('id', 'title', 'published', 'locked', 'pinned', 'position')}
     if listed not in inventory or _read(client, route, item, topic_id, context_type) != before or account(client) != identity:
         raise CanvasError('Discussion/account changed during preflight; review a fresh preview')
+    if action is not None and (_scope(client, item, context_type) != (route, context) or
+                               _inventory(client, route, item, context_type, max_pages) != inventory or account(client) != identity):
+        raise CanvasError('Discussion context/inventory changed during state preflight')
     preview = {**identity, 'context_type': context_type, f'{context_type}_id': int(item), 'context': context,
                'topic': before, 'inventory_digest': digest(inventory), 'acknowledge_shared_topic': True,
                'acknowledge_topic_removal': acknowledge_removal, 'method': 'DELETE' if delete else 'PUT',
                'route': route + '/discussion_topics/' + topic_id + '?no_verifiers=true', 'body': changes, 'warning': WARNING}
+    if action is not None:
+        preview.update(topic_state_action=action, acknowledge_topic_ordering_change=acknowledge_ordering,
+                       acknowledge_closing_schedule_removal=acknowledge_schedule_removal,
+                       clears_closing_schedule=clears_schedule, warning=WARNING + ' ' + STATE_WARNING)
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -199,8 +240,15 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             else:
                 raise CanvasError('The deleted discussion is still readable')
         elif (_read(client, next_route, item, topic_id, context_type) != after or
-              after['permissions']['update'] is not True):
+              action is None and after['permissions']['update'] is not True):
             raise CanvasError('Stored topic acknowledgement and readback do not agree')
+        if action is not None:
+            field, value = ACTIONS[action]
+            if after[field] is not value or clears_schedule and after['lock_at'] is not None:
+                raise CanvasError('Canvas did not store the requested native state or clear its closing date')
+            remaining = _inventory(client, next_route, item, context_type, max_pages)
+            if {key: after[key] for key in listed} not in remaining:
+                raise CanvasError('The updated topic is not verified in the accessible inventory')
         if account(client) != identity:
             raise CanvasError('Account changed during topic verification')
     except CanvasError:
@@ -215,10 +263,20 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
                for key, value in changes.items()}
     changed = [key for key in before if before[key] != after[key]]
     requested = {'message_digest' if key == 'message' else key for key in changes}
-    return {'edited_topic': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{topic_id}'},
+    result = {'edited_topic': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{topic_id}'},
             'context_type': context_type, f'{context_type}_id': int(item), 'acknowledgement_matches_readback': True,
             'stored_text_matches_request': matched, 'changed_fields': changed,
             'unrequested_changed_fields': [key for key in changed if key not in requested],
             'note': 'One native PUT and independent exact-topic readback with stable account/context verified. '
                     'Requested-text equality and other observed field changes are labeled; native HTML rewriting is not hidden. '
                     'No private prompt, attachment URLs or raw response emitted, no reply/read-marker write, retry or rollback.'}
+    if action is not None:
+        result.update(stored_text_matches_request={},
+                      topic_state={'action': action, 'field': field, 'value': value, 'verified': True,
+                                   'closing_schedule_cleared': True if clears_schedule else None},
+                      observed_inventory_changes=_inventory_delta(inventory, remaining),
+                      note='One native PUT, exact state and independent topic/inventory readback with stable account/context verified. '
+                           'Other observed field/inventory changes are labeled, not attributed exclusively to this write. '
+                           'Opening/availability/future jobs and notification/module/pacing effects remain unverified. '
+                           'No private prompt, signed URLs, peer reply reads, retries or rollback.')
+    return result

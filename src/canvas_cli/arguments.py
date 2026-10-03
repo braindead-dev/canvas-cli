@@ -684,6 +684,18 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
+    for name in ('publish', 'unpublish', 'close', 'open', 'pin', 'unpin'):
+        state = sub.add_parser('topic-' + name, help='Preview one native shared discussion state change with independent readback')
+        state.set_defaults(topic_action=name)
+        state.add_argument('context_id', type=identifier)
+        state.add_argument('topic_id', type=identifier)
+        state.add_argument('--context', choices=('course', 'group'), default='course')
+        state.add_argument('--acknowledge-shared-topic', action='store_true')
+        if name in ('pin', 'unpin'):
+            state.add_argument('--acknowledge-topic-ordering-change', action='store_true', help='Required because other positions can shift')
+        if name == 'open':
+            state.add_argument('--acknowledge-closing-schedule-removal', action='store_true', help='Required when reopening clears a closing date')
+        _confirmation(state)
     for name in ('topic-edit', 'topic-delete'):
         s = sub.add_parser(name, help='Preview exact ungraded discussion prompt management, not a reply or assignment change')
         s.add_argument('context_id', type=identifier)

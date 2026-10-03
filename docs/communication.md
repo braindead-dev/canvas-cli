@@ -84,6 +84,23 @@ Deletion requires additional removal acknowledgement. One native soft DELETE mus
 
 Graded topics, announcements, anonymous topics and root/child/group-set associations remain separate, unsupported management workflows. Initial-post protections still govern peer replies; these commands do not inspect them. Preflight is not an atomic lock and concurrent edits can be overwritten.
 
+### Publication, closing and pinning
+
+```sh
+canvas topic-publish 123 456 --acknowledge-shared-topic
+canvas topic-unpublish 123 456 --acknowledge-shared-topic
+canvas topic-close 123 456 --acknowledge-shared-topic
+canvas topic-open 123 456 --acknowledge-shared-topic --acknowledge-closing-schedule-removal
+canvas topic-pin 123 456 --acknowledge-shared-topic --acknowledge-topic-ordering-change
+canvas topic-unpin 123 456 --acknowledge-shared-topic --acknowledge-topic-ordering-change
+```
+
+Each verb previews one native boolean change on an ordinary ungraded topic. Exact update permission remains required; moving to draft also requires the reported `can_unpublish` eligibility, and closing requires `can_lock`. Do not substitute ownership or total reply counts for these flags. No peer-post enumeration is performed. A verified state change can legitimately remove future edit permission.
+
+Published is not a promise of immediate availability: existing opening dates, course/module restrictions and future jobs remain native. Close affects replies, not deletion. Reopening a closed topic with `lock_at` clears that closing date and requires separate acknowledgement. Opening an already open topic is a no-op, not cancellation of its future closing schedule.
+
+Pin/unpin requires ordering acknowledgement because moving to the bottom of a native ordering scope can shift other topics. Account, exact prompt/audience/eligibility, scope and complete accessible inventory bind confirmation. One PUT must independently read back the requested state, any acknowledged closing-date removal and a matching inventory entry. Ignored states or unverified outcomes fail without retry/cleanup. Other observed fields and added/removed/changed inventory IDs are labeled, not attributed exclusively to the write; hidden ordering, notifications and future effects are not proven. Advanced date/view/audience configuration remains open.
+
 ## Peer reviews
 
 ```sh

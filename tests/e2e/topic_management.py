@@ -39,6 +39,8 @@ def initialize(state, *, enabled=False):
     state.topic_create_permission = True
     state.topic_moderator = state.topic_own_edit = False
     state.topic_publication_override = None
+    state.topic_state_enabled = state.topic_state_lose_edit = state.topic_state_keep_schedule = False
+    state.topic_state_hide_after = state.topic_state_inventory_denied = False
 
 
 def _route(state, handler):
@@ -72,6 +74,12 @@ def read(state, handler):
             return True
         page = int(parameters.get('page', ['1'])[0])
         rows = list(state.managed_topics.values())
+        if state.topic_written and state.topic_state_enabled:
+            if state.topic_state_inventory_denied:
+                _send(handler, {'private': 'synthetic-private-inventory-denial'}, 403)
+                return True
+            if state.topic_state_hide_after:
+                rows = [row for row in rows if row['id'] != 901]
         parameters['page'] = [str(page + 1)]
         link = f'<{url.path}?{urlencode(parameters, doseq=True)}>; rel="next"' if page < len(rows) else None
         _send(handler, rows[page - 1:page], link=link)
@@ -136,6 +144,32 @@ def write(state, handler, body):
         _send(handler, {'private': 'synthetic-private-native-topic-permission-denial'}, 403)
         return True
     if set(body) - {'title', 'message'} or parse_qs(url.query) != {'no_verifiers': ['true']}:
+        if (state.topic_state_enabled and handler.command == 'PUT' and len(body) == 1 and
+                set(body) <= {'published', 'locked', 'pinned'} and all(type(value) is bool for value in body.values()) and
+                parse_qs(url.query) == {'no_verifiers': ['true']}):
+            if (body.get('published') is False and row.get('can_unpublish') is not True or
+                    body.get('locked') is True and row.get('can_lock') is not True):
+                _send(handler, {'private': 'synthetic-private-native-state-ineligible'}, 403)
+                return True
+            state.topic_written = True
+            if not state.topic_ignore:
+                if body.get('locked') is False and row['locked'] and not state.topic_state_keep_schedule:
+                    row['lock_at'] = None
+                if 'pinned' in body and row['pinned'] != body['pinned']:
+                    siblings = [topic for topic in state.managed_topics.values() if topic['id'] != identifier]
+                    for sibling in siblings:
+                        if sibling['pinned'] == row['pinned'] and sibling['position'] > row['position']:
+                            sibling['position'] -= 1
+                    row['position'] = max((topic['position'] for topic in siblings if topic['pinned'] == body['pinned']), default=0) + 1
+                row.update(body)
+                if state.topic_state_lose_edit:
+                    row['permissions']['update'] = False
+                state.topic_notifications.append(identifier)
+            response = copy.deepcopy(row)
+            if state.topic_ack_patch is not None:
+                response = {**response, **state.topic_ack_patch} if isinstance(state.topic_ack_patch, dict) else state.topic_ack_patch
+            _send(handler, response)
+            return True
         _send(handler, {'private': 'synthetic-private-native-invalid-topic-changes'}, 400)
         return True
     state.topic_written = True

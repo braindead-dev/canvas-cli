@@ -45,8 +45,17 @@ def _brief(data):
         return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'edited_topic' in data:
         row = data['edited_topic']
-        lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} edited",
+        verb = 'updated' if 'topic_state' in data else 'edited'
+        lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} {verb}",
                  row['title'], row['html_url']]
+        if 'topic_state' in data:
+            state = data['topic_state']
+            lines.append(f"Native {state['field']}={str(state['value']).lower()} verified.")
+            if state['closing_schedule_cleared']:
+                lines.append('Closing schedule cleared.')
+            inventory = data['observed_inventory_changes']
+            lines.append(f"Observed inventory changes: {len(inventory['added_ids'])} added, "
+                         f"{len(inventory['removed_ids'])} removed, {len(inventory['changed'])} changed; not causal proof.")
         if not all(data['stored_text_matches_request'].values()):
             lines.append('Stored text differs from the request; inspect Canvas and JSON before using the topic.')
         if data['unrequested_changed_fields']:

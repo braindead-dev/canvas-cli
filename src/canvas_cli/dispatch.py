@@ -9,6 +9,13 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if getattr(args, 'topic_action', None) is not None:
+        from .topic_management import change
+        return change(client, args.context_id, args.topic_id, context_type=args.context, action=args.topic_action,
+                      acknowledge_shared=args.acknowledge_shared_topic,
+                      acknowledge_ordering=getattr(args, 'acknowledge_topic_ordering_change', False),
+                      acknowledge_schedule_removal=getattr(args, 'acknowledge_closing_schedule_removal', False),
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-create':
         from .topic_authoring import create
         return create(client, args.context_id, context_type=args.context, title=args.title,
