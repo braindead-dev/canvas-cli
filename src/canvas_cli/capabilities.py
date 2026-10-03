@@ -29,6 +29,7 @@ def describe():
             'snapshot-search (offline)',
         ],
         'read_with_native_side_effects': [
+            'page-revisions/page-revision (metadata by default; native page-read/edit-history permissions, exact numeric page IDs; GET can record module progress or repair legacy imported revision records)',
             'root-folder/my-root/folder-path (GET may materialize a missing native root folder)',
             'notification-preferences (GET may materialize default policy records)',
             'get (expert GET only; native server-side effects may apply)',
@@ -40,6 +41,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'page-restore (shared RCE title/body/URL; native full-update/history authorization, exact-ID account/revision/inventory-bound preview and digest, explicit front-page risk acknowledgement, separate page/revision/front readback; normalization is labeled, no automatic retry or repair)',
             'page-create/page-edit (shared RCE wiki content; explicit context/audience acknowledgement, native page-edit authorization, exact page IDs and revision-bound preview, matching digest and separate stored-page readback; native HTML normalization is labeled)',
             'channel-create/channel-delete (exact own contact methods; explicit message/removal acknowledgement, account/full-inventory-bound preview and matching digest; native confirmation, separate full own-inventory verification)',
             'profile-set (selected own name/profile/time-zone fields; shared-audience acknowledgement, account/profile-bound preview and matching digest; no SIS override, subsequent exact read-back verification)',

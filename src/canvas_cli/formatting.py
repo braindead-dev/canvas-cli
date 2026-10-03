@@ -36,6 +36,25 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'restored_page' in data:
+        row = data['restored_page']
+        lines = [f"Shared {data['context_type']} page {row['page_id']} restored from revision {data['selected_revision_id']}",
+                 f"{row['title']} | current revision {data['current_revision_id']}", row['html_url']]
+        if data['html_matches_revision'] is False or data['url_matches_revision'] is False:
+            lines.append('Stored HTML/URL differs from the historical revision; inspect Canvas and JSON.')
+        if data['front_page_deselected']:
+            lines.append('This page is no longer the front page. No automatic repair was requested.')
+        return '\n'.join([*lines, data['note']])
+    if isinstance(data, dict) and ('page_revisions' in data or 'page_revision' in data):
+        lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} page {data['page']['page_id']} revision metadata"]
+        for row in data.get('page_revisions', [data.get('page_revision')]):
+            lines.append(f"{row['revision_id']} | {row['updated_at']}" + (' | latest' if row['latest'] else ''))
+            if row.get('edited_by'):
+                actor = row['edited_by']
+                lines.append(f"  editor {actor['id']} | {actor.get('display_name') or actor.get('name') or '(name unavailable)'}")
+        if data.get('page_revision', {}).get('body') is not None:
+            lines.append('Content included in JSON only; inspect it before restoring.')
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'shared_page' in data:
         row = data['shared_page']
         status = 'created' if data['created'] else 'edited'

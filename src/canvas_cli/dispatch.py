@@ -9,6 +9,16 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('page-revisions', 'page-revision', 'page-restore'):
+        from . import page_history
+        if args.command == 'page-restore':
+            return page_history.restore(client, args.context_id, args.page_id, args.revision_id,
+                                        context_type=args.context, acknowledge_shared=args.acknowledge_shared_page,
+                                        acknowledge_front=args.acknowledge_front_page_change,
+                                        max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+        return page_history.read(client, args.context_id, args.page_id, getattr(args, 'revision_id', None),
+                                 context_type=args.context, content=getattr(args, 'include_content', False),
+                                 editors=args.include_editors, max_pages=args.max_pages)
     if args.command in ('page-create', 'page-edit'):
         from .page_authoring import change
         content = read_utf8(args.body_file, label='Page body') if args.body_file is not None else None

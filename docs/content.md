@@ -67,7 +67,24 @@ Creation uses POST, never replacement. Existing title matches are counted; Canva
 
 Exact page ID, selected metadata, fresh identity/permissions and separate acknowledgement/readback are verified. Stored HTML may be sanitized or rewritten; `html_matches_request` distinguishes literal equality and JSON includes the stored body when requested. Unobserved changes, conflicting readbacks, denied verification and foreign acknowledgements are uncertain outcomes, never automatically retried. Previous bodies/editors/history are fingerprinted or omitted, not dumped in previews.
 
-Block-editor/Horizon payloads, deletion, revision restore and scheduling changes remain separate work. Authorized RCE drafts can be edited without bypassing publication; existing publication schedules are preserved, and future-scheduled pages refuse implicit publication/front-page changes.
+Block-editor/Horizon payloads, deletion and scheduling changes remain separate work. Authorized RCE drafts can be edited without bypassing publication; existing publication schedules are preserved, and future-scheduled pages refuse implicit publication/front-page changes.
+
+## Inspect and restore page history
+
+```sh
+canvas page-revisions 123 789 --context course --format brief
+canvas page-revision 123 789 2 --context course --include-content
+canvas page-revision 456 789 latest --context group --include-editors
+canvas page-restore 123 789 2 --context course --acknowledge-shared-page
+```
+
+Exact numeric page IDs avoid slug collisions. History follows all pagination or fails rather than return a partial inventory. Default output is revision IDs/dates/latest flags, not old titles, HTML or editor records. One-revision `--include-content` opts into potentially private historical title/URL/HTML; `--include-editors` adds only IDs/display names. Brief output indexes metadata even when JSON includes content. Native latest-detail read requires page-read permission; numeric detail/history require read-revisions permission. Draft access stays native, never inferred from fabricated manager rights. These GETs can record module read progress or repair legacy imported YAML revisions, so are not classified as entirely side-effect-free.
+
+Restore uses [confirmation](safety.md#confirmation) and one native POST to an exact numeric revision. It restores **title, body and URL**, not historical publication, editing roles, scheduling or deleted pages. Full page-update permission and native history authorization are required; body-only contribution permission is insufficient. Previews bind account, context, permissions, current page/revision, selected historical body fingerprint and full page/front-page inventory without dumping old HTML/editors. Inspect historical content before confirming. Native restrictions remain authoritative.
+
+Renaming a front page can deselect it; `--acknowledge-front-page-change` is required for that risk. Links/modules can also be affected. Separate page/revision/front-page readbacks verify the observed result; no automatic front-page repair or rollback is issued. A current-revision no-op does not falsely claim a new revision. Native HTML/URL normalization is labeled (`html_matches_revision`, `url_matches_revision`), not treated as literal equivalence. Title collisions, ignored changes, lost permissions or inconsistent readbacks are uncertain outcomes. Check Canvas before repeating. Neither confirmation nor readback prevents concurrent edits during execution.
+
+[Native Pages API](https://developerdocs.instructure.com/services/canvas/resources/pages), [revision authorization/restore implementation](https://github.com/instructure/canvas-lms/blob/master/app/controllers/wiki_pages_api_controller.rb), [title/URL/front-page/version behavior](https://github.com/instructure/canvas-lms/blob/master/app/models/wiki_page.rb), [HTML rewriting](https://github.com/instructure/canvas-lms/blob/master/lib/api.rb).
 
 ## Private snapshots
 

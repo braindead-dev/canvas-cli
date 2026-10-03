@@ -94,15 +94,23 @@ def _metadata(row, page_id=None):
     return {key: row.get(key) for key in PAGE_FIELDS}
 
 
-def _page(client, route, page_id, rights):
-    row, _ = client.request(route + '/pages/page_id:' + page_id)
+def _read_page(client, route, page_id, *, no_verifiers=False):
+    # Successful native Page GET authorizes this exact page, including readable drafts.
+    # Do not invent manager permissions for read-only revision access.
+    row, _ = client.request(route + '/pages/page_id:' + page_id + ('?no_verifiers=true' if no_verifiers else ''))
     metadata = _metadata(row, page_id)
-    if (not row['published'] and not (rights['manage_wiki_update'] or rights['manage_wiki_create']) or
-            row.get('editor') not in (None, 'rce') or row.get('block_editor_attributes') is not None or
+    if (row.get('editor') not in (None, 'rce') or row.get('block_editor_attributes') is not None or
             row.get('block_editor_data') is not None):
         raise CanvasError('The page is not authorized readable RCE content; block-editor pages require their native editor')
     content = _html(row)
     return {**row, 'body': content}, {**metadata, 'body_digest': digest(content)}
+
+
+def _page(client, route, page_id, rights):
+    row, metadata = _read_page(client, route, page_id)
+    if not row['published'] and not (rights['manage_wiki_update'] or rights['manage_wiki_create']):
+        raise CanvasError('The page is not authorized readable RCE content; block-editor pages require their native editor')
+    return row, metadata
 
 
 def _html(row):

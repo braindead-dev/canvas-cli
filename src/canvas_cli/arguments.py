@@ -442,6 +442,23 @@ def parser():
     context_upload.add_argument('--file', required=True, type=Path)
     context_upload.add_argument('--max-bytes', type=int, default=25 * 1024 * 1024)
     _confirmation(context_upload)
+    for name in ('page-revisions', 'page-revision', 'page-restore'):
+        history = sub.add_parser(name, help=('Preview restoring one shared RCE page revision with exact-ID verification'
+                                             if name == 'page-restore' else 'Inspect native-authorized RCE wiki history; content/editors are opt-in'))
+        history.add_argument('context_id', type=identifier)
+        history.add_argument('page_id', type=identifier, help='Exact numeric page ID, never an ambiguous slug')
+        history.add_argument('--context', required=True, choices=('course', 'group'))
+        if name != 'page-revisions':
+            history.add_argument('revision_id', type=identifier if name == 'page-restore' else str,
+                                 help='Exact numeric revision ID' + (' or latest' if name == 'page-revision' else ''))
+        if name == 'page-restore':
+            history.add_argument('--acknowledge-shared-page', action='store_true', help='Required even for previews; restores shared title/body/URL')
+            history.add_argument('--acknowledge-front-page-change', action='store_true', help='Required if restoration may deselect the current front page')
+            _confirmation(history)
+        else:
+            history.add_argument('--include-editors', action='store_true', help='Include editor IDs/display names, never full native contact records')
+            if name == 'page-revision':
+                history.add_argument('--include-content', action='store_true', help='Include potentially private historical title/URL/HTML')
     for name in ('page-create', 'page-edit'):
         authoring = sub.add_parser(name, help='Preview shared RCE page authoring with native authorization and exact-ID readback')
         authoring.add_argument('context_id', type=identifier)
