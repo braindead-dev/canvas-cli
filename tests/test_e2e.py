@@ -41,6 +41,11 @@ class E2E(unittest.TestCase):
                              'parent_folder_id': None, 'for_submissions': False}
         cls.personal_destination = {**cls.personal_root, 'id': 92, 'name': 'Notes', 'parent_folder_id': 91}
         cls.personal_children = []
+        cls.favorite_ids = {'course': set(), 'group': set()}
+        cls.favorite_defaults = {'course': [{'id': 101, 'name': 'Synthetic course'},
+                                            {'id': 102, 'name': 'Synthetic second course'}],
+                                 'group': [{'id': 11, 'name': 'Synthetic group'},
+                                           {'id': 12, 'name': 'Synthetic second group'}]}
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -307,7 +312,17 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/users/self/groups?per_page=100':
                     data = [{'id': 11, 'name': 'Synthetic group'}]
                 elif self.path == '/api/v1/users/self/favorites/courses?per_page=100':
-                    data = [{'id': 101, 'name': 'Synthetic course'}]
+                    self.send_header('Link', '</api/v1/users/self/favorites/courses?page=2>; rel="next"')
+                    data = []
+                elif self.path in ('/api/v1/users/self/favorites/courses?page=2',
+                                   '/api/v1/users/self/favorites/groups?per_page=100'):
+                    context = 'group' if '/groups?' in self.path else 'course'
+                    data = [row for row in cls.favorite_defaults[context]
+                            if not cls.favorite_ids[context] or row['id'] in cls.favorite_ids[context]]
+                elif self.path in ('/api/v1/courses/101', '/api/v1/courses/102',
+                                   '/api/v1/groups/11', '/api/v1/groups/12'):
+                    context = 'group' if '/groups/' in self.path else 'course'
+                    data = next(row for row in cls.favorite_defaults[context] if row['id'] == int(self.path.rsplit('/', 1)[1]))
                 elif self.path == '/api/v1/conversations?per_page=100&scope=unread':
                     data = [{'id': 12, 'subject': 'Synthetic inbox thread'}]
                 elif self.path == '/api/v1/conversations/12?auto_mark_as_read=false':
@@ -337,6 +352,27 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path.startswith('/api/v1/users/self/favorites/'):
+                    namespace = self.path.split('/')[6]
+                    context = namespace[:-1]
+                    parts = self.path.split('/')
+                    if len(parts) == 7:
+                        cls.favorite_ids[context].clear()
+                        data = {'status': 'ok'}
+                    else:
+                        item = int(parts[7])
+                        if self.command == 'POST':
+                            cls.favorite_ids[context].add(item)
+                            data = {'context_id': item, 'context_type': context.title()}
+                        else:
+                            # Native course removal can first save the defaults when no custom favorites exist.
+                            if context == 'course' and not any(cls.favorite_ids.values()):
+                                cls.favorite_ids[context].update(row['id'] for row in cls.favorite_defaults[context])
+                            data = ({'context_id': item, 'context_type': context.title()}
+                                    if item in cls.favorite_ids[context] else {})
+                            cls.favorite_ids[context].discard(item)
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path == '/api/v1/folders/94':
                     current = next(row for row in cls.personal_children if row['id'] == 94)
                     cls.folder_write = body
@@ -450,6 +486,60 @@ class E2E(unittest.TestCase):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
+
+    def test_favorites_changes_are_preview_first_and_reset_restores_defaults(self):
+        original = {context: ids.copy() for context, ids in self.favorite_ids.items()}
+        try:
+            for context, target in [('course', '102'), ('group', '11')]:
+                type(self).favorite_ids = {'course': set(), 'group': set()}
+                displayed = self.invoke('favorites', '--context', context)
+                self.assertEqual(displayed.returncode, 0, displayed.stderr)
+                self.assertEqual(len(json.loads(displayed.stdout)), 2)
+                for command in [('favorite-add', target), ('favorite-remove', target),
+                                ('favorite-remove', target), ('favorites-reset',)]:
+                    with self.subTest(context=context, command=command):
+                        args = (*command, '--context', context)
+                        before = len(self.calls)
+                        preview = self.invoke(*args)
+                        self.assertEqual(preview.returncode, 0, preview.stderr)
+                        data = json.loads(preview.stdout)
+                        self.assertFalse(data['manual_selection_known'])
+                        wrong = self.invoke(*args, '--yes', '--confirm', 'wrong')
+                        self.assertNotEqual(wrong.returncode, 0)
+                        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                        sent = self.invoke(*args, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+                        self.assertEqual(sent.returncode, 0, sent.stderr)
+                        self.assertIn('acknowledged', sent.stdout)
+                        method = 'POST' if command[0] == 'favorite-add' else 'DELETE'
+                        route = f'/api/v1/users/self/favorites/{context}s' + (f'/{target}' if len(command) > 1 else '')
+                        self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [(method, route)])
+                        if command[0] == 'favorite-add':
+                            current = self.invoke('favorites', '--context', context)
+                            self.assertEqual([row['id'] for row in json.loads(current.stdout)], [int(target)])
+                self.assertEqual(self.favorite_ids[context], set())
+                reset = self.invoke('favorites', '--context', context)
+                self.assertEqual(len(json.loads(reset.stdout)), 2)
+        finally:
+            type(self).favorite_ids = original
+
+    def test_favorite_preview_rejects_truncated_inventory_and_changed_selection(self):
+        original = {context: ids.copy() for context, ids in self.favorite_ids.items()}
+        try:
+            type(self).favorite_ids = {'course': set(), 'group': set()}
+            command = ('favorite-add', '102')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            type(self).favorite_ids['course'].add(101)
+            before = len(self.calls)
+            changed = self.invoke(*command, '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+            self.assertNotEqual(changed.returncode, 0)
+            self.assertIn('Preview changed', changed.stderr)
+            truncated = self.invoke(*command, '--max-pages', '1')
+            self.assertNotEqual(truncated.returncode, 0)
+            self.assertIn('Page limit', truncated.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).favorite_ids = original
 
     def test_personal_calendar_lifecycle_is_preview_first_over_tls(self):
         commands = [(('event-create', '--title', 'Synthetic study block', '--date', '2026-10-05',

@@ -65,7 +65,15 @@ def parser():
     courses = sub.add_parser('courses')
     courses.add_argument('--active', action='store_true', help='Only current active enrollments')
     sub.add_parser('me')
-    sub.add_parser('favorites', help='Your favorite courses')
+    favorites = sub.add_parser('favorites', help='Displayed favorite courses/groups, which may be Canvas defaults')
+    favorites.add_argument('--context', choices=('course', 'group'), default='course')
+    for name in ('favorite-add', 'favorite-remove', 'favorites-reset'):
+        favorite = sub.add_parser(name, help='Preview a change to your own dashboard favorites')
+        if name != 'favorites-reset':
+            favorite.add_argument('item', type=identifier, help='Numeric course or group ID')
+        favorite.add_argument('--context', choices=('course', 'group'), default='course')
+        favorite.add_argument('--confirm', help='Digest returned by the preview')
+        favorite.add_argument('--yes', action='store_true', help='Apply only if --confirm matches the fresh preview')
     sub.add_parser('groups', help='Your active Canvas groups')
     group = sub.add_parser('group', help='One visible group')
     group.add_argument('group', type=identifier)
@@ -641,7 +649,12 @@ def run(args):
     if args.command == 'todo':
         return client.list('/api/v1/users/self/todo?per_page=100', args.max_pages)
     if args.command == 'favorites':
-        return client.list('/api/v1/users/self/favorites/courses?per_page=100', args.max_pages)
+        from .favorites import listing
+        return listing(client, args.max_pages, args.context)
+    if args.command in ('favorite-add', 'favorite-remove', 'favorites-reset'):
+        from .favorites import change
+        return change(client, args.command.rsplit('-', 1)[1], getattr(args, 'item', None),
+                      context_type=args.context, max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'groups':
         return client.list('/api/v1/users/self/groups?per_page=100', args.max_pages)
     if args.command == 'group':
@@ -860,6 +873,11 @@ def brief(data):
         state = data['discussion_state']
         return (f"Discussion {state['topic_id']}: {state['action']}" +
                 (f" (entry {state['entry_id']})" if state.get('entry_id') else '') + f"\n{data['note']}")
+    if isinstance(data, dict) and 'favorite_change' in data:
+        change = data['favorite_change']
+        target = change.get('target')
+        return (f"Favorites ({change['context_type']}): {change['action']}" +
+                (f" {target['id']} {target.get('name') or ''}" if target else '') + f"\n{data['note']}")
     if isinstance(data, dict) and 'personal_file' in data:
         file = data['personal_file']
         return f"File {file['id']}: {file.get('display_name') or 'Untitled'}\n{data['note']}"

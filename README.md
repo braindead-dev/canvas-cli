@@ -32,6 +32,10 @@ canvas-pocket doctor 123
 canvas-pocket find 123 --query 'paper'
 canvas-pocket find 123 --query 'lab' --area assignments
 canvas-pocket favorites
+canvas-pocket favorites --context group
+canvas-pocket favorite-add 123
+canvas-pocket favorite-remove 456 --context group
+canvas-pocket favorites-reset --context course
 canvas-pocket groups
 canvas-pocket course-groups 123
 canvas-pocket my-files --search 'paper'
@@ -248,6 +252,12 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 ```
 
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
+
+## Dashboard favorites
+
+`favorites` defaults to courses; `--context group` selects groups. This read-only list can be Canvas's automatic default selection, not proof that every item was explicitly starred. `favorite-add`, `favorite-remove` and `favorites-reset` change only your own favorites, never enrollment, membership or course content. They preview the current account, exact context/target and full paginated displayed selection, then require `--yes --confirm DIGEST`.
+
+Adding the first custom favorite can replace the default displayed selection. Removing a course with no custom favorites can first save the other default courses as favorites. Removing the last custom favorite or resetting can make defaults appear again. Reset clears **all custom favorites of the selected type**, not just the listed IDs. Canvas enforces membership/permissions, and inaccessible targets are not bypassed. An acknowledged remove may be a no-op if there was no explicit favorite; the output does not falsely claim that a displayed default disappeared. Course/group lifecycle and pagination have synthetic HTTPS coverage only. See the [official Favorites API](https://developerdocs.instructure.com/services/canvas/resources/favorites).
 
 ## Discussion contexts and entry changes
 

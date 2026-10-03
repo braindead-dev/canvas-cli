@@ -26,6 +26,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'favorite-add/favorite-remove/favorites-reset (own course/group favorites; account-bound preview, displayed-default warning and matching digest required)',
             'event-create/event-edit/event-delete (personal calendar only; account-bound preview and matching digest required)',
             'task-create/task-edit/task-delete (personal planner notes; account-bound preview and matching digest required)',
             'planner-override-create/planner-override-edit/planner-override-delete (planner completion/dismissal; account-bound preview, explicit module-progress acknowledgement for course content)',
