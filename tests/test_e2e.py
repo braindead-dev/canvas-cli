@@ -865,6 +865,42 @@ class E2E(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
 
+    def test_machine_schemas_work_without_auth_or_network_and_keep_write_safety_visible(self):
+        before = len(self.calls)
+        result = self.invoke('schema', 'enrollment-accept', token='invalid')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data['schema_version'], 1)
+        command = data['commands'][0]
+        self.assertEqual(command['command'], 'enrollment-accept')
+        self.assertEqual(command['safety'], 'Canvas writes (preview-first)')
+        arguments = {row['destination']: row for row in command['arguments']}
+        self.assertTrue(arguments['acknowledge_canvas_enrollment']['required'])
+        self.assertIn('--confirm', arguments['confirm']['flags'])
+        self.assertTrue(arguments['max_pages']['default_suppressed'])
+        result = self.invoke('schema', 'auth', token='invalid')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        nested = json.loads(result.stdout)['commands'][0]['subcommand_selectors'][0]
+        self.assertEqual(set(nested['commands']), {'login', 'status', 'logout'})
+        result = self.invoke('schema', '--search', 'group', '--format', 'brief', token='invalid')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('group-join | Canvas writes (preview-first)', result.stdout)
+        self.assertIn('group-users | Read-only', result.stdout)
+        self.assertEqual(self.calls[before:], [])
+
+    def test_machine_schema_empty_search_conflict_and_unknown_commands_fail_offline(self):
+        before = len(self.calls)
+        for arguments, code in ((('schema', '--search', ' '), 1),
+                                 (('schema', 'group-users', '--search', 'group'), 1),
+                                 (('schema', 'not-a-command'), 2)):
+            result = self.invoke(*arguments, token='invalid')
+            self.assertEqual(result.returncode, code)
+            self.assertEqual(result.stdout, '')
+        result = self.invoke('schema', '--search', 'nonexistent-synthetic-command', token='invalid')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['commands'], [])
+        self.assertEqual(self.calls[before:], [])
+
     def test_own_enrollments_paginate_native_filters_keep_sections_and_omit_private_data(self):
         before = len(self.calls)
         result = self.invoke('enrollments')

@@ -25,8 +25,12 @@ For ephemeral/headless use, supply `CANVAS_ORIGIN` and `CANVAS_TOKEN` through a 
 
 Use `canvas-pocket help --format brief` for the command index, grouped by read-only actions, local file writes and preview-first Canvas writes. `help --search TEXT` searches the actual command names and descriptions, and `help COMMAND --format brief` shows exact options. Help works offline without opening the keyring or authenticating.
 
+`canvas-pocket schema COMMAND` emits a versioned machine-readable argument catalog derived from the actual parser, including flags/positionals, choices, value-type names, defaults/suppressed defaults, accumulation behavior, parser-defined exclusion groups and nested auth commands. Omit `COMMAND` for all command schemas or use `schema --search TEXT`. Safety labels come from the same capability map as help, including GETs with known native side effects. This is Pocket's catalog format, **not a JSON Schema standard or a guarantee that syntax alone makes an operation allowed/safe**. Runtime account/access/publication/bounds/confirmation checks still apply; scripts must inspect fresh write previews and cannot use the catalog as permission to execute. Schema discovery is offline, never reads credentials/configuration/account data, and has installed-CLI tests with invalid authentication and zero requests.
+
 ```sh
 canvas-pocket courses
+canvas-pocket schema group-users
+canvas-pocket schema --search upload
 canvas-pocket courses --active
 canvas-pocket doctor 123
 canvas-pocket find 123 --query 'paper'

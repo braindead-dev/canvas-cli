@@ -610,9 +610,12 @@ def parser():
                            help='Explicitly set or clear the manual read-marker override; omitted leaves it unchanged')
         s.add_argument('--confirm', help='Digest returned by the preview')
         s.add_argument('--yes', action='store_true', help='Execute only if the fresh preview matches --confirm')
+    schema_command = sub.add_parser('schema', help='Offline machine-readable argument and safety catalog from the actual parser')
+    schema_command.add_argument('--search', help='Find command schemas by name, description or safety category')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')
     help_command.add_argument('topic', nargs='?', choices=sorted(sub.choices))
     help_command.add_argument('--search', help='Find commands by name, description or safety category')
+    schema_command.add_argument('topic', nargs='?', choices=sorted(sub.choices))
     # SUPPRESS preserves a root-level value when the subcommand omits the option.
     for command_parser in (*sub.choices.values(), *a.choices.values()):
         command_parser.add_argument('--format', choices=('json', 'brief'),
@@ -629,6 +632,9 @@ def run(args):
     if args.command == 'help':
         from .navigation import command_help
         return command_help(parser(), args.topic, args.search)
+    if args.command == 'schema':
+        from .navigation import command_schema
+        return command_schema(parser(), args.topic, args.search)
     if args.command == 'capabilities':
         from .capabilities import describe
         return describe()
@@ -1163,6 +1169,18 @@ def brief(data):
     """Small human index. JSON remains the complete representation."""
     if isinstance(data, dict) and 'help_text' in data:
         return f"{data['safety']}\n\n{data['help_text'].rstrip()}"
+    if isinstance(data, dict) and 'schema_version' in data and 'commands' in data:
+        lines = [f"Pocket parser schema v{data['schema_version']} (JSON has full argument details)"]
+        for command in data['commands']:
+            lines.append(f"{command['command']} | {command['safety']}")
+            lines.extend('  ' + (' / '.join(argument['flags']) or argument['destination']) +
+                         (' (required)' if argument['required'] else '') for argument in command['arguments'])
+            for selector in command.get('subcommand_selectors', []):
+                lines.append('  subcommands: ' + ', '.join(selector['commands']))
+        if not data['commands']:
+            lines.append('No matching commands.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'command_index' in data:
         lines = []
         for category, commands in data['command_index'].items():
