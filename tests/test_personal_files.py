@@ -2,7 +2,12 @@ import unittest
 from unittest.mock import Mock
 
 from canvas_pocket.client import CanvasError
-from canvas_pocket.personal_files import change_file, create_folder, folders
+from canvas_pocket.personal_files import (
+    change_file,
+    change_folder,
+    create_folder,
+    folders,
+)
 
 
 class PersonalFilesTests(unittest.TestCase):
@@ -141,6 +146,56 @@ class PersonalFilesTests(unittest.TestCase):
             self.result = result
             with self.subTest(result=result), self.assertRaisesRegex(CanvasError, 'verify in Canvas'):
                 create_folder(self.client, '11', 'Notes', yes=True, confirm=preview['confirm'])
+
+    def test_folder_rename_sends_only_requested_changes_and_binds_ancestry(self):
+        preview = change_folder(self.client, '11', name='Revised Notes')
+        self.assertEqual(preview['body'], {'name': 'Revised Notes'})
+        self.assertEqual(preview['before']['ancestors'][0]['id'], 10)
+        self.result = {**self.target, 'name': 'Revised Notes'}
+        change_folder(self.client, '11', name='Revised Notes', yes=True, confirm=preview['confirm'])
+        self.client.request.assert_called_with('/api/v1/folders/11', 'PUT', {'name': 'Revised Notes'})
+        self.source['name'] = 'Changed ancestor'
+        with self.assertRaisesRegex(CanvasError, 'Preview changed'):
+            change_folder(self.client, '11', name='Revised Notes', yes=True, confirm=preview['confirm'])
+
+    def test_folder_move_rejects_descendants_cycles_and_wrong_user_ancestors(self):
+        with self.assertRaisesRegex(CanvasError, 'itself'):
+            change_folder(self.client, '11', destination='11')
+        self.source['parent_folder_id'] = 11
+        with self.assertRaisesRegex(CanvasError, 'descendants'):
+            change_folder(self.client, '11', destination='10')
+        self.source['parent_folder_id'] = 10
+        with self.assertRaisesRegex(CanvasError, 'ancestry cycle'):
+            change_folder(self.client, '11', destination='10')
+        self.source['context_id'] = 99
+        with self.assertRaises(CanvasError): change_folder(self.client, '11', destination='10')
+
+    def test_folder_delete_requires_empty_non_root_personal_folder_and_never_sends_force(self):
+        self.target.update(files_count=0, folders_count=0)
+        preview = change_folder(self.client, '11', delete=True)
+        self.assertIsNone(preview['body'])
+        self.result = {**self.target, 'workflow_state': 'deleted'}
+        result = change_folder(self.client, '11', delete=True, yes=True, confirm=preview['confirm'])
+        self.assertTrue(result['deleted'])
+        self.client.request.assert_called_with('/api/v1/folders/11', 'DELETE', None)
+        with self.assertRaisesRegex(CanvasError, 'root'):
+            change_folder(self.client, '10', delete=True)
+        self.siblings = [{'id': 12, 'name': 'Child'}]
+        with self.assertRaisesRegex(CanvasError, 'empty'):
+            change_folder(self.client, '11', delete=True)
+        self.siblings = []; self.target['files_count'] = 1
+        with self.assertRaisesRegex(CanvasError, 'empty'):
+            change_folder(self.client, '11', delete=True)
+
+    def test_folder_destination_collisions_and_invalid_operations_do_not_write(self):
+        self.siblings = [{'id': 15, 'name': 'Taken'}]
+        with self.assertRaisesRegex(CanvasError, 'same-named'):
+            change_folder(self.client, '11', name='Taken')
+        self.client.request.reset_mock()
+        for kwargs in ({}, {'delete': True, 'name': 'Bad'}, {'name': '../Bad'}, {'name': 'New', 'yes': True}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(CanvasError):
+                change_folder(self.client, '11', **kwargs)
+        self.client.request.assert_not_called()
 
 
 if __name__ == '__main__': unittest.main()

@@ -36,7 +36,7 @@ def describe():
             'submit-url/submit-text/submit-file (preview and matching digest required)',
             'submission-comment (own submission only; account-bound preview and matching digest required)',
             'export-create (asynchronous course export; account-bound preview and matching digest required)',
-            'my-file-edit/my-file-copy/my-file-delete/my-folder-create (personal file organization; account-bound preview, no overwrite/sharing, permanent acknowledgement for deletion)',
+            'my-file-edit/my-file-copy/my-file-delete/my-folder-create/my-folder-edit/my-folder-delete (personal file organization; account-bound preview, no overwrite, permanent acknowledgement for file deletion, empty folders only)',
             'upload-personal/upload-assignment-file (preview and matching digest required; assignment upload does not submit)',
         ],
         'auth': ['login', 'status', 'logout'],

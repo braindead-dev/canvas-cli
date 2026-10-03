@@ -69,6 +69,8 @@ class E2E(unittest.TestCase):
                     self.send_response(404); self.end_headers(); return
                 if self.path == '/api/v1/files/881' and cls.personal_file is None:
                     self.send_response(404); self.end_headers(); return
+                if self.path == '/api/v1/folders/94' and not any(row['id'] == 94 for row in cls.personal_children):
+                    self.send_response(404); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 if self.path == '/api/v1/courses?per_page=100':
@@ -187,7 +189,13 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/users/self/folders?page=2':
                     data = [cls.personal_destination, *cls.personal_children]
                 elif self.path == '/api/v1/folders/92/folders?per_page=100':
-                    data = cls.personal_children
+                    data = [row for row in cls.personal_children if row['parent_folder_id'] == 92]
+                elif self.path == '/api/v1/folders/91/folders?per_page=100':
+                    data = [cls.personal_destination, *[row for row in cls.personal_children if row['parent_folder_id'] == 91]]
+                elif self.path == '/api/v1/folders/94':
+                    data = next(row for row in cls.personal_children if row['id'] == 94)
+                elif self.path in ('/api/v1/folders/94/folders?per_page=100', '/api/v1/folders/94/files?per_page=100'):
+                    data = []
                 elif self.path == '/api/v1/courses/105/content_exports?per_page=100':
                     self.send_header('Link', '</api/v1/courses/105/content_exports?page=2>; rel="next"')
                     data = [{'id': 51, 'user_id': 7, 'export_type': 'zip', 'workflow_state': 'exporting'}]
@@ -329,6 +337,18 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path == '/api/v1/folders/94':
+                    current = next(row for row in cls.personal_children if row['id'] == 94)
+                    cls.folder_write = body
+                    if self.command == 'DELETE':
+                        data = current.copy()
+                        cls.personal_children.remove(current)
+                    else:
+                        current.update({key: int(value) if key == 'parent_folder_id' else value
+                                        for key, value in body.items()})
+                        data = current
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path in ('/api/v1/files/881', '/api/v1/folders/92/copy_file', '/api/v1/folders/92/folders'):
                     cls.personal_write = body
                     if self.path.endswith('/folders'):
@@ -671,6 +691,37 @@ class E2E(unittest.TestCase):
             self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         finally:
             self.__class__.personal_destination = original
+
+    def test_personal_folder_edit_move_and_empty_delete_are_stateful_over_tls(self):
+        original = self.personal_children.copy()
+        self.__class__.personal_children = [{**self.personal_destination, 'id': 94,
+                                           'name': 'Synthetic child', 'parent_folder_id': 92}]
+        try:
+            commands = [('my-folder-edit', '94', '--name', 'Revised child', '--parent', '91'),
+                        ('my-folder-delete', '94')]
+            for command in commands:
+                with self.subTest(command=command):
+                    before = len(self.calls)
+                    preview = self.invoke(*command)
+                    self.assertEqual(preview.returncode, 0, preview.stderr)
+                    data = json.loads(preview.stdout)
+                    self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                    sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                    self.assertEqual(sent.returncode, 0, sent.stderr)
+                    self.assertEqual(self.folder_write, data['body'] or {})
+                    self.assertNotIn('force', self.folder_write)
+                    self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                                     [(data['method'], '/api/v1/folders/94')])
+                    read = self.invoke('folder', '94')
+                    if command[0] == 'my-folder-edit':
+                        self.assertEqual(read.returncode, 0, read.stderr)
+                        self.assertEqual(json.loads(read.stdout)['name'], 'Revised child')
+                        self.assertEqual(json.loads(read.stdout)['parent_folder_id'], 91)
+                    else:
+                        self.assertNotEqual(read.returncode, 0)
+                        self.assertIn('HTTP 404', read.stderr)
+        finally:
+            self.__class__.personal_children = original
 
     def test_planner_pagination_and_read_only_personal_notes(self):
         before = len(self.calls)

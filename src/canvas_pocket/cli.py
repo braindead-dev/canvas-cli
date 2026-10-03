@@ -324,6 +324,14 @@ def parser():
     personal_folder.add_argument('--name', required=True)
     personal_folder.add_argument('--yes', action='store_true')
     personal_folder.add_argument('--confirm')
+    for name in ('my-folder-edit', 'my-folder-delete'):
+        s = sub.add_parser(name, help='Preview a personal folder change; deletion requires an empty non-root folder')
+        s.add_argument('folder', type=identifier)
+        if name == 'my-folder-edit':
+            s.add_argument('--name')
+            s.add_argument('--parent', type=identifier)
+        s.add_argument('--yes', action='store_true')
+        s.add_argument('--confirm')
     for name in ('my-file-edit', 'my-file-copy', 'my-file-delete'):
         s = sub.add_parser(name, help='Preview organizing a personal Canvas file without overwriting or sharing')
         s.add_argument('file', type=identifier)
@@ -709,6 +717,11 @@ def run(args):
     if args.command == 'my-folder-create':
         from .personal_files import create_folder
         return create_folder(client, args.parent, args.name, max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+    if args.command in ('my-folder-edit', 'my-folder-delete'):
+        from .personal_files import change_folder
+        return change_folder(client, args.folder, name=getattr(args, 'name', None),
+                             destination=getattr(args, 'parent', None), delete=args.command == 'my-folder-delete',
+                             max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('my-file-edit', 'my-file-copy', 'my-file-delete'):
         from .personal_files import change_file
         return change_file(client, args.file, name=getattr(args, 'name', None),
