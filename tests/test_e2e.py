@@ -11,7 +11,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 
 @unittest.skipUnless(shutil.which('openssl'), 'openssl required for local TLS fixture')
@@ -138,6 +138,8 @@ class E2E(unittest.TestCase):
                 if self.path == '/api/v1/files/881' and cls.personal_file is None:
                     self.send_response(404); self.end_headers(); return
                 if self.path == '/api/v1/folders/94' and not any(row['id'] == 94 for row in cls.personal_children):
+                    self.send_response(404); self.end_headers(); return
+                if self.path.endswith('/folders/by_path/Missing'):
                     self.send_response(404); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -441,6 +443,19 @@ class E2E(unittest.TestCase):
                     data = cls.group_folder
                 elif self.path in ('/api/v1/courses/101/folders/root', '/api/v1/courses/101/folders/96'):
                     data = {**cls.group_folder, 'id': 96, 'context_type': 'Course', 'context_id': 101}
+                elif any(self.path.startswith(prefix + '/folders/by_path') for prefix in
+                         ('/api/v1/courses/101', '/api/v1/groups/11', '/api/v1/users/self')):
+                    prefix = next(prefix for prefix in ('/api/v1/courses/101', '/api/v1/groups/11', '/api/v1/users/self')
+                                  if self.path.startswith(prefix + '/folders/by_path'))
+                    root_record = (cls.personal_root if prefix.endswith('/self') else
+                                   {**cls.group_folder, 'id': 96, 'context_type': 'Course', 'context_id': 101}
+                                   if prefix.startswith('/api/v1/courses') else cls.group_folder)
+                    path = unquote(self.path[len(prefix + '/folders/by_path'):]).lstrip('/')
+                    data = [root_record]
+                    for index, name in enumerate(path.split('/') if path else []):
+                        data.append({**root_record, 'id': root_record['id'] + index + 10,
+                                     'name': name, 'parent_folder_id': data[-1]['id'],
+                                     'private_field': 'synthetic-private-folder-detail'})
                 elif self.path in ('/api/v1/groups/11/pages/welcome', '/api/v1/groups/11/pages/411', '/api/v1/groups/11/front_page'):
                     data = cls.group_page
                 elif self.path == '/api/v1/groups/11/tabs?per_page=100':
@@ -910,6 +925,40 @@ class E2E(unittest.TestCase):
         finally:
             type(self).group_folder = original_folder
             type(self).storage_quota = original_quota
+
+    def test_folder_path_resolves_unicode_hierarchy_in_explicit_contexts(self):
+        for kind, item, prefix in (('course', '101', '/api/v1/courses/101'),
+                                   ('group', '11', '/api/v1/groups/11'), ('user', '7', '/api/v1/users/self')):
+            command = ('folder-path', item, '--context', kind, '--path', 'Week 1/Résumé % notes')
+            before = len(self.calls)
+            result = self.invoke(*command)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual([row['name'] for row in data['folders'][1:]], ['Week 1', 'Résumé % notes'])
+            self.assertEqual(data['folder_id'], data['folders'][-1]['id'])
+            self.assertTrue(data['complete_for_path'])
+            self.assertIn('materialize', data['note'])
+            self.assertNotIn('synthetic-private-folder-detail', result.stdout)
+            self.assertEqual(self.calls[-1], ('GET', prefix + '/folders/by_path/Week%201/R%C3%A9sum%C3%A9%20%25%20notes'))
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            root = self.invoke('folder-path', item, '--context', kind)
+            self.assertEqual(root.returncode, 0, root.stderr)
+            self.assertEqual(len(json.loads(root.stdout)['folders']), 1)
+
+    def test_folder_path_not_found_invalid_path_and_other_user_are_not_empty_success(self):
+        result = self.invoke('folder-path', '11', '--context', 'group', '--path', 'Missing')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('404', result.stderr)
+        self.assertEqual(self.calls[-2:], [('GET', '/api/v1/groups/11'),
+                                          ('GET', '/api/v1/groups/11/folders/by_path/Missing')])
+        before = len(self.calls)
+        for path in ('/Week 1', '../Readings', 'Week 1//Readings', 'Week 1\\Readings'):
+            result = self.invoke('folder-path', '11', '--context', 'group', '--path', path)
+            self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.calls[before:], [])
+        result = self.invoke('folder-path', '8', '--context', 'user', '--path', 'Readings')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/users/self/profile')])
 
     def test_group_file_download_is_scoped_private_and_credential_free_at_storage(self):
         original = self.group_file.copy()

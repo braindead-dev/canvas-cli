@@ -221,6 +221,10 @@ After the **same job** reports `exported` with an available attachment, `export-
 
 `root-folder CONTEXT --context course|group|user` reads the native root-folder metadata and verifies its context and root association. `file-quota CONTEXT --context course|group|user` reports native quota/used/remaining bytes, including an over-quota flag. User-context reads require your signed-in numeric user ID; they never accept another user's storage. A positive remaining quota does not establish permission to upload. These are GET-only operations with no membership, uploads, publication or enrollment changes; Canvas may record content-access analytics. Group support and quota/root reads have synthetic HTTPS coverage only. See the [official Files/Folders API](https://developerdocs.instructure.com/services/canvas/resources/files), [Pages API](https://developerdocs.instructure.com/services/canvas/resources/pages) and [Tabs API](https://developerdocs.instructure.com/services/canvas/resources/tabs).
 
+`folder-path CONTEXT --context course|group|user --path "Week 1/Readings"` resolves an existing relative path to its root-to-leaf folder hierarchy and final `folder_id`, suitable for an upload preview. An empty path selects only the root. UTF-8 names, spaces and literal percent characters are encoded; empty/dot segments, leading/trailing separators, backslashes and controls are refused before access. Every returned folder must match the explicit context, exact requested names and parent chain; missing, incomplete or locked-for-user paths fail rather than appearing as an empty result. Own-user context requires your numeric signed-in ID.
+
+Root and path reads are **GETs with native server-side effects**, not strictly side-effect-free reads: Canvas's [root-folder model](https://github.com/instructure/canvas-lms/blob/master/app/models/folder.rb) creates a missing root when these APIs resolve it. Pocket reports that in the command safety index and output notes. `upload-context` previews without `--folder` also warn about this root lookup. No arbitrary subfolder is created by a path lookup, and no explicit creation/upload/membership/enrollment request is made.
+
 ```sh
 canvas-pocket files 123 --context group --format brief
 canvas-pocket folders 123 --context group
@@ -228,6 +232,7 @@ canvas-pocket pages 123 --context group
 canvas-pocket page 123 welcome --context group
 canvas-pocket tabs 123 --context group
 canvas-pocket root-folder 123 --context group
+canvas-pocket folder-path 123 --context group --path "Week 1/Readings"
 canvas-pocket file-quota 123 --context group
 ```
 
@@ -413,7 +418,7 @@ The read-only `calendar` command also accepts repeated `--group` filters. `--und
 
 ## Personal Canvas file organization
 
-`my-root` returns your personal root folder ID and `my-folders` lists your paginated personal folders. `my-folder-create PARENT_ID --name NAME` creates one subfolder after an account-bound preview and matching confirmation. It refuses an existing same-named child, changed sibling inventory, inaccessible folders, other users' folders, course/group folders and submission folders. Use numeric IDs from your own inventory, not a guessed course folder.
+`my-root` returns your personal root folder ID (Canvas may create a missing native root during this GET); `my-folders` lists your paginated personal folders. `my-folder-create PARENT_ID --name NAME` creates one subfolder after an account-bound preview and matching confirmation. It refuses an existing same-named child, changed sibling inventory, inaccessible folders, other users' folders, course/group folders and submission folders. Use numeric IDs from your own inventory, not a guessed course folder.
 
 `my-file-edit FILE_ID --name NAME --folder DESTINATION_ID` renames and/or moves a personal file. Either option can be used alone. `my-file-copy FILE_ID --folder DESTINATION_ID` copies an accessible file into your personal folder without modifying the source; a readable course file can be copied if Canvas permits it. Both use `on_duplicate=rename`, never overwrite. Canvas may append a qualifier to resolve a collision, so inspect the actual name in the result. They send no publication, visibility, sharing or lock-setting changes. Moves can affect inherited folder behavior and existing links; review the destination. Preview fingerprints bind file metadata and destination/account; they do not prove unchanged binary bytes.
 

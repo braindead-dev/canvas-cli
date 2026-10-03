@@ -16,8 +16,8 @@ def describe():
             'news', 'linked-files', 'assignments', 'assignment',
             'assignment-groups', 'assignment-group', 'submission', 'submissions', 'grades', 'peer-reviews',
             'syllabus', 'tabs', 'front-page', 'modules', 'module-items', 'outline', 'pages', 'page',
-            'files', 'my-files', 'file-info', 'folders', 'my-folders', 'my-root', 'folder', 'folder-files', 'folder-folders',
-            'root-folder', 'file-quota',
+            'files', 'my-files', 'file-info', 'folders', 'my-folders', 'folder', 'folder-files', 'folder-folders',
+            'file-quota',
             'sections', 'announcements', 'discussions', 'topic', 'thread', 'entries', 'entry', 'topic-ratings',
             'replies', 'quizzes (metadata only)', 'quiz (metadata only)',
             'new-quizzes (metadata only)', 'new-quiz (metadata only)',
@@ -25,6 +25,7 @@ def describe():
             'snapshot-search (offline)',
         ],
         'read_with_native_side_effects': [
+            'root-folder/my-root/folder-path (GET may materialize a missing native root folder)',
             'notification-preferences (GET may materialize default policy records)',
             'get (expert GET only; native server-side effects may apply)',
         ],

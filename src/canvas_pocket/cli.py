@@ -439,14 +439,18 @@ def parser():
                              metavar='CONTEXT_ID' if name in ('folders', 'tabs', 'front-page') else None)
         if name in ('folders', 'tabs', 'front-page'):
             content.add_argument('--context', choices=('course', 'group'), default='course')
-    for name in ('root-folder', 'file-quota'):
-        content = sub.add_parser(name, help=('Read the authorized native root folder for an explicit context' if name == 'root-folder' else
-                                            'Read native storage quota and used bytes, not upload permission'))
+    for name in ('root-folder', 'file-quota', 'folder-path'):
+        descriptions = {'root-folder': 'GET native root folder metadata; Canvas may create a missing root',
+                        'file-quota': 'Read native storage quota and used bytes, not upload permission',
+                        'folder-path': 'GET an existing relative folder hierarchy; Canvas may create a missing root'}
+        content = sub.add_parser(name, help=descriptions[name])
         content.add_argument('context_id', type=identifier)
         content.add_argument('--context', choices=('course', 'group', 'user'), default='course',
                              help='User context requires your own numeric ID; no other-user reads')
+        if name == 'folder-path':
+            content.add_argument('--path', default='', help='Relative folder path, e.g. Week 1/Readings; empty means root')
     sub.add_parser('my-folders', help='List your paginated personal Canvas folders')
-    sub.add_parser('my-root', help='Read your personal root folder ID')
+    sub.add_parser('my-root', help='GET your personal root folder ID; Canvas may create a missing root')
     personal_folder = sub.add_parser('my-folder-create', help='Preview one subfolder in your personal Canvas files')
     personal_folder.add_argument('parent', type=identifier)
     personal_folder.add_argument('--name', required=True)
@@ -864,6 +868,9 @@ def run(args):
         if not isinstance(data, dict) or str(data.get('id')) != args.file:
             raise CanvasError('Canvas returned a different file; refusing output')
         return data
+    if args.command == 'folder-path':
+        from .group_content import resolve_folder_path
+        return resolve_folder_path(client, args.context_id, args.context, args.path)
     if args.command in ('root-folder', 'file-quota'):
         from .group_content import quota, root
         return (root if args.command == 'root-folder' else quota)(client, args.context_id, args.context)

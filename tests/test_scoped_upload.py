@@ -67,6 +67,8 @@ class ScopedUploadTests(unittest.TestCase):
                     self.assertEqual(preview['destination']['context_type'], kind)
                     self.assertNotIn('synthetic-private-folder-data', str(preview))
                     self.assertIn('visible to others', preview['destination']['warning'])
+                    if folder_id is None:
+                        self.assertIn('materialize', preview['destination']['root_read_note'])
                     self.assertTrue(all(method == 'GET' for method, _, _ in client.calls))
 
     def test_all_contexts_use_exact_existing_folder_and_no_overwrite(self):

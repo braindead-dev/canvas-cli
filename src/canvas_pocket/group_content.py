@@ -8,6 +8,9 @@ from .pages import visible
 from .snapshot import redact
 from .writes import account
 
+ROOT_NOTE = ('GET may materialize a missing native root folder. No explicit folder creation, '
+             'content upload, membership or enrollment change is requested.')
+
 
 def _number(item):
     if not isinstance(item, str) or not re.fullmatch(r'[1-9][0-9]*', item):
@@ -66,7 +69,36 @@ def root(client, item, context_type='course'):
     if result.get('parent_folder_id') is not None:
         raise CanvasError('Canvas did not return the context root folder')
     return {'context_type': context_type, f'{context_type}_id': int(item), 'context_name': context.get('name'),
-            'root_folder': result, 'note': 'Root metadata only. No folder creation, content download or enrollment change.'}
+            'root_folder': result, 'note': 'Root metadata only. ' + ROOT_NOTE}
+
+
+def resolve_folder_path(client, item, context_type='course', path=''):
+    if (not isinstance(path, str) or '\\' in path or any(ord(char) < 32 or ord(char) == 127 for char in path) or
+            path and any(part in ('', '.', '..') for part in path.split('/'))):
+        raise CanvasError('Use a relative folder path without empty/dot segments, backslashes or controls; empty means root')
+    parts = path.split('/') if path else []
+    route, context = _context(client, item, context_type)
+    rows, links = client.request(route + '/folders/by_path' + ('/' + quote(path, safe='/') if path else ''))
+    if (not isinstance(rows, list) or len(rows) != len(parts) + 1 or
+            re.search(r'<[^>]+>;\s*rel="next"', links)):
+        raise CanvasError('Canvas returned an incomplete or invalid folder-path hierarchy')
+    hierarchy, seen = [], set()
+    for index, row in enumerate(rows):
+        details = folder(row, item, context_type)
+        if (details['id'] in seen or 'parent_folder_id' not in details or
+                not isinstance(details.get('name'), str) or not details['name'] or
+                details.get('locked_for_user') or details.get('hidden_for_user') or
+                row.get('workflow_state') == 'deleted'):
+            raise CanvasError('Canvas returned an unavailable or invalid folder-path hierarchy')
+        parent = details['parent_folder_id']
+        if (index == 0 and parent is not None or index > 0 and
+                (type(parent) is not int or parent != hierarchy[-1]['id'] or details['name'] != parts[index - 1])):
+            raise CanvasError('Canvas returned a different folder-path hierarchy')
+        hierarchy.append(details)
+        seen.add(details['id'])
+    return {'context_type': context_type, f'{context_type}_id': int(item), 'context_name': context.get('name'),
+            'path': path, 'folders': hierarchy, 'folder_id': hierarchy[-1]['id'], 'complete_for_path': True,
+            'note': 'Existing native path only; no subfolder creation or content enumeration. ' + ROOT_NOTE}
 
 
 def quota(client, item, context_type='course'):

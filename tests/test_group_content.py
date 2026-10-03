@@ -2,7 +2,15 @@ import unittest
 from unittest.mock import Mock
 
 from canvas_pocket.client import CanvasError
-from canvas_pocket.group_content import base, file_metadata, listing, page, quota, root
+from canvas_pocket.group_content import (
+    base,
+    file_metadata,
+    listing,
+    page,
+    quota,
+    resolve_folder_path,
+    root,
+)
 
 
 class GroupContentTests(unittest.TestCase):
@@ -106,11 +114,73 @@ class GroupContentTests(unittest.TestCase):
         self.client.request.side_effect = [(self.group, ''), (self.folder, '')]
         result = root(self.client, '11', 'group')
         self.assertEqual(result['root_folder']['id'], 95)
+        self.assertIn('materialize', result['note'])
         self.client.request.assert_called_with('/api/v1/groups/11/folders/root')
         for row in ({**self.folder, 'parent_folder_id': 94}, {**self.folder, 'context_type': 'Course'}):
             self.client.request.side_effect = [(self.group, ''), (row, '')]
             with self.assertRaises(CanvasError):
                 root(self.client, '11', 'group')
+
+    def test_folder_path_encodes_native_relative_names_and_returns_exact_chain(self):
+        children = [{**self.folder, 'id': 96, 'name': 'Week 1', 'parent_folder_id': 95},
+                    {**self.folder, 'id': 97, 'name': 'Résumé % notes', 'parent_folder_id': 96,
+                     'private_field': 'synthetic-private-folder-data'}]
+        self.client.request.side_effect = [(self.group, ''), ([self.folder, *children], '')]
+        result = resolve_folder_path(self.client, '11', 'group', 'Week 1/Résumé % notes')
+        self.client.request.assert_called_with('/api/v1/groups/11/folders/by_path/Week%201/R%C3%A9sum%C3%A9%20%25%20notes')
+        self.assertEqual(result['folder_id'], 97)
+        self.assertEqual([row['id'] for row in result['folders']], [95, 96, 97])
+        self.assertTrue(result['complete_for_path'])
+        self.assertIn('materialize', result['note'])
+        self.assertNotIn('synthetic-private-folder-data', str(result))
+
+    def test_empty_folder_path_resolves_only_native_root_in_each_namespace(self):
+        for kind, item in (('course', '101'), ('group', '11'), ('user', '7')):
+            record = {**self.folder, 'context_type': kind.title(), 'context_id': int(item)}
+            self.client.request.side_effect = [({'id': int(item)}, ''), ([record], '')]
+            result = resolve_folder_path(self.client, item, kind)
+            self.assertEqual(result['folders'], [record])
+            prefix = '/api/v1/users/self' if kind == 'user' else f'/api/v1/{kind}s/{item}'
+            self.client.request.assert_called_with(prefix + '/folders/by_path')
+
+    def test_invalid_relative_paths_fail_before_canvas_access(self):
+        for path in (None, True, '/Week 1', 'Week 1/', 'Week 1//Readings', '.', '..', 'Week 1/../Readings',
+                     'bad\\path', 'bad\npath', 'https://canvas.example.edu/folders/1'):
+            self.client.request.reset_mock()
+            with self.subTest(path=path), self.assertRaises(CanvasError):
+                resolve_folder_path(self.client, '11', 'group', path)
+            self.client.request.assert_not_called()
+
+    def test_folder_path_rejects_missing_extra_foreign_or_inconsistent_hierarchy(self):
+        child = {**self.folder, 'id': 96, 'name': 'Readings', 'parent_folder_id': 95}
+        records = ([], [self.folder], [self.folder, child, child], {}, [self.folder, self.folder],
+                   [{**self.folder, 'parent_folder_id': 94}, child],
+                   [self.folder, {**child, 'parent_folder_id': True}],
+                   [self.folder, {**child, 'parent_folder_id': 94}],
+                   [self.folder, {**child, 'name': 'Other'}],
+                   [self.folder, {**child, 'context_type': 'User'}],
+                   [self.folder, {**child, 'hidden_for_user': True}],
+                   [self.folder, {**child, 'locked_for_user': True}],
+                   [self.folder, {**child, 'workflow_state': 'deleted'}],
+                   [self.folder, {key: value for key, value in child.items() if key != 'parent_folder_id'}])
+        for rows in records:
+            self.client.request.side_effect = [(self.group, ''), (rows, '')]
+            with self.subTest(rows=rows), self.assertRaises(CanvasError):
+                resolve_folder_path(self.client, '11', 'group', 'Readings')
+        self.client.request.side_effect = [(self.group, ''), ([self.folder, child], '</api/v1/other>; rel="next"')]
+        with self.assertRaisesRegex(CanvasError, 'incomplete'):
+            resolve_folder_path(self.client, '11', 'group', 'Readings')
+
+    def test_folder_path_does_not_guess_other_user_storage_or_mask_access_failure(self):
+        self.client.request.side_effect = [({'id': 7}, '')]
+        with self.assertRaisesRegex(CanvasError, 'signed-in user'):
+            resolve_folder_path(self.client, '8', 'user', 'Readings')
+        self.client.request.reset_mock()
+        self.client.request.side_effect = [(self.group, ''), CanvasError('Native path not found', status=404)]
+        with self.assertRaisesRegex(CanvasError, 'not found') as caught:
+            resolve_folder_path(self.client, '11', 'group', 'Readings')
+        self.assertEqual(caught.exception.status, 404)
+        self.assertEqual(len(self.client.request.call_args_list), 2)
 
     def test_quota_reads_native_bytes_for_course_group_or_verified_own_user(self):
         for context, item, native in (('course', '101', '/api/v1/courses/101'),

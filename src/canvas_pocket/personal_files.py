@@ -1,6 +1,7 @@
 """Account-bound personal file organization, without sharing or overwrite controls."""
 
 from .client import CanvasError
+from .group_content import ROOT_NOTE
 from .writes import account, check_flags, confirmed, digest
 
 
@@ -47,7 +48,7 @@ def folders(client, max_pages=100, root=False):
     identity = account(client)
     if root:
         record, _ = client.request('/api/v1/users/self/folders/root')
-        return _folder_record(record, identity['user_id'])
+        return {**_folder_record(record, identity['user_id']), 'note': ROOT_NOTE}
     rows = client.list('/api/v1/users/self/folders?per_page=100', max_pages)
     # Submission folders can appear in the inventory but must never be used as mutation targets.
     return rows

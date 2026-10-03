@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .client import CanvasError
-from .group_content import base, folder
+from .group_content import ROOT_NOTE, base, folder
 from .writes import account
 from .writes import digest as revision_digest
 
@@ -72,6 +72,8 @@ def _destination(client, identity, context_type, context_id, folder_id):
                          'Course/group files may be visible to others according to native permissions. '
                          'No visibility flags are requested; Canvas defaults apply. Reading a folder does '
                          'not prove Manage Files permission; Canvas enforces upload authorization.'}
+    if folder_id is None:
+        target['root_read_note'] = ROOT_NOTE
     return route + '/files', target
 
 
