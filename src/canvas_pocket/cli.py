@@ -144,6 +144,18 @@ def parser():
     group.add_argument('group', type=identifier)
     course_groups = sub.add_parser('course-groups', help='Visible groups in a course')
     course_groups.add_argument('course', type=identifier)
+    permissions = sub.add_parser('permissions', help='Read exact own native context rights, not an admin-role inference')
+    permissions.add_argument('context_id', type=identifier)
+    permissions.add_argument('--context', choices=('course', 'group'), default='course')
+    permissions.add_argument('--permission', dest='permissions', action='append', required=True,
+                             help='Repeat for exact native keys, e.g. read_roster or join; false does not diagnose why')
+    categories = sub.add_parser('group-categories', help='List authorized course group-set metadata, not member allocations')
+    categories.add_argument('course', type=identifier)
+    categories.add_argument('--collaboration-state', choices=('collaborative', 'non_collaborative', 'all'), default='collaborative')
+    for name in ('group-category', 'category-groups'):
+        categories = sub.add_parser(name, help='Read a course-verified group set or its paginated group metadata')
+        categories.add_argument('course', type=identifier)
+        categories.add_argument('category', type=identifier)
     for name in ('course-users', 'group-users'):
         roster = sub.add_parser(name, help='Fully paginate an authorized roster; metadata only by default')
         roster.add_argument('context_id', type=identifier)
@@ -873,6 +885,16 @@ def run(args):
         return client.request(f'/api/v1/groups/{args.group}')[0]
     if args.command == 'course-groups':
         return client.list(f'/api/v1/courses/{args.course}/groups?per_page=100', args.max_pages)
+    if args.command == 'permissions':
+        from .access import read
+        return read(client, args.context_id, args.context, names=args.permissions)
+    if args.command in ('group-categories', 'group-category', 'category-groups'):
+        from . import group_categories
+        if args.command == 'group-categories':
+            return group_categories.listing(client, args.course, args.max_pages, collaboration_state=args.collaboration_state)
+        if args.command == 'group-category':
+            return group_categories.read(client, args.course, args.category)
+        return group_categories.groups(client, args.course, args.category, args.max_pages)
     if args.command in ('course-users', 'group-users'):
         from .roster import listing
         return listing(client, args.context_id, 'course' if args.command == 'course-users' else 'group', args.max_pages,
@@ -1127,6 +1149,20 @@ def brief(data):
             lines.append('')
         if not data['command_index']:
             lines.append('No matching commands. Try help without --search.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'permissions' in data and 'context_type' in data:
+        return (f"Native permissions ({data['context_type']} {data[data['context_type'] + '_id']})\n" +
+                '\n'.join(f"{key}: {str(value).lower()}" for key, value in data['permissions'].items()) + f"\n{data['note']}")
+    if isinstance(data, dict) and ('group_categories' in data or 'group_category' in data):
+        categories = data.get('group_categories', [data.get('group_category')])
+        lines = [f"Course {data['course_id']} group-set metadata"]
+        for row in categories:
+            signup = (row['self_signup'] or 'disabled') if 'self_signup' in row else 'unknown'
+            lines.append(f"{row['id']} | {row.get('name') or '(unnamed)'} | self-signup {signup}")
+        if 'category_groups' in data:
+            lines.extend(f"  {row['id']} | {row.get('name') or '(unnamed)'} | native count {row.get('members_count', 'unknown')}"
+                         for row in data['category_groups'])
         lines.append(data['note'])
         return '\n'.join(lines)
     if isinstance(data, dict) and 'returned_user_count' in data and 'users' in data:

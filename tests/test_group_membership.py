@@ -93,7 +93,7 @@ class GroupMembershipTests(unittest.TestCase):
             def request(route, *args):
                 return (permissions, '') if '/permissions?' in route else original(route, *args)
             self.client.request.side_effect = request
-            with self.subTest(permissions=permissions), self.assertRaisesRegex(CanvasError, 'explicitly grant'):
+            with self.subTest(permissions=permissions), self.assertRaisesRegex(CanvasError, 'explicit'):
                 change(self.client, '11', 'join')
         self.client.list.assert_not_called()
 

@@ -38,6 +38,11 @@ canvas-pocket favorite-remove 456 --context group
 canvas-pocket favorites-reset --context course
 canvas-pocket groups
 canvas-pocket course-groups 123
+canvas-pocket permissions 123 --permission read_roster --permission send_messages
+canvas-pocket permissions 789 --context group --permission join --permission leave
+canvas-pocket group-categories 123
+canvas-pocket group-category 123 456  # course ID, then group-category ID
+canvas-pocket category-groups 123 456
 canvas-pocket course-users 123 --enrollment-type teacher --enrollment-type ta --include-enrollments
 canvas-pocket course-users 123 --search 'Example Name' --section 456
 canvas-pocket group-users 789 --exclude-inactive
@@ -326,6 +331,10 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
 
 ## Rosters and own group membership
+
+`permissions CONTEXT --context course|group --permission KEY` queries exact native rights for the signed-in user. Repeat `--permission` for distinct lowercase keys. It reports only explicit booleans returned by Canvas; a missing/nonboolean result is an error, not an assumed denial. A native `false` can mean denied, unsupported or feature-disabled, and a `true` is not a guarantee that a later action succeeds. No role, scope or permission is changed. See the [official permission endpoint](https://developerdocs.instructure.com/services/canvas/resources/groups#method.groups.permissions).
+
+`group-categories COURSE` paginates authorized group-set metadata, defaulting to collaborative groups; `--collaboration-state all|non_collaborative` explicitly selects other native filters. `group-category COURSE CATEGORY` and `category-groups COURSE CATEGORY` verify that the category and every returned group belong to **both the exact category and the requested course**. They show native self-signup/deadline/limit/multiple-membership settings when returned, not inferred eligibility. Member/leader associations, SIS IDs and progress details are omitted. These endpoints are role-dependent and can be denied to students; Pocket does not elevate privileges or recover a denied inventory from administrative exports. No group allocation or group-set change occurs. Synthetic HTTPS coverage only. See the [official Group Categories API](https://developerdocs.instructure.com/services/canvas/resources/group_categories).
 
 `course-users COURSE` and `group-users GROUP` fully paginate the native authorized roster. `--search` performs a native partial-name/full-ID search. Course rosters support repeated `--enrollment-type`, `--enrollment-state` and `--section` filters; `--include-enrollments` opts into course/user-verified role/state/section metadata, **never grades**. Group rosters support explicit `--exclude-inactive` or `--no-exclude-inactive`; omission preserves the native default. Names/Canvas IDs are shown, email only with `--include-email` and only if Canvas returns it. SIS/login IDs, biographies, avatars, analytics and unknown private fields are never projected. Live roster output is private, not suitable for a public repository.
 

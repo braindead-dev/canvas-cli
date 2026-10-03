@@ -6,6 +6,7 @@ def describe():
         'read': [
             'courses', 'doctor', 'find', 'me', 'favorites', 'groups', 'group', 'course-groups',
             'course-users', 'group-users', 'group-membership',
+            'permissions', 'group-categories', 'group-category', 'category-groups',
             'nicknames', 'nickname', 'colors', 'color',
             'settings', 'dashboard-positions',
             'channels',

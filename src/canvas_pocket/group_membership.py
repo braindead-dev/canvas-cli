@@ -1,7 +1,6 @@
 """Own membership controls, never group-set switches or other people's roles."""
 
-from urllib.parse import urlencode
-
+from .access import query
 from .client import CanvasError
 from .group_content import _context, _id, _number
 from .writes import account, check_flags, confirmed
@@ -72,9 +71,8 @@ def change(client, group_id, action, *, max_pages=100, yes=False, confirm=None):
             group['group_category_id'] < 1):
         raise CanvasError('Membership writes require a current collaborative student-organized/community group; '
                           'project groups, differentiation tags and unknown group types are not supported')
-    permission_route = route + '/permissions?' + urlencode([('permissions[]', action)])
-    permissions, _ = client.request(permission_route)
-    if not isinstance(permissions, dict) or permissions.get(action) is not True:
+    permissions = query(client, route, [action])
+    if permissions[action] is not True:
         raise CanvasError('Canvas did not explicitly grant the requested own-group permission')
     current = _current(client, group_id, identity['user_id'], max_pages)
     if action == 'join':

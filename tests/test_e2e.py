@@ -86,6 +86,14 @@ class E2E(unittest.TestCase):
         cls.membership_ack = 'normal'
         cls.membership_denied = False
         cls.membership_write = None
+        cls.group_category = {'id': 3, 'context_type': 'Course', 'course_id': 101, 'name': 'Synthetic project sets',
+                              'self_signup': 'restricted', 'group_limit': 5, 'allows_multiple_memberships': False,
+                              'sis_group_category_id': 'synthetic-private-category-sis',
+                              'progress': {'message': 'synthetic-private-category-progress'}}
+        cls.category_groups = [{'id': 11, 'context_type': 'Course', 'course_id': 101, 'group_category_id': 3,
+                                'name': 'Synthetic project team', 'members_count': 3,
+                                'leader': {'id': 8, 'name': 'synthetic-private-category-leader'}}]
+        cls.category_denied = False
         cls.roster_users = [
             {'id': 7, 'name': 'Synthetic teacher', 'email': 'synthetic-roster-contact@example.edu',
              'sis_user_id': 'synthetic-private-roster-sis', 'login_id': 'synthetic-private-roster-login',
@@ -146,6 +154,8 @@ class E2E(unittest.TestCase):
                     self.end_headers(); return
                 if self.path.startswith('/api/v1/courses/102/users?'):
                     self.send_response(403); self.end_headers(); return
+                if cls.category_denied and self.path.startswith(('/api/v1/courses/101/group_categories?', '/api/v1/group_categories/3')):
+                    self.send_response(403); self.end_headers(); return
                 if self.path.startswith(('/api/v1/courses/101/files?per_page=',
                                          '/api/v1/courses/103/files?per_page=')):
                     self.send_response(403); self.end_headers(); return
@@ -163,7 +173,23 @@ class E2E(unittest.TestCase):
                     self.send_response(404); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
-                if self.path.startswith(('/api/v1/courses/101/users?', '/api/v1/groups/11/users?')):
+                if self.path.startswith('/api/v1/courses/101/permissions?'):
+                    data = {'read_roster': True, 'send_messages': False, 'private': 'synthetic-private-permission-metadata'}
+                elif self.path.startswith('/api/v1/courses/101/group_categories?'):
+                    if 'page=2' not in self.path:
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = []
+                    else:
+                        data = [cls.group_category]
+                elif self.path == '/api/v1/group_categories/3':
+                    data = cls.group_category
+                elif self.path.startswith('/api/v1/group_categories/3/groups?'):
+                    if 'page=2' not in self.path:
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = []
+                    else:
+                        data = cls.category_groups
+                elif self.path.startswith(('/api/v1/courses/101/users?', '/api/v1/groups/11/users?')):
                     query = parse_qs(urlsplit(self.path).query)
                     if 'page=2' not in self.path:
                         self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
@@ -808,6 +834,84 @@ class E2E(unittest.TestCase):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
+
+    def test_permission_views_have_exact_native_booleans_and_explicit_context_over_tls(self):
+        before = len(self.calls)
+        result = self.invoke('permissions', '101', '--permission', 'send_messages', '--permission', 'read_roster', '--format', 'brief')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('read_roster: true', result.stdout)
+        self.assertIn('send_messages: false', result.stdout)
+        self.assertNotIn('synthetic-private', result.stdout)
+        self.assertEqual(self.calls[before:], [('GET', '/api/v1/courses/101'),
+                                             ('GET', '/api/v1/courses/101/permissions?permissions%5B%5D=read_roster&permissions%5B%5D=send_messages')])
+        result = self.invoke('permissions', '11', '--context', 'group', '--permission', 'join', '--permission', 'leave')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['permissions'], {'join': True, 'leave': True})
+        original = self.membership_permissions.copy()
+        try:
+            self.membership_permissions['join'] = 'true'
+            result = self.invoke('permissions', '11', '--context', 'group', '--permission', 'join')
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, '')
+        finally:
+            type(self).membership_permissions = original
+        before = len(self.calls)
+        for arguments in (('--permission', '../join'), ('--permission', 'join', '--permission', 'join')):
+            result = self.invoke('permissions', '11', '--context', 'group', *arguments)
+            self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.calls[before:], [])
+
+    def test_group_sets_and_category_groups_are_paginated_course_verified_private_metadata(self):
+        before = len(self.calls)
+        result = self.invoke('group-categories', '101', '--collaboration-state', 'all')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data['complete_for_endpoint'])
+        self.assertEqual(data['group_categories'][0]['self_signup'], 'restricted')
+        self.assertNotIn('synthetic-private', result.stdout)
+        self.assertEqual(len(self.calls[before:]), 3)
+        result = self.invoke('group-category', '101', '3')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['group_category']['id'], 3)
+        result = self.invoke('category-groups', '101', '3', '--format', 'brief')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('self-signup restricted', result.stdout)
+        self.assertIn('11 | Synthetic project team | native count 3', result.stdout)
+        self.assertNotIn('synthetic-private', result.stdout)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        self.assertFalse(any('/users' in route or 'export' in route for _, route in self.calls[before:]))
+
+    def test_group_sets_denial_truncation_and_foreign_associations_are_not_empty_success(self):
+        original_category, original_groups = self.group_category.copy(), list(self.category_groups)
+        try:
+            type(self).category_denied = True
+            for command in (('group-categories', '101'), ('group-category', '101', '3'), ('category-groups', '101', '3')):
+                result = self.invoke(*command)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('denied access', result.stderr)
+                self.assertEqual(result.stdout, '')
+            type(self).category_denied = False
+            for command in (('group-categories', '101'), ('category-groups', '101', '3')):
+                result = self.invoke(*command, '--max-pages', '1')
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('Page limit', result.stderr)
+                self.assertEqual(result.stdout, '')
+            self.group_category['course_id'] = 102
+            before = len(self.calls)
+            result = self.invoke('category-groups', '101', '3')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('outside the requested course', result.stderr)
+            self.assertEqual(self.calls[before:], [('GET', '/api/v1/courses/101'), ('GET', '/api/v1/group_categories/3')])
+            type(self).group_category = original_category.copy()
+            type(self).category_groups = [{**original_groups[0], 'group_category_id': 4}]
+            result = self.invoke('category-groups', '101', '3')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('outside the requested group category', result.stderr)
+            self.assertEqual(result.stdout, '')
+        finally:
+            type(self).category_denied = False
+            type(self).group_category = original_category
+            type(self).category_groups = original_groups
 
     def test_rosters_paginate_encode_filters_and_project_private_fields_over_tls(self):
         before = len(self.calls)
