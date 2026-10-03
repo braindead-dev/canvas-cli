@@ -132,6 +132,23 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/assignments/88/submissions/self':
                     data = {'id': 41, 'assignment_id': 88, 'user_id': 7, 'attempt': 1,
                             'workflow_state': 'submitted', 'assignment_visible': True}
+                elif self.path.startswith('/api/v1/courses/101/assignments/88/peer_reviews?'):
+                    reviews = [{'id': 61, 'asset_id': 41, 'asset_type': 'Submission', 'user_id': 7,
+                                'assessor_id': 9, 'workflow_state': 'assigned'},
+                               {'id': 62, 'asset_id': 42, 'asset_type': 'Submission', 'user_id': 9,
+                                'assessor_id': 7, 'workflow_state': 'completed'},
+                               {'id': 63, 'asset_id': 41, 'asset_type': 'Submission', 'user_id': 7,
+                                'workflow_state': 'completed'}]
+                    if 'page=2' in self.path:
+                        data = reviews[1:]
+                    else:
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = reviews[:1]
+                    if 'include%5B%5D=submission_comments' in self.path:
+                        data = [{**row, 'submission_comments': [{'comment': 'Synthetic review feedback'}]} for row in data]
+                    if 'include%5B%5D=user' in self.path:
+                        data = [{**row, 'user': {'id': row['user_id']},
+                                 **({'assessor': {'id': row['assessor_id']}} if 'assessor_id' in row else {})} for row in data]
                 elif self.path == '/api/v1/courses/101/assignments/88':
                     data = {'id': 88, 'course_id': 101, 'name': 'Synthetic paper',
                             'published': True, 'locked_for_user': False,
@@ -1055,6 +1072,30 @@ class E2E(unittest.TestCase):
         brief = self.invoke('--format', 'brief', 'submission', '101', '88')
         self.assertIn('Status: submitted', brief.stdout)
         self.assertIn('Comments: 1', brief.stdout)
+
+    def test_peer_review_scopes_paginate_and_preserve_anonymity_without_writes(self):
+        before = len(self.calls)
+        result = self.invoke('peer-reviews', '101', '88')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual([row['id'] for row in data['peer_reviews']], [61, 63])
+        self.assertFalse(data['owed_review_inventory_complete'])
+        self.assertNotIn('assessor_id', data['peer_reviews'][1])
+        result = self.invoke('peer-reviews', '101', '88', '--scope', 'visible', '--include-users', '--include-comments')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual([row['id'] for row in data['peer_reviews']], [61, 62, 63])
+        self.assertTrue(data['peer_reviews'][1]['assigned_to_self'])
+        self.assertEqual(data['peer_reviews'][0]['submission_comments'][0]['comment'], 'Synthetic review feedback')
+        self.assertNotIn('assessor', data['peer_reviews'][2])
+        brief = self.invoke('peer-reviews', '101', '88', '--format', 'brief')
+        self.assertEqual(brief.returncode, 0, brief.stderr)
+        self.assertIn('hidden/unknown', brief.stdout)
+        truncated = self.invoke('peer-reviews', '101', '88', '--max-pages', '1')
+        self.assertNotEqual(truncated.returncode, 0)
+        self.assertIn('Page limit', truncated.stderr)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        self.assertFalse(any('/allocate' in route or 'read_status' in route for _, route in self.calls[before:]))
 
     def test_work_board_over_tls_is_read_only(self):
         before = len(self.calls)

@@ -313,6 +313,13 @@ def parser():
     submission = sub.add_parser('submission', help='Read your own assignment submission and feedback')
     submission.add_argument('course', type=identifier)
     submission.add_argument('assignment', type=identifier)
+    peer_reviews = sub.add_parser('peer-reviews', help='Read reviews of your submission, not a complete list of reviews you owe')
+    peer_reviews.add_argument('course', type=identifier)
+    peer_reviews.add_argument('assignment', type=identifier)
+    peer_reviews.add_argument('--scope', choices=('received', 'visible'), default='received',
+                              help='Received filters to your work; visible includes other records only if Canvas permits')
+    peer_reviews.add_argument('--include-comments', action='store_true', help='Include native submission comments, which may repeat')
+    peer_reviews.add_argument('--include-users', action='store_true', help='Include permitted user associations; anonymous identities stay hidden')
     feedback = sub.add_parser('submission-comment', help='Preview a comment on your own submission, without grading')
     feedback.add_argument('course', type=identifier)
     feedback.add_argument('assignment', type=identifier)
@@ -826,6 +833,10 @@ def run(args):
         return client.request(base + f'/{resource}/{args.item}')[0]
     if args.command == 'submission':
         return client.request(base + f'/assignments/{args.assignment}/submissions/self?include[]=submission_comments&include[]=rubric_assessment')[0]
+    if args.command == 'peer-reviews':
+        from .peer_reviews import read
+        return read(client, args.course, args.assignment, args.max_pages, scope=args.scope,
+                    comments=args.include_comments, users=args.include_users)
     if args.command == 'download':
         from .download import download
         metadata = client.request(base + f'/files/{args.file}')[0]
@@ -901,6 +912,16 @@ def brief(data):
         thread = data['inbox_change']
         action = 'removed from your view' if data['deleted_from_own_view'] else thread['workflow_state']
         return f"Inbox {thread['id']}: {action}\nStarred: {thread['starred']}; subscribed: {thread['subscribed']}\n{data['note']}"
+    if isinstance(data, dict) and 'peer_reviews' in data:
+        lines = [f"Peer reviews: {data.get('assignment_name') or data['assignment_id']} ({data['scope']})"]
+        for review in data['peer_reviews']:
+            assessor = review.get('assessor_id')
+            lines.append(f"{review['id']}  {review.get('workflow_state') or 'unknown'}  "
+                         f"owner {review['user_id']}; assessor {assessor if assessor is not None else 'hidden/unknown'}")
+        if not data['peer_reviews']:
+            lines.append('No reviews returned in this scope; this does not prove there are no reviews you owe.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'personal_file' in data:
         file = data['personal_file']
         return f"File {file['id']}: {file.get('display_name') or 'Untitled'}\n{data['note']}"

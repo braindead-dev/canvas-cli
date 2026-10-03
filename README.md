@@ -93,6 +93,9 @@ canvas-pocket quiz 123 456
 canvas-pocket new-quizzes 123
 canvas-pocket new-quiz 123 456  # 456 is the assignment ID for a New Quiz
 canvas-pocket submission 123 456
+canvas-pocket peer-reviews 123 456
+canvas-pocket peer-reviews 123 456 --include-comments --include-users
+canvas-pocket peer-reviews 123 456 --scope visible  # only records Canvas permits for your role
 canvas-pocket submission-comment 123 456 --message-file question.txt
 canvas-pocket submit-url 123 456 --url-file project-url.txt
 canvas-pocket submit-text 123 456 --text-file response.txt
@@ -256,6 +259,12 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 ```
 
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
+
+## Peer-review read scope
+
+`peer-reviews COURSE ASSIGNMENT` reads the native paginated endpoint and defaults to reviews **of your own submission**. This is not a complete inventory of reviews you owe: student permissions normally restrict this endpoint to the assessee, not the assessor. Output always says `owed_review_inventory_complete: false`. `--scope visible` includes other returned records only if Canvas authorizes them for your role; it does not elevate permissions or enumerate other submissions.
+
+`--include-comments` and `--include-users` explicitly request the native associations. Submission comments can repeat across peer-review records and are not necessarily authored by that review's assessor. Anonymous/missing assessor IDs are never reconstructed or looked up, and an assessor association is omitted when the API does not provide an assessor ID. Assignment identity/publication/lock checks run first, and malformed or duplicate IDs and truncated pagination fail rather than producing a false complete result. These are read-only commands: no allocation, review completion, rubric grading, assessment attempts or read-status writes. Synthetic HTTPS tests cover scopes, pagination and anonymous records; live coverage remains unverified. See the [official Peer Reviews API](https://developerdocs.instructure.com/services/canvas/resources/peer_reviews).
 
 ## Inbox organization
 
