@@ -44,7 +44,7 @@ def main():
     try:
         args = parser().parse_args()
         data = run(args)
-        print(brief(data) if args.format == 'brief' else json.dumps(data, indent=2))
+        print(brief(data) if args.format == 'brief' else json.dumps(data, indent=2, allow_nan=False))
     except CanvasError as e:
         print(f'Error: {e}', file=sys.stderr)
         return 1

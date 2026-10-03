@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import appointments
+from . import appointments, channels
 
 
 @unittest.skipUnless(shutil.which('openssl'), 'openssl required for local TLS fixture')
@@ -75,12 +75,8 @@ class CanvasFixture(unittest.TestCase):
         cls.profile_written = False
         cls.sync_switch_viewer = False
         cls.dashboard_positions = {'course_101': 1, 'course_102': 2, 'group_12': '9'}
-        cls.communication_channels = [
-            {'id': 19, 'user_id': 7, 'type': 'email', 'position': 1, 'workflow_state': 'active',
-             'address': 'synthetic-contact@example.edu', 'bounce_count': 0,
-             'last_bounce_summary': 'Synthetic private bounce details'},
-            {'id': 20, 'user_id': 7, 'type': 'push', 'position': 2, 'workflow_state': 'active',
-             'address': 'synthetic-private-push-token'}]
+        channels.initialize(cls)
+        cls.raw_json_response = b'{"id":1}'
         cls.notification_preferences = {
             'new_announcement': {'notification': 'new_announcement', 'category': 'announcement', 'frequency': 'daily'},
             'submission_comment': {'notification': 'submission_comment', 'category': 'submission_comment', 'frequency': 'never'}}
@@ -178,6 +174,14 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 if appointments.read(cls, self):
+                    return
+                if channels.read(cls, self):
+                    return
+                if self.path == '/api/v1/synthetic-json':
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(cls.raw_json_response)
                     return
                 if self.path == '/api/v1/users/self/profile' and cls.profile_fail_readback and cls.profile_written:
                     self.send_response(403); self.end_headers(); return
@@ -586,11 +590,6 @@ class CanvasFixture(unittest.TestCase):
                     data = {'custom_colors': cls.custom_colors}
                 elif self.path == '/api/v1/users/self/settings':
                     data = cls.user_settings
-                elif self.path == '/api/v1/users/self/communication_channels?per_page=100':
-                    self.send_header('Link', '</api/v1/users/self/communication_channels?page=2>; rel="next"')
-                    data = []
-                elif self.path == '/api/v1/users/self/communication_channels?page=2':
-                    data = cls.communication_channels
                 elif self.path == '/api/v1/users/self/communication_channels/19/notification_preferences':
                     data = {'notification_preferences': list(cls.notification_preferences.values())}
                 elif self.path == '/api/v1/users/self/dashboard_positions':
@@ -655,6 +654,8 @@ class CanvasFixture(unittest.TestCase):
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
                 if appointments.write(cls, self, body):
+                    return
+                if channels.write(cls, self, body):
                     return
                 if self.path == '/api/v1/users/self':
                     if cls.profile_denied:

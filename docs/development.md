@@ -25,6 +25,7 @@ src/canvas_cli/
   dispatch.py     parsed arguments → domain operations
   formatting.py   human summaries; no credentials/network
   client.py       HTTPS transport, guarded paths, pagination
+  strict_json.py  unambiguous API/snapshot decoding
   writes.py       identity and confirmation digests
   text.py         bounded explicit UTF-8 file inputs
   download.py     credential-free binary transport
@@ -34,6 +35,7 @@ tests/
   e2e/
     fixture.py       shared synthetic Canvas/storage HTTPS server
     appointments.py  focused synthetic Scheduler routes and state
+    channels.py      focused synthetic contact routes and state
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 
@@ -75,4 +77,4 @@ See the capability map for domain limits. No npm/PyPI release or universal brows
 
 ## Primary references
 
-[Canvas API](https://developerdocs.instructure.com/services/canvas), [Pagination](https://developerdocs.instructure.com/services/canvas/basics/file.pagination), [OAuth](https://developerdocs.instructure.com/services/canvas/oauth2/file.oauth), [Native implementation](https://github.com/instructure/canvas-lms).
+[Canvas API](https://developerdocs.instructure.com/services/canvas), [Pagination](https://developerdocs.instructure.com/services/canvas/basics/file.pagination), [OAuth](https://developerdocs.instructure.com/services/canvas/oauth2/file.oauth), [Native implementation](https://github.com/instructure/canvas-lms), [JSON interoperability](https://docs.python.org/3/library/json.html#standard-compliance-and-interoperability).

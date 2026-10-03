@@ -4,6 +4,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from .strict_json import load
+
 
 class CanvasError(Exception):
     def __init__(self, message, status=None):
@@ -56,10 +58,14 @@ class Client:
                      any(key != 'auto_mark_as_read' and key.startswith('auto_mark_as_read[')
                          for key in parameters))):
             raise CanvasError('Conversation reads require auto_mark_as_read=false to avoid changing Inbox state')
+        try:
+            payload = json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8') if body is not None else None
+        except (TypeError, ValueError, UnicodeError):
+            raise CanvasError('Request body must be valid JSON; no request was sent or private content logged.') from None
         req = Request(url, method=method, headers={
             'Authorization': f'Bearer {self.token}', 'Accept': 'application/json',
             'Content-Type': 'application/json', 'User-Agent': 'canvas-cli/0.1.0'},
-            data=json.dumps(body).encode() if body is not None else None)
+            data=payload)
         try:
             with self.transport(req, timeout=30) as response:
                 if expect_no_content:
@@ -67,7 +73,7 @@ class Client:
                         raise CanvasError('Canvas did not return the expected empty 204 acknowledgement. '
                                           'Verify the write in Canvas before repeating it; no automatic retries.')
                     return None, response.headers.get('Link', '')
-                return json.load(response), response.headers.get('Link', '')
+                return load(response), response.headers.get('Link', '')
         except HTTPError as e:
             e.close()
             if e.code == 401:
@@ -80,7 +86,8 @@ class Client:
         except (URLError, TimeoutError, OSError):
             raise CanvasError('Network failure. If posting, verify in Canvas before retrying to avoid duplicates.') from None
         except (ValueError, UnicodeError):
-            raise CanvasError('Canvas returned an unexpected response; no response body was logged.') from None
+            warning = ' The write may have applied; check Canvas before repeating. No automatic retries.' if method != 'GET' else ''
+            raise CanvasError('Canvas returned an unexpected response; no response body was logged.' + warning) from None
 
     def list(self, route, max_pages=100):
         rows, seen = [], set()

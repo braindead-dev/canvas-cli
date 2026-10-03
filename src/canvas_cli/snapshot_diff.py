@@ -1,9 +1,9 @@
 """Compare two local snapshots without printing full course content."""
 
-import json
 from pathlib import Path
 
 from .client import CanvasError
+from .strict_json import load
 
 FIELDS = {
     'assignments': ('name', 'description', 'due_at', 'unlock_at', 'lock_at',
@@ -20,10 +20,11 @@ FIELDS = {
 
 def read(path):
     try:
-        data = json.loads(Path(path).expanduser().read_text(encoding='utf-8'))
+        with Path(path).expanduser().open('r', encoding='utf-8') as source:
+            data = load(source)
     except (OSError, ValueError):
         raise CanvasError('Cannot read a valid JSON snapshot') from None
-    if not isinstance(data, dict) or data.get('schema_version') != 1:
+    if not isinstance(data, dict) or type(data.get('schema_version')) is not int or data['schema_version'] != 1:
         raise CanvasError('Unsupported snapshot schema')
     return data
 

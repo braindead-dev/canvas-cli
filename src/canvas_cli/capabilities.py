@@ -39,6 +39,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'channel-create/channel-delete (exact own contact methods; explicit message/removal acknowledgement, account/full-inventory-bound preview and matching digest; native confirmation, separate full own-inventory verification)',
             'profile-set (selected own name/profile/time-zone fields; shared-audience acknowledgement, account/profile-bound preview and matching digest; no SIS override, subsequent exact read-back verification)',
             'enrollment-accept/enrollment-reject (exact pending own Canvas invitation only; explicit membership acknowledgement, fresh account/invitation-bound preview and matching digest required; not official university registration)',
             'group-join/group-leave (own student-organized/community groups only; explicit native permission, account/group/current-membership-bound preview and matching digest required)',

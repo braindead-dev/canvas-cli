@@ -157,6 +157,10 @@ def brief(data):
     if isinstance(data, dict) and ('settings_change' in data or 'positions_change' in data):
         changes = data.get('settings_change', data.get('positions_change'))
         return '\n'.join(f'{key}: {value}' for key, value in changes.items()) + f"\n{data['note']}"
+    if isinstance(data, dict) and 'channel_change' in data:
+        row = data['channel_change']
+        return (f"Own channel {row['id']} | {row['type']} | {row['workflow_state']} | "
+                f"{'removed' if data['deleted'] else 'added or reactivated'}\n{data['note']}")
     if isinstance(data, dict) and 'communication_channels' in data:
         lines = ['Own communication channels']
         for row in data['communication_channels']:

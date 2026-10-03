@@ -26,6 +26,7 @@ Schema syntax, a preview, or broad automation instructions are not permission to
 - Storage/binary transport has no API credential, cookies, or redirects.
 - 401 requires reauth; 403 is not automatically bad auth; 429 is surfaced without aggressive retries.
 - Page caps fail explicitly, including empty intermediate pages, never silent truncation.
+- API/snapshot JSON rejects duplicate object keys, non-finite numbers and floating-point overflow. Request bodies, preview digests, snapshots and JSON output never serialize non-finite values.
 
 Expert get is for guarded documented API reads, not arbitrary harmless HTTP or permission bypass.
 

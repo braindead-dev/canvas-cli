@@ -23,7 +23,11 @@ def check_flags(yes, confirm):
 
 
 def digest(preview):
-    return hashlib.sha256(json.dumps(preview, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    try:
+        encoded = json.dumps(preview, sort_keys=True, ensure_ascii=False, allow_nan=False).encode('utf-8')
+    except (TypeError, ValueError, UnicodeError):
+        raise CanvasError('Preview contains malformed JSON; no request was sent or private content logged.') from None
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def confirmed(client, preview, yes=False, confirm=None):

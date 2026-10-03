@@ -1,11 +1,46 @@
 """Installed-CLI HTTPS regression tests for core workflows."""
 
 import json
+from pathlib import Path
 
 from .fixture import CanvasFixture
 
 
 class CoreE2E(CanvasFixture):
+    def test_ambiguous_or_nonfinite_json_response_is_not_printed_as_trusted_state(self):
+        original = self.raw_json_response
+        try:
+            for response in (b'{"id":7,"id":8,"private":"Synthetic private raw JSON"}',
+                             b'{"nested":{"id":7,"id":8}}', b'{"score":NaN}', b'{"score":1e999}'):
+                type(self).raw_json_response = response
+                before = len(self.calls)
+                result = self.invoke('get', '/api/v1/synthetic-json')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+                self.assertIn('unexpected response', result.stderr)
+                self.assertNotIn('Synthetic private', result.stderr)
+                self.assertEqual(self.calls[before:], [('GET', '/api/v1/synthetic-json')])
+        finally:
+            type(self).raw_json_response = original
+
+    def test_offline_snapshot_commands_reject_ambiguous_identity_without_auth_or_overwriting_files(self):
+        snapshot = Path(self.tmp.name) / 'synthetic-ambiguous-snapshot.json'
+        output = Path(self.tmp.name) / 'synthetic-ambiguous-notes.md'
+        snapshot.write_text('{"schema_version":1,"viewer_user_id":7,"viewer_user_id":8, '
+                            '"private":"Synthetic private snapshot content"}', encoding='utf-8')
+        before = len(self.calls)
+        commands = (('snapshot-diff', str(snapshot), str(snapshot)),
+                    ('snapshot-search', str(snapshot), '--query', 'Synthetic'),
+                    ('snapshot-markdown', str(snapshot), '--output', str(output)))
+        for command in commands:
+            result = self.invoke(*command, token='invalid')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '')
+            self.assertIn('valid JSON snapshot', result.stderr)
+            self.assertNotIn('Synthetic private', result.stderr)
+            self.assertFalse(output.exists())
+        self.assertEqual(self.calls[before:], [])
+
     def test_courses_paginate_over_tls(self):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)

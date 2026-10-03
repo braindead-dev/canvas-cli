@@ -231,10 +231,19 @@ def execute(client, args):
             return preferences.settings(client)
         return preferences.change_settings(client, preferences.setting_pairs(args.changes),
                                            yes=args.yes, confirm=args.confirm)
-    if args.command in ('channels', 'notification-preferences', 'notification-preferences-set', 'notification-category-set'):
-        from . import notifications
+    if args.command in ('channels', 'channel-create', 'channel-delete'):
+        from . import channels
         if args.command == 'channels':
-            return notifications.channels(client, args.max_pages, include_addresses=args.include_addresses)
+            return channels.listing(client, args.max_pages, include_addresses=args.include_addresses)
+        if args.command == 'channel-delete':
+            return channels.delete(client, args.channel, acknowledge_removal=args.acknowledge_contact_removal,
+                                   max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+        address = read_utf8(args.address_file, label='Contact address', max_bytes=4096)
+        address = address[:-2] if address.endswith('\r\n') else address.removesuffix('\n')
+        return channels.create(client, args.channel_type, address, acknowledge_message=args.acknowledge_contact_message,
+                               max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+    if args.command in ('notification-preferences', 'notification-preferences-set', 'notification-category-set'):
+        from . import notifications
         if args.command == 'notification-preferences':
             return notifications.preferences(client, args.channel, args.max_pages, category=args.category)
         if args.command == 'notification-category-set':

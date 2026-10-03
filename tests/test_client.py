@@ -155,5 +155,56 @@ class Tests(unittest.TestCase):
             client.request('/api/quiz/v1/../users/1')
         self.assertEqual(len(calls), 1)
 
+    def test_duplicate_nested_keys_or_nonfinite_response_numbers_fail_closed_and_close_the_response(self):
+        for body in (b'{"id":7,"id":8}', b'{"nested":{"user_id":7,"user_id":8}}',
+                     b'[{"score":NaN}]', b'{"score":Infinity}', b'{"score":1e999}'):
+            response = Response(body)
+            calls = []
+            def send(req, **kwargs):
+                calls.append(req)
+                return response
+            client = Client('https://canvas.example.edu', 'synthetic-private-token', send)
+            with self.subTest(body=body), self.assertRaisesRegex(CanvasError, 'unexpected response') as error:
+                client.request('/api/v1/example')
+            self.assertEqual(len(calls), 1)
+            self.assertTrue(response.closed)
+            self.assertNotIn('synthetic-private-token', str(error.exception))
+            self.assertNotIn(body.decode(), str(error.exception))
+
+    def test_ambiguous_write_response_warns_that_it_may_have_applied_and_is_never_retried(self):
+        for method in ('POST', 'PUT', 'DELETE'):
+            calls = []
+            def send(req, **kwargs):
+                calls.append(req)
+                return Response(b'{"id":7,"id":8,"private":"Synthetic private body"}')
+            client = Client('https://canvas.example.edu', 'synthetic-token', send)
+            with self.assertRaisesRegex(CanvasError, 'write may have applied') as error:
+                client.request('/api/v1/example', method, {'title': 'Synthetic selected title'})
+            self.assertIn('No automatic retries', str(error.exception))
+            self.assertNotIn('Synthetic private', str(error.exception))
+            self.assertEqual(len(calls), 1)
+
+    def test_ambiguous_second_page_does_not_return_the_first_page_as_complete(self):
+        responses = iter([Response(b'[{"id":1}]', '</api/v1/example?page=2>; rel="next"'),
+                          Response(b'[{"id":2,"id":3}]')])
+        calls = []
+        def send(req, **kwargs):
+            calls.append(req)
+            return next(responses)
+        client = Client('https://canvas.example.edu', 'synthetic-token', send)
+        with self.assertRaisesRegex(CanvasError, 'unexpected response'):
+            client.list('/api/v1/example')
+        self.assertEqual(len(calls), 2)
+
+    def test_finite_utf8_request_body_and_response_are_preserved_without_ascii_replacement(self):
+        calls = []
+        def send(req, **kwargs):
+            calls.append(req)
+            return Response('{"title":"Synthetic \u2603", "score":3.5}'.encode('utf-8'))
+        client = Client('https://canvas.example.edu', 'synthetic-token', send)
+        data, _ = client.request('/api/v1/example', 'POST', {'title': 'Synthetic \u2603', 'score': 3.5})
+        self.assertEqual(data, {'title': 'Synthetic \u2603', 'score': 3.5})
+        self.assertEqual(calls[0].data, '{"title": "Synthetic \u2603", "score": 3.5}'.encode('utf-8'))
+
 
 if __name__ == '__main__': unittest.main()

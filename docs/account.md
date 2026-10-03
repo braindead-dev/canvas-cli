@@ -49,7 +49,7 @@ canvas notification-preferences-set 123 --set new_announcement=immediately
 canvas notification-category-set 123 --category announcement --frequency daily
 ```
 
-Own channel addresses are opt-in for email/SMS, never push/provider tokens or bounce summaries. State is not delivery proof. Creation/deletion excluded.
+Own channel addresses are opt-in for email/SMS, never push/provider tokens or bounce summaries. State is not delivery proof. Contact management is separate below.
 
 Native reads validate exact notification/category keys and reject absent/malformed/duplicate inventories. GETs can persist native default policies without Canvas CLI selecting new frequencies.
 
@@ -58,6 +58,23 @@ Writes send exact selected keys with immediately/daily/weekly/never, through one
 Category convenience expands only currently reported keys, listing keys/count in preview. Added/removed/recategorized members require fresh confirmation. Future/unreported keys are not affected; no broad native category write.
 
 Failure can partially apply: check Canvas before repeating, no retry/body logging. Course overrides/institution settings can affect delivery; disabling email may hide alerts. No Inbox/enrollment mutation.
+
+## Contact methods
+
+```sh
+canvas channel-create --type email --address-file contact.txt --acknowledge-contact-message
+canvas channel-delete 123 --acknowledge-contact-removal
+```
+
+Creation adds or reactivates an own email/SMS contact; it is not a confirmation resend. The UTF-8 file contains one trimmed line, with one optional LF/CRLF terminator, at most 1024 characters/4096 bytes. Native validation, institution limits and SMS availability still apply. Push registration requires a separate provider/developer-key workflow.
+
+Native confirmation stays enabled, without login creation or confirmation bypass. The selected contact appears in the preview because you must check its destination; results omit addresses. Complete the native confirmation message yourself. Reported active state does not prove delivery.
+
+Deletion retires one exact owned channel ID, including primary/last contacts or a whole push channel. Acknowledgement covers lost alerts, possible primary/recovery-email changes and integration effects. A whole push-channel deletion can affect all its devices; it is not individual token revocation. Managed contacts and OTP-linked SMS may be refused by Canvas.
+
+Both workflows use [confirmation](safety.md#confirmation), binding the account and full owned inventory with addresses hashed. A separate fully paginated inventory verifies the exact contact/state or retirement acknowledgement plus absence. No primary-email/login/integration verification or atomic lock is claimed. Ambiguous acknowledgements, denied/truncated readback or account changes are uncertainty, never a retry. No real contact mutation has been live-tested.
+
+Native behavior is checked against the [contact controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/communication_channels_controller.rb) and [retirement/OTP model](https://github.com/instructure/canvas-lms/blob/master/app/models/communication_channel.rb).
 
 ## Rosters, groups, permissions
 

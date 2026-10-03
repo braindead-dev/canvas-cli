@@ -169,7 +169,7 @@ def save_private(path, data):
         raise CanvasError('Snapshot path already exists; choose a new filename') from None
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as handle:
-            json.dump(data, handle, indent=2, ensure_ascii=False)
+            json.dump(data, handle, indent=2, ensure_ascii=False, allow_nan=False)
             handle.write('\n')
     except Exception:
         path.unlink(missing_ok=True)
