@@ -123,6 +123,12 @@ def parser():
                                help='Repeat exact notification keys with immediately, daily, weekly or never')
     notifications.add_argument('--confirm', help='Digest returned by the preview')
     notifications.add_argument('--yes', action='store_true')
+    notifications = sub.add_parser('notification-category-set', help='Preview exact reported notification keys in one own-channel category')
+    notifications.add_argument('channel', type=identifier, help='Numeric channel ID from channels')
+    notifications.add_argument('--category', required=True, help='Exact category key reported by notification-preferences')
+    notifications.add_argument('--frequency', required=True, choices=('immediately', 'daily', 'weekly', 'never'))
+    notifications.add_argument('--confirm', help='Digest returned by the preview')
+    notifications.add_argument('--yes', action='store_true')
     sub.add_parser('dashboard-positions', help='Read saved own dashboard positions, not a complete visible card inventory')
     for name in ('dashboard-position-set', 'dashboard-order'):
         preference = sub.add_parser(name, help='Preview own dashboard position changes without changing favorites')
@@ -909,12 +915,15 @@ def run(args):
             return preferences.settings(client)
         return preferences.change_settings(client, preferences.setting_pairs(args.changes),
                                            yes=args.yes, confirm=args.confirm)
-    if args.command in ('channels', 'notification-preferences', 'notification-preferences-set'):
+    if args.command in ('channels', 'notification-preferences', 'notification-preferences-set', 'notification-category-set'):
         from . import notifications
         if args.command == 'channels':
             return notifications.channels(client, args.max_pages, include_addresses=args.include_addresses)
         if args.command == 'notification-preferences':
             return notifications.preferences(client, args.channel, args.max_pages, category=args.category)
+        if args.command == 'notification-category-set':
+            return notifications.change(client, args.channel, category=args.category, frequency=args.frequency,
+                                        max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
         return notifications.change(client, args.channel, notifications.pairs(args.changes),
                                     max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('dashboard-positions', 'dashboard-position-set', 'dashboard-order'):

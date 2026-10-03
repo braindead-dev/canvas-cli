@@ -45,7 +45,7 @@ def describe():
             'favorite-add/favorite-remove/favorites-reset (own course/group favorites; account-bound preview, displayed-default warning and matching digest required)',
             'nickname-set/nickname-clear/nicknames-reset/color-set (own display preferences; account-bound preview and matching digest required, no shared course renaming)',
             'settings-set/dashboard-position-set/dashboard-order (selected own interface preferences only; account-bound preview and matching digest required)',
-            'notification-preferences-set (exact selected own-channel frequencies; account/channel/current-state-bound preview and matching digest required, partial-batch warning)',
+            'notification-preferences-set/notification-category-set (exact selected own-channel frequencies, category expands to currently reported keys only; account/channel/current-state-bound preview and matching digest required, partial-batch warning)',
             'activity-dismiss/activity-dismiss-all (hide own notifications only; account-bound preview, explicit all-item acknowledgement and matching digest required)',
             'event-create/event-edit/event-delete (personal calendar only; account-bound preview and matching digest required)',
             'task-create/task-edit/task-delete (personal planner notes; account-bound preview and matching digest required)',

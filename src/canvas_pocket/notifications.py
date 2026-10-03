@@ -127,18 +127,27 @@ def preferences(client, channel_id, max_pages=100, *, category=None):
             'complete_for_endpoint': True, 'note': READ_NOTE}
 
 
-def change(client, channel_id, changes, *, max_pages=100, yes=False, confirm=None):
+def change(client, channel_id, changes=None, *, category=None, frequency=None, max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     _number(channel_id)
-    if not isinstance(changes, dict) or not changes:
-        raise CanvasError('Select at least one notification preference')
-    for name, frequency in changes.items():
-        _name(name)
-        if frequency not in FREQUENCIES:
-            raise CanvasError('Frequency must be immediately, daily, weekly or never')
+    if category is not None:
+        _name(category)
+        if changes is not None or frequency not in FREQUENCIES:
+            raise CanvasError('Select one exact category and supported frequency, not mixed explicit notification keys')
+    else:
+        if frequency is not None or not isinstance(changes, dict) or not changes:
+            raise CanvasError('Select at least one notification preference, or a category with frequency')
+        for name, value in changes.items():
+            _name(name)
+            if value not in FREQUENCIES:
+                raise CanvasError('Frequency must be immediately, daily, weekly or never')
     identity = account(client)
     channel = _channel(client, channel_id, identity, max_pages)
     inventory = _read(client, channel_id)
+    if category is not None:
+        changes = {name: frequency for name, row in inventory.items() if row['category'] == category}
+        if not changes:
+            raise CanvasError('Category is not reported for this channel; no change requested')
     if any(name not in inventory for name in changes):
         raise CanvasError('A requested notification is not reported for this channel; no change requested')
     current = {name: inventory[name] for name in sorted(changes)}
@@ -153,6 +162,12 @@ def change(client, channel_id, changes, *, max_pages=100, yes=False, confirm=Non
                'warning': 'Use channels --include-addresses to identify email/SMS destinations before confirming. '
                           'Disabling notifications can hide deadline emails. Native batch updates may partially apply '
                           'before an error; verify in Canvas before repeating. ' + READ_NOTE}
+    selection = {'category': category, 'notification_count': len(changes),
+                 'scope': 'Only exact notification keys currently reported in this category; no future or unreported keys.'}
+    if category is not None:
+        preview['category_selection'] = selection
+        preview['warning'] += (' Category selection expands to the exact listed keys in the batch, not a broad category '
+                               'mutation. Added/removed/recategorized keys before confirmation require a fresh preview.')
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -164,7 +179,10 @@ def change(client, channel_id, changes, *, max_pages=100, yes=False, confirm=Non
     except CanvasError:
         raise CanvasError('Could not verify Canvas notification changes. The batch may have partially applied; '
                           'check Canvas before repeating. No automatic retries or response-body logging.') from None
-    return {**identity, 'channel': _metadata(channel),
+    result = {**identity, 'channel': _metadata(channel),
             'notification_changes': [row for _, row in sorted(accepted.items())], 'acknowledged': True,
             'note': 'Canvas acknowledged the selected frequencies only. Unselected preferences were not sent. '
                     'Delivery and course overrides are not verified; no read-marker or channel changes were requested.'}
+    if category is not None:
+        result['category_selection'] = selection
+    return result

@@ -82,6 +82,76 @@ class NotificationsTests(unittest.TestCase):
         with self.assertRaisesRegex(CanvasError, 'Category is not reported'):
             preferences(self.client, '19', category='unknown_category')
 
+    def test_category_change_expands_reported_exact_keys_into_existing_batch_without_other_categories(self):
+        self.prefs['notification_preferences'].append({'notification': 'announcement_reply', 'category': 'announcement',
+                                                      'frequency': 'weekly'})
+        self.responses()
+        preview = change(self.client, '19', category='announcement', frequency='immediately')
+        self.assertEqual(preview['body'], {'notification_preferences': {
+            'new_announcement': {'frequency': 'immediately'}, 'announcement_reply': {'frequency': 'immediately'}}})
+        self.assertEqual(preview['category_selection']['notification_count'], 2)
+        self.assertEqual(set(preview['current_preferences']), {'new_announcement', 'announcement_reply'})
+        self.assertNotIn('synthetic@example.edu', str(preview))
+        self.assertIn('no future or unreported keys', preview['category_selection']['scope'])
+        accepted = {'notification_preferences': [{**row, 'frequency': 'immediately'}
+                    for row in self.prefs['notification_preferences'] if row['category'] == 'announcement']}
+        self.client.request.reset_mock()
+        self.client.request.side_effect = [({'id': 7}, ''), (self.prefs, ''), (accepted, '')]
+        result = change(self.client, '19', category='announcement', frequency='immediately',
+                        yes=True, confirm=preview['confirm'])
+        self.assertTrue(result['acknowledged'])
+        self.assertEqual(result['category_selection'], preview['category_selection'])
+        self.client.request.assert_called_with('/api/v1/users/self/communication_channels/19/notification_preferences',
+                                               'PUT', preview['body'])
+        self.assertEqual(self.client.request.call_count, 3)
+
+    def test_category_membership_or_frequency_change_requires_fresh_preview_without_write(self):
+        original = deepcopy(self.prefs)
+        preview = change(self.client, '19', category='announcement', frequency='daily')
+        for extra in ({'notification': 'announcement_reply', 'category': 'announcement', 'frequency': 'weekly'},
+                      {'notification': 'another_announcement', 'category': 'announcement', 'frequency': 'daily'}):
+            self.prefs = deepcopy(original)
+            self.prefs['notification_preferences'].append(extra)
+            self.responses()
+            self.client.request.reset_mock()
+            with self.assertRaisesRegex(CanvasError, 'Preview changed'):
+                change(self.client, '19', category='announcement', frequency='daily',
+                       yes=True, confirm=preview['confirm'])
+            self.assertTrue(all(len(call.args) == 1 for call in self.client.request.call_args_list))
+        self.prefs = deepcopy(original)
+        self.prefs['notification_preferences'][0]['category'] = 'different_category'
+        self.responses()
+        with self.assertRaisesRegex(CanvasError, 'Category is not reported'):
+            change(self.client, '19', category='announcement', frequency='daily', yes=True, confirm=preview['confirm'])
+        self.prefs = deepcopy(original)
+        self.responses()
+        with self.assertRaisesRegex(CanvasError, 'Preview changed'):
+            change(self.client, '19', category='announcement', frequency='weekly', yes=True, confirm=preview['confirm'])
+
+    def test_invalid_category_frequency_or_mixed_selection_fails_before_account(self):
+        self.client.request.reset_mock()
+        self.client.list.reset_mock()
+        for options in ({'category': '../announcement', 'frequency': 'daily'},
+                        {'category': 'announcement'}, {'category': 'announcement', 'frequency': 'asap'},
+                        {'category': 'announcement', 'frequency': True},
+                        {'changes': {'new_announcement': 'daily'}, 'category': 'announcement', 'frequency': 'daily'},
+                        {'changes': {'new_announcement': 'daily'}, 'frequency': 'daily'}):
+            with self.subTest(options=options), self.assertRaises(CanvasError):
+                change(self.client, '19', **options)
+        self.client.request.assert_not_called()
+        self.client.list.assert_not_called()
+
+    def test_category_partial_or_extra_acknowledgement_is_not_retried_or_success(self):
+        preview = change(self.client, '19', category='announcement', frequency='weekly')
+        for response in ({'notification_preferences': []}, {'notification_preferences': [
+            {'notification': 'new_announcement', 'category': 'announcement', 'frequency': 'weekly'},
+            {'notification': 'submission_comment', 'category': 'submission_comment', 'frequency': 'weekly'}]}):
+            self.client.request.reset_mock()
+            self.client.request.side_effect = [({'id': 7}, ''), (self.prefs, ''), (response, '')]
+            with self.assertRaisesRegex(CanvasError, 'partially applied'):
+                change(self.client, '19', category='announcement', frequency='weekly', yes=True, confirm=preview['confirm'])
+            self.assertEqual(self.client.request.call_count, 3)
+
     def test_malformed_or_duplicate_preference_responses_and_pagination_are_not_emitted(self):
         for response in ([], {}, {'notification_preferences': {}},
                          {'notification_preferences': [self.prefs['notification_preferences'][0]] * 2},

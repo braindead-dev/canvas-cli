@@ -402,6 +402,8 @@ Adding the first custom favorite can replace the default displayed selection. Re
 
 `notification-preferences-set CHANNEL_ID --set new_announcement=immediately --set submission_comment=daily` previews only those named settings, then requires the same command with `--yes --confirm DIGEST`. The supported frequencies are `immediately`, `daily`, `weekly` and `never`. Unknown notification keys, duplicate selections and stale account/site/channel/current-preference revisions are refused; private contact addresses are hashed rather than echoed in previews. Unselected preferences are not sent. Execution uses one native batch PUT, and **a failed or ambiguous batch can have partially applied**, so verify in Canvas before repeating. No automatic retries or response-body logging occur. These preferences apply to the selected own channel; course overrides and institution configuration can also affect delivery. Disabling emails can hide deadline alerts. No channel, enrollment or Inbox read state is changed by this write.
 
+`notification-category-set CHANNEL_ID --category announcement --frequency daily` is an exact-key convenience selection, not a broad native category mutation. It expands the currently reported category into the same batch PUT, listing every affected key/count in the preview. New, removed or recategorized keys before confirmation require a new preview. Future/unreported keys are not sent or promised to change; other categories are untouched. It has the same account/channel/state/digest and partial-batch safeguards. No extra preferences request or unreviewed category expansion is sent after confirmation.
+
 These commands have synthetic HTTPS coverage only; no real account's notification frequencies were changed to test them. See the [official notification-preferences API](https://developerdocs.instructure.com/services/canvas/resources/notification_preferences).
 
 ```sh
@@ -409,6 +411,7 @@ canvas-pocket channels
 canvas-pocket channels --include-addresses --format brief
 canvas-pocket notification-preferences 123 --category announcement
 canvas-pocket notification-preferences-set 123 --set new_announcement=immediately
+canvas-pocket notification-category-set 123 --category announcement --frequency daily
 ```
 
 ## Own submission inventory

@@ -890,6 +890,66 @@ class E2E(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
 
+    def test_notification_category_expands_exact_keys_and_preserves_other_categories_over_tls(self):
+        original = {key: row.copy() for key, row in self.notification_preferences.items()}
+        try:
+            self.notification_preferences['announcement_reply'] = {'notification': 'announcement_reply',
+                                                                    'category': 'announcement', 'frequency': 'weekly'}
+            command = ('notification-category-set', '19', '--category', 'announcement', '--frequency', 'immediately')
+            before = len(self.calls)
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            self.assertTrue(data['dry_run'])
+            self.assertEqual(data['category_selection']['notification_count'], 2)
+            self.assertEqual(set(data['body']['notification_preferences']), {'announcement_reply', 'new_announcement'})
+            self.assertNotIn('synthetic-contact@example.edu', preview.stdout)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['category_selection'], data['category_selection'])
+            self.assertEqual(self.notification_write, data['body'])
+            self.assertEqual(self.notification_preferences['submission_comment'], original['submission_comment'])
+            self.assertEqual(self.notification_preferences['announcement_reply']['frequency'], 'immediately')
+            self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                             [('PUT', '/api/v1/users/self/communication_channels/19/notification_preferences')])
+        finally:
+            type(self).notification_preferences = original
+
+    def test_notification_category_changed_inventory_unknown_category_and_partial_ack_fail_safely(self):
+        original = {key: row.copy() for key, row in self.notification_preferences.items()}
+        old_shape = self.notification_ack_shape
+        try:
+            command = ('notification-category-set', '19', '--category', 'announcement', '--frequency', 'weekly')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            digest = json.loads(preview.stdout)['confirm']
+            self.notification_preferences['announcement_reply'] = {'notification': 'announcement_reply',
+                                                                    'category': 'announcement', 'frequency': 'daily'}
+            before = len(self.calls)
+            result = self.invoke(*command, '--yes', '--confirm', digest)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Preview changed', result.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            result = self.invoke('notification-category-set', '19', '--category', 'unknown_category', '--frequency', 'weekly')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Category is not reported', result.stderr)
+            self.assertEqual(result.stdout, '')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            digest = json.loads(preview.stdout)['confirm']
+            type(self).notification_ack_shape = 'ambiguous'
+            before = len(self.calls)
+            result = self.invoke(*command, '--yes', '--confirm', digest)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('partially applied', result.stderr)
+            self.assertNotIn('Synthetic never log notification error', result.stderr)
+            self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                             [('PUT', '/api/v1/users/self/communication_channels/19/notification_preferences')])
+        finally:
+            type(self).notification_preferences = original
+            type(self).notification_ack_shape = old_shape
+
     def test_feedback_summary_follows_pages_with_own_grade_comments_and_rubric_but_never_answers(self):
         original = list(self.student_submissions)
         try:
