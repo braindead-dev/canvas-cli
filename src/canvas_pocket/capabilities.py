@@ -10,7 +10,7 @@ def describe():
             'activity', 'activity-summary',
             'inbox', 'conversation (no read-state change)', 'recipients',
             'todo', 'upcoming', 'calendar', 'event', 'planner', 'planner-notes', 'planner-note',
-            'planner-overrides', 'planner-override', 'module-progress', 'overview', 'deadlines', 'work', 'agenda',
+            'planner-overrides', 'planner-override', 'module-progress', 'overview', 'deadlines', 'work', 'agenda', 'missing',
             'exports', 'export-status',
             'news', 'linked-files', 'assignments', 'assignment',
             'assignment-groups', 'assignment-group', 'submission', 'grades', 'peer-reviews',

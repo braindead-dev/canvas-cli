@@ -297,6 +297,12 @@ def parser():
     work.add_argument('--days', type=int, help='Show only work due in the next N days; default is all work')
     work.add_argument('--status', choices=('unknown', 'unsubmitted', 'submitted', 'graded',
                                            'pending_review', 'missing', 'excused'))
+    missing = sub.add_parser('missing', help="Read Canvas's own native missing-submission list")
+    missing.add_argument('--course', type=identifier, action='append', help='Limit to a course; repeatable')
+    missing.add_argument('--submittable', action='store_true', help='Native filter: omit locked assignments')
+    missing.add_argument('--current-grading-period', action='store_true', help='Native current-grading-period filter')
+    missing.add_argument('--include-planner', action='store_true', help='Include own planner markers, not submission proof')
+    missing.add_argument('--timezone', default='local', help='IANA time zone; default is system local time')
     agenda = sub.add_parser('agenda', help='Unfinished dated work in local time, with undated-item coverage')
     agenda.add_argument('--days', type=int, default=14, help='Look ahead this many days; default 14')
     agenda.add_argument('--course', type=identifier, action='append', default=[],
@@ -768,6 +774,11 @@ def run(args):
             return activity.summary(client, course_id=args.course, active=args.active)
         return activity.dismiss(client, getattr(args, 'item', None), all_items=args.command == 'activity-dismiss-all',
                                 max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+    if args.command == 'missing':
+        from .missing import read
+        return read(client, args.max_pages, course_ids=args.course, submittable=args.submittable,
+                    current_grading_period=args.current_grading_period, include_planner=args.include_planner,
+                    time_zone=args.timezone)
     if args.command == 'groups':
         return client.list('/api/v1/users/self/groups?per_page=100', args.max_pages)
     if args.command == 'group':
@@ -1018,6 +1029,18 @@ def brief(data):
     if isinstance(data, dict) and 'activity_hidden' in data:
         record = data['activity_hidden']
         return f"Activity hide acknowledged: {'all items' if record['all_items'] else record['item_id']}\n{data['note']}"
+    if isinstance(data, dict) and 'missing_assignments' in data:
+        lines = ['Native missing submissions (own account)']
+        for row in data['missing_assignments']:
+            lines.append(f"{row['course_id']}/{row['id']} | {row['due_display']} | {row.get('name') or '(untitled)'}")
+            if row.get('locked_for_user') is True:
+                lines.append('  Locked for this user; do not assume a late submission is possible.')
+            if row.get('planner_override'):
+                lines.append('  Planner marker present; missing submission remains listed by Canvas.')
+            if row.get('html_url'):
+                lines.append('  ' + row['html_url'])
+        lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'activity_summary' in data:
         return '\n'.join(f"{row['type']}" + (f" ({row['notification_category']})" if row.get('notification_category') else '') +
                          f": {row['unread_count']} unread / {row['count']} notifications"

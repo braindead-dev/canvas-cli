@@ -75,6 +75,9 @@ canvas-pocket overview
 canvas-pocket --format brief overview
 canvas-pocket deadlines --days 30
 canvas-pocket work --days 30
+canvas-pocket --format brief missing --timezone America/Los_Angeles
+canvas-pocket missing --course 123 --course 456 --submittable --current-grading-period
+canvas-pocket missing --include-planner
 canvas-pocket --format brief agenda --days 21 --timezone America/Los_Angeles
 canvas-pocket --format brief agenda --course 123 --course 456 --include-undated
 canvas-pocket --format brief work --course 123 --status unsubmitted
@@ -308,6 +311,12 @@ Adding the first custom favorite can replace the default displayed selection. Re
 `settings` reads the known own-user interface booleans and reports keys the deployment did not return. It never requests mobile settings or prints unknown response fields. `settings-set --set KEY=true --set OTHER=false` accepts exact, distinct supported keys; it sends only those fields after an account/current-state-bound preview and matching confirmation. A requested setting missing from the deployment's read response is refused rather than guessed. `manual_mark_as_read` changes future browser discussion read behavior, not existing read markers; feature-gated settings may not visibly affect the current UI. No setting changes automatically during login or ordinary reads.
 
 `dashboard-positions` reads your saved positions, not a complete inventory of visible dashboard cards. `dashboard-position-set ITEM --position N --context course|group|user` sets one position from -1000 through 1000. `dashboard-order course_123 course_456 group_789` assigns positions 0, 1 and 2 in that order. Both preview the current full map and verified targets, then require `--yes --confirm DIGEST`. The API **merges** specified positions; unspecified positions remain, equal positions may be ambiguous, and neither favorites nor card visibility change. User-context writes require your own user ID. These settings/order actions have synthetic HTTPS tests only, not live write validation. They use the [documented Users API and official implementation](https://github.com/instructure/canvas-lms/blob/master/app/controllers/users_controller.rb).
+
+## Native missing work
+
+`missing` reads the signed-in student's [native missing-submission list](https://developerdocs.instructure.com/services/canvas/resources/users), following all pages. Repeat `--course COURSE` to restrict courses; `--submittable` and `--current-grading-period` use Canvas's documented filters rather than inferring a late policy locally. Output is assignment metadata with effective due times in `--timezone IANA_ZONE` (system local by default), not prompts or submission bodies. An unknown or timezone-free due time stays unknown. The native list can include locked assignments; being listed does not guarantee a late submission will be accepted.
+
+`--include-planner` adds verified own assignment checkmarks/dismissals, but these **do not** submit work or clear a missing-submission flag. An empty list is not proof that all coursework, external tools, reading or attendance is finished. Coverage describes this endpoint only; permission, authentication or pagination failures are errors rather than an empty success. This command is GET-only, does not mark feedback read or start assessments, and has synthetic HTTPS coverage only.
 
 ## Activity notifications
 

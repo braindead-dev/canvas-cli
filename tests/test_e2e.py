@@ -11,6 +11,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 
 @unittest.skipUnless(shutil.which('openssl'), 'openssl required for local TLS fixture')
@@ -66,6 +67,17 @@ class E2E(unittest.TestCase):
              'user_has_posted': False, 'read_state': True, 'message': 'Synthetic cached prompt',
              'root_discussion_entries': [{'message': 'Synthetic cached peer entry'}]},
         ]
+        cls.missing_assignments = [
+            {'id': 88, 'course_id': 101, 'name': 'Synthetic missing paper', 'published': True,
+             'due_at': '2026-10-01T06:59:00Z', 'locked_for_user': True,
+             'course': {'id': 101, 'name': 'Synthetic course'},
+             'description': 'Synthetic private prompt', 'fixture_current_period': False,
+             'planner_override': {'id': 51, 'user_id': 7, 'plannable_type': 'assignment',
+                                  'plannable_id': 88, 'marked_complete': True, 'dismissed': False}},
+            {'id': 89, 'course_id': 102, 'name': 'Synthetic late upload', 'published': True,
+             'due_at': '2026-09-28T16:00:00Z', 'locked_for_user': False,
+             'course': {'id': 102, 'name': 'Synthetic second course'}, 'fixture_current_period': True},
+        ]
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -108,6 +120,20 @@ class E2E(unittest.TestCase):
                     data = [{'id': 55, 'title': 'Synthetic upcoming event'}]
                 elif self.path == '/api/v1/users/self/todo?per_page=100':
                     data = [{'id': 77}]
+                elif self.path.startswith('/api/v1/users/self/missing_submissions?'):
+                    query = parse_qs(urlsplit(self.path).query)
+                    data = cls.missing_assignments
+                    if query.get('course_ids[]'):
+                        data = [row for row in data if str(row['course_id']) in query['course_ids[]']]
+                    if 'submittable' in query.get('filter[]', []):
+                        data = [row for row in data if not row.get('locked_for_user')]
+                    if 'current_grading_period' in query.get('filter[]', []):
+                        data = [row for row in data if row.get('fixture_current_period')]
+                    if 'planner_overrides' not in query.get('include[]', []):
+                        data = [{key: value for key, value in row.items() if key != 'planner_override'} for row in data]
+                    if not query.get('page'):
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = []
                 elif self.path == '/api/v1/courses/101/assignments?per_page=100':
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()}]
@@ -746,6 +772,53 @@ class E2E(unittest.TestCase):
             self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         finally:
             type(self).dashboard_positions = original
+
+    def test_missing_work_paginates_native_filters_and_does_not_treat_planner_marker_as_submitted(self):
+        before = len(self.calls)
+        result = self.invoke('missing', '--timezone', 'America/Los_Angeles', '--include-planner')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual([row['id'] for row in data['missing_assignments']], [88, 89])
+        first = data['missing_assignments'][0]
+        self.assertEqual(first['due_local'], '2026-09-30T23:59:00-07:00')
+        self.assertTrue(first['planner_override']['marked_complete'])
+        self.assertEqual(first['status_source'], 'canvas_missing_submissions')
+        self.assertNotIn('Synthetic private prompt', result.stdout)
+        self.assertFalse(data['complete_coursework_inventory'])
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        self.assertEqual(len(self.calls[before:]), 3)
+        filtered = self.invoke('missing', '--course', '101', '--course', '102', '--course', '101',
+                               '--submittable', '--current-grading-period')
+        self.assertEqual(filtered.returncode, 0, filtered.stderr)
+        self.assertEqual([row['id'] for row in json.loads(filtered.stdout)['missing_assignments']], [89])
+        self.assertEqual(self.calls[-1][1].count('course_ids%5B%5D=101'), 1)
+        brief = self.invoke('--format', 'brief', 'missing', '--course', '101', '--include-planner')
+        self.assertEqual(brief.returncode, 0, brief.stderr)
+        self.assertIn('Locked for this user', brief.stdout)
+        self.assertIn('missing submission remains', brief.stdout)
+
+    def test_missing_work_page_limit_invalid_timezone_and_wrong_account_marker_fail_closed(self):
+        before = len(self.calls)
+        bad_zone = self.invoke('missing', '--timezone', 'No/Such_Zone')
+        self.assertNotEqual(bad_zone.returncode, 0)
+        self.assertEqual(len(self.calls), before)
+        limited = self.invoke('--max-pages', '1', 'missing')
+        self.assertNotEqual(limited.returncode, 0)
+        self.assertNotIn('missing_assignments', limited.stdout)
+        saved = type(self).missing_assignments
+        try:
+            type(self).missing_assignments = [{**saved[0], 'planner_override': {
+                **saved[0]['planner_override'], 'user_id': 8}}]
+            wrong = self.invoke('missing', '--include-planner')
+            self.assertNotEqual(wrong.returncode, 0)
+            self.assertIn('outside this own assignment', wrong.stderr)
+            type(self).missing_assignments = []
+            empty = self.invoke('missing')
+            self.assertEqual(empty.returncode, 0, empty.stderr)
+            self.assertEqual(json.loads(empty.stdout)['missing_assignments'], [])
+            self.assertFalse(json.loads(empty.stdout)['complete_coursework_inventory'])
+        finally:
+            type(self).missing_assignments = saved
 
     def test_activity_reads_paginate_without_marking_read_and_gate_cached_discussion_entries(self):
         original = self.topic_state.copy()
