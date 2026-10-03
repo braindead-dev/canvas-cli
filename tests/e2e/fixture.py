@@ -25,6 +25,7 @@ from . import (
     page_history,
     page_scheduling,
     team_appointments,
+    topic_management,
 )
 
 
@@ -52,6 +53,7 @@ class CanvasFixture(unittest.TestCase):
         page_deletion.initialize(cls)
         page_duplication.initialize(cls)
         page_scheduling.initialize(cls)
+        topic_management.initialize(cls)
         cls.event = {'id': 61, 'context_code': 'user_7', 'title': 'Synthetic event',
                      'start_at': '2026-10-05T09:00:00-07:00', 'end_at': '2026-10-05T10:00:00-07:00',
                      'all_day': False, 'workflow_state': 'active', 'updated_at': '2026-10-01T12:00:00Z'}
@@ -193,6 +195,8 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 if module_paths.read(cls, self):
+                    return
+                if topic_management.read(cls, self):
                     return
                 if module_items.read(cls, self):
                     return
@@ -689,6 +693,8 @@ class CanvasFixture(unittest.TestCase):
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
                 if module_paths.write(cls, self, body):
+                    return
+                if topic_management.write(cls, self, body):
                     return
                 if module_items.write(cls, self, body):
                     return

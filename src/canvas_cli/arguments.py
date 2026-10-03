@@ -675,6 +675,18 @@ def parser():
                            help='Acknowledge that Canvas text edits remove the existing attachment')
         if name != 'entry':
             _confirmation(s)
+    for name in ('topic-edit', 'topic-delete'):
+        s = sub.add_parser(name, help='Preview exact ungraded discussion prompt management, not a reply or assignment change')
+        s.add_argument('context_id', type=identifier)
+        s.add_argument('topic_id', type=identifier)
+        s.add_argument('--context', choices=('course', 'group'), default='course')
+        s.add_argument('--acknowledge-shared-topic', action='store_true', help='Required for shared course/group discussion changes')
+        if name == 'topic-edit':
+            s.add_argument('--title', help='Selected title; omitted preserves it')
+            s.add_argument('--message-file', type=Path, help='Selected UTF-8 plain text, escaped to HTML; omitted preserves it')
+        else:
+            s.add_argument('--acknowledge-topic-removal', action='store_true', help='Required for native soft deletion and loss of topic access')
+        _confirmation(s)
     ratings = sub.add_parser('topic-ratings', help='Read only your own discussion likes without cached bodies')
     ratings.add_argument('course', type=identifier, help='Course or group ID, selected by --context')
     ratings.add_argument('topic', type=identifier)

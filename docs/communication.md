@@ -54,6 +54,22 @@ Topic subscribe/unsubscribe changes your notifications. Topic markers cover init
 
 Forced-read-state sets a manual override; its explicit negation clears it; omission preserves it. Closed-topic subscription remains subject to access. These are separately confirmed writes; acknowledgement does not prove a person read or completed work.
 
+### Manage a discussion prompt
+
+```sh
+canvas topic-edit 123 456 --title 'Updated topic' --acknowledge-shared-topic
+canvas topic-edit 123 456 --message-file prompt.txt --acknowledge-shared-topic
+canvas topic-delete 123 456 --acknowledge-shared-topic --acknowledge-topic-removal
+```
+
+These are shared prompt changes, not replies or submissions. Course/group context is explicit; native per-topic update/delete permissions, not ownership or guessed enrollment roles, govern access. Readable drafts can be edited when Canvas permits it. Title/body omission preserves that field; text is escaped to HTML. Existing topic attachments are not explicitly removed, unlike entry editing.
+
+Previews bind account, exact topic/content, reported audience, permissions and the complete accessible topic inventory. Prior bodies, private audience records and signed file/feed URLs are omitted. Independent readback distinguishes stored text from HTML normalization/ignored changes and labels other observed field changes. Native notification/module/pacing/blueprint effects are not asserted verified.
+
+Deletion requires additional removal acknowledgement. One native soft DELETE must be acknowledged as deleted, disappear from the paginated active-topic inventory and return exact-ID 404/410. Access denial alone is not deletion proof; no permanent-erasure claim or CLI restore. Uncertain outcomes never retry, roll back or clean up automatically.
+
+Graded topics, announcements, anonymous topics and root/child/group-set associations remain separate, unsupported management workflows. Initial-post protections still govern peer replies; these commands do not inspect them. Preflight is not an atomic lock and concurrent edits can be overwritten.
+
 ## Peer reviews
 
 ```sh
@@ -86,3 +102,5 @@ Dismiss hides one own notification; dismiss-all with all acknowledgement hides e
 ## Sources
 
 [Conversations](https://developerdocs.instructure.com/services/canvas/resources/conversations), [Recipients](https://developerdocs.instructure.com/services/canvas/resources/search), [Discussions](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics), [Peer reviews](https://developerdocs.instructure.com/services/canvas/resources/peer_reviews), [Announcements](https://developerdocs.instructure.com/services/canvas/resources/announcements), [Activity](https://developerdocs.instructure.com/services/canvas/resources/users).
+
+Prompt-management semantics also follow Instructure's [controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_controller.rb), [API serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/discussion_topics.rb), [API reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_api_controller.rb) and [topic model](https://github.com/instructure/canvas-lms/blob/master/app/models/discussion_topic.rb).

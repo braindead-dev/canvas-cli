@@ -9,6 +9,14 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('topic-edit', 'topic-delete'):
+        from .topic_management import change
+        source = getattr(args, 'message_file', None)
+        return change(client, args.context_id, args.topic_id, context_type=args.context,
+                      title=getattr(args, 'title', None), message=read_utf8(source, label='Topic message') if source else None,
+                      delete=args.command == 'topic-delete', acknowledge_shared=args.acknowledge_shared_topic,
+                      acknowledge_removal=getattr(args, 'acknowledge_topic_removal', False),
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'page-schedule':
         from .page_scheduling import schedule
         return schedule(client, args.course_id, args.page_id, publish_at=args.publish_at, cancel=args.cancel,

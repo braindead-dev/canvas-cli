@@ -44,6 +44,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'topic-edit/topic-delete (exact readable ungraded non-anonymous discussion prompts; native update/delete permission, shared/removal acknowledgement, account/content/audience/inventory-bound preview and independent readback; normalization and collateral fields labeled, linked assignment/root/child/announcement workflows excluded, no retry/rollback)',
             'module-path-select (own native mastery selection/switch; graded posted trigger and account/inventory/choice-bound preview, explicit assignment-change/switch acknowledgement; separate own choice readback, asynchronous/unverified outcomes labeled, availability/dates/downstream effects not asserted)',
             'module-item-done/module-item-not-done/module-item-mark-read (explicit own native progression events; student permission, account/full-item-inventory/policy-bound preview, matching digest and independent requirement readback; read requires prior-content-access acknowledgement, no assessment/score/submission simulation, planner/downstream effects not asserted)',
             'page-schedule (course RCE publication date/cancel; manager-only, enabled root-account feature, exact-ID revision/content/inventory-bound preview and independent stored-date/draft readback; front/linked-assignment pages refused, future background execution not asserted, no automatic publication/retry)',

@@ -36,6 +36,18 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'edited_topic' in data:
+        row = data['edited_topic']
+        lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} edited",
+                 row['title'], row['html_url']]
+        if not all(data['stored_text_matches_request'].values()):
+            lines.append('Stored text differs from the request; inspect Canvas and JSON before using the topic.')
+        if data['unrequested_changed_fields']:
+            lines.append('Other observed changes: ' + ', '.join(data['unrequested_changed_fields']))
+        return '\n'.join([*lines, data['note']])
+    if isinstance(data, dict) and 'deleted_topic' in data:
+        return (f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {data['deleted_topic']['id']} soft-deleted\n"
+                f"{data['deleted_topic']['title']}\n{data['note']}")
     if isinstance(data, dict) and 'mastery_paths' in data and not data.get('dry_run'):
         item_id = data.get('item_id') or data['module_item']['id']
         module_id = data.get('module_id') or data['module']['id']
