@@ -319,6 +319,23 @@ Adding the first custom favorite can replace the default displayed selection. Re
 
 `dashboard-positions` reads your saved positions, not a complete inventory of visible dashboard cards. `dashboard-position-set ITEM --position N --context course|group|user` sets one position from -1000 through 1000. `dashboard-order course_123 course_456 group_789` assigns positions 0, 1 and 2 in that order. Both preview the current full map and verified targets, then require `--yes --confirm DIGEST`. The API **merges** specified positions; unspecified positions remain, equal positions may be ambiguous, and neither favorites nor card visibility change. User-context writes require your own user ID. These settings/order actions have synthetic HTTPS tests only, not live write validation. They use the [documented Users API and official implementation](https://github.com/instructure/canvas-lms/blob/master/app/controllers/users_controller.rb).
 
+## Contact channels and notification frequencies
+
+`channels` paginates only your own [communication channels](https://developerdocs.instructure.com/services/canvas/resources/communication_channels) and defaults to IDs, types, positions, state and bounce metadata. `--include-addresses` explicitly prints own email/SMS addresses to identify the destination; push/provider addresses, tokens and bounce summaries are never printed. Channel state does not prove that delivery works. The CLI does not create or delete channels.
+
+`notification-preferences CHANNEL_ID` reads the native wrapped preference inventory and reports exact notification/category keys and frequencies. `--category KEY` filters that inventory locally, and a category absent from the deployment is an error rather than a misleading empty success. Unknown, duplicate or malformed metadata is refused. These are GET requests, but **Canvas may persist default policy records when preferences are read**; Pocket does not select new frequencies automatically. This behavior comes from the [official notification controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/notification_preferences_controller.rb) and [policy model](https://github.com/instructure/canvas-lms/blob/master/app/models/notification_policy.rb), not an assumption that every GET is side-effect-free.
+
+`notification-preferences-set CHANNEL_ID --set new_announcement=immediately --set submission_comment=daily` previews only those named settings, then requires the same command with `--yes --confirm DIGEST`. The supported frequencies are `immediately`, `daily`, `weekly` and `never`. Unknown notification keys, duplicate selections and stale account/site/channel/current-preference revisions are refused; private contact addresses are hashed rather than echoed in previews. Unselected preferences are not sent. Execution uses one native batch PUT, and **a failed or ambiguous batch can have partially applied**, so verify in Canvas before repeating. No automatic retries or response-body logging occur. These preferences apply to the selected own channel; course overrides and institution configuration can also affect delivery. Disabling emails can hide deadline alerts. No channel, enrollment or Inbox read state is changed by this write.
+
+These commands have synthetic HTTPS coverage only; no real account's notification frequencies were changed to test them. See the [official notification-preferences API](https://developerdocs.instructure.com/services/canvas/resources/notification_preferences).
+
+```sh
+canvas-pocket channels
+canvas-pocket channels --include-addresses --format brief
+canvas-pocket notification-preferences 123 --category announcement
+canvas-pocket notification-preferences-set 123 --set new_announcement=immediately
+```
+
 ## Own submission inventory
 
 `submissions COURSE` uses Canvas's [paginated multi-assignment submission API](https://developerdocs.instructure.com/services/canvas/resources/submissions) with the signed-in user's numeric ID explicitly selected. It never accepts another student or `all`. Repeat `--assignment ID` and use `--state submitted|unsubmitted|graded|pending_review` for native filters. Every returned parent record must match the own user, selected assignment and course association; mismatches and page-limit failures produce errors without partial output.

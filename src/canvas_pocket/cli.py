@@ -100,6 +100,17 @@ def parser():
                             help='Repeat for several distinct settings; use settings to see reported keys')
     preference.add_argument('--confirm', help='Digest returned by the preview')
     preference.add_argument('--yes', action='store_true')
+    channels = sub.add_parser('channels', help='List your own communication-channel metadata, not contact addresses by default')
+    channels.add_argument('--include-addresses', action='store_true', help='Opt in to own email/SMS addresses; never push tokens')
+    notifications = sub.add_parser('notification-preferences', help='Read own-channel frequencies; Canvas may materialize defaults')
+    notifications.add_argument('channel', type=identifier, help='Numeric channel ID from channels')
+    notifications.add_argument('--category', help='Exact reported category key; filter after reading the full inventory')
+    notifications = sub.add_parser('notification-preferences-set', help='Preview specific own-channel frequency changes')
+    notifications.add_argument('channel', type=identifier, help='Numeric channel ID from channels')
+    notifications.add_argument('--set', dest='changes', action='append', required=True, metavar='NOTIFICATION=FREQUENCY',
+                               help='Repeat exact notification keys with immediately, daily, weekly or never')
+    notifications.add_argument('--confirm', help='Digest returned by the preview')
+    notifications.add_argument('--yes', action='store_true')
     sub.add_parser('dashboard-positions', help='Read saved own dashboard positions, not a complete visible card inventory')
     for name in ('dashboard-position-set', 'dashboard-order'):
         preference = sub.add_parser(name, help='Preview own dashboard position changes without changing favorites')
@@ -455,7 +466,7 @@ def parser():
     new_quiz = sub.add_parser('new-quiz', help='Read New Quiz metadata without starting an attempt')
     new_quiz.add_argument('course', type=identifier)
     new_quiz.add_argument('assignment', type=identifier)
-    s = sub.add_parser('get', help='Advanced read-only Canvas API request')
+    s = sub.add_parser('get', help='Advanced Canvas GET; some native endpoints have server-side effects')
     s.add_argument('path', help='An /api/v1/ path, including optional query parameters')
     s.add_argument('--paginate', action='store_true')
     for name in ('assignments', 'assignment-groups', 'modules', 'pages', 'files',
@@ -777,6 +788,14 @@ def run(args):
             return preferences.settings(client)
         return preferences.change_settings(client, preferences.setting_pairs(args.changes),
                                            yes=args.yes, confirm=args.confirm)
+    if args.command in ('channels', 'notification-preferences', 'notification-preferences-set'):
+        from . import notifications
+        if args.command == 'channels':
+            return notifications.channels(client, args.max_pages, include_addresses=args.include_addresses)
+        if args.command == 'notification-preferences':
+            return notifications.preferences(client, args.channel, args.max_pages, category=args.category)
+        return notifications.change(client, args.channel, notifications.pairs(args.changes),
+                                    max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('dashboard-positions', 'dashboard-position-set', 'dashboard-order'):
         from . import preferences
         if args.command == 'dashboard-positions':
@@ -1056,6 +1075,21 @@ def brief(data):
     if isinstance(data, dict) and ('settings_change' in data or 'positions_change' in data):
         changes = data.get('settings_change', data.get('positions_change'))
         return '\n'.join(f'{key}: {value}' for key, value in changes.items()) + f"\n{data['note']}"
+    if isinstance(data, dict) and 'communication_channels' in data:
+        lines = ['Own communication channels']
+        for row in data['communication_channels']:
+            lines.append(f"{row['id']} | {row['type']} | {row['workflow_state']} | position {row.get('position', 'unknown')}" +
+                         (f" | {row['address']}" if row.get('address') is not None else ''))
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and ('notification_preferences' in data or 'notification_changes' in data):
+        channel = data['channel']
+        lines = [f"Notification {'changes' if 'notification_changes' in data else 'preferences'}: "
+                 f"channel {channel['id']} ({channel['type']}, {channel['workflow_state']})"]
+        for row in data.get('notification_changes', data.get('notification_preferences')):
+            lines.append(f"{row['notification']} | {row['frequency']} | {row['category'] or 'category unknown'}")
+        lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'activity_hidden' in data:
         record = data['activity_hidden']
         return f"Activity hide acknowledged: {'all items' if record['all_items'] else record['item_id']}\n{data['note']}"

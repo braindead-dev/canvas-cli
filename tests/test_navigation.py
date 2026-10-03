@@ -44,5 +44,11 @@ class NavigationTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(CanvasError):
                 command_help(parser(), **kwargs)
 
+    def test_native_get_side_effects_are_not_classified_as_side_effect_free(self):
+        for name in ('notification-preferences', 'get'):
+            self.assertEqual(command_help(parser(), name)['safety'], 'Canvas GET (server-side effects possible)')
+        self.assertEqual(command_help(parser(), 'channels')['safety'], 'Read-only')
+        self.assertEqual(command_help(parser(), 'notification-preferences-set')['safety'], 'Canvas writes (preview-first)')
+
 
 if __name__ == '__main__': unittest.main()

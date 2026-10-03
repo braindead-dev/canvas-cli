@@ -57,6 +57,16 @@ class E2E(unittest.TestCase):
         cls.user_settings = {'manual_mark_as_read': False, 'collapse_global_nav': True,
                              'collapse_course_nav': False, 'hide_dashcard_color_overlays': False}
         cls.dashboard_positions = {'course_101': 1, 'course_102': 2, 'group_12': '9'}
+        cls.communication_channels = [
+            {'id': 19, 'user_id': 7, 'type': 'email', 'position': 1, 'workflow_state': 'active',
+             'address': 'synthetic-contact@example.edu', 'bounce_count': 0,
+             'last_bounce_summary': 'Synthetic private bounce details'},
+            {'id': 20, 'user_id': 7, 'type': 'push', 'position': 2, 'workflow_state': 'active',
+             'address': 'synthetic-private-push-token'}]
+        cls.notification_preferences = {
+            'new_announcement': {'notification': 'new_announcement', 'category': 'announcement', 'frequency': 'daily'},
+            'submission_comment': {'notification': 'submission_comment', 'category': 'submission_comment', 'frequency': 'never'}}
+        cls.notification_ack_shape = 'normal'
         cls.activity_hidden_ids = set()
         cls.activity_items = [
             {'id': 71, 'type': 'Conversation', 'conversation_id': 12, 'title': 'Synthetic activity message',
@@ -415,6 +425,13 @@ class E2E(unittest.TestCase):
                     data = {'custom_colors': cls.custom_colors}
                 elif self.path == '/api/v1/users/self/settings':
                     data = cls.user_settings
+                elif self.path == '/api/v1/users/self/communication_channels?per_page=100':
+                    self.send_header('Link', '</api/v1/users/self/communication_channels?page=2>; rel="next"')
+                    data = []
+                elif self.path == '/api/v1/users/self/communication_channels?page=2':
+                    data = cls.communication_channels
+                elif self.path == '/api/v1/users/self/communication_channels/19/notification_preferences':
+                    data = {'notification_preferences': list(cls.notification_preferences.values())}
                 elif self.path == '/api/v1/users/self/dashboard_positions':
                     data = {'dashboard_positions': cls.dashboard_positions}
                 elif self.path.startswith(('/api/v1/users/self/activity_stream', '/api/v1/courses/101/activity_stream')):
@@ -486,6 +503,16 @@ class E2E(unittest.TestCase):
                     cls.user_settings.update(body)
                     self.send_response(200); self.end_headers()
                     self.wfile.write(json.dumps(cls.user_settings).encode()); return
+                if self.path == '/api/v1/users/self/communication_channels/19/notification_preferences':
+                    cls.notification_write = body
+                    updates = body['notification_preferences']
+                    for name, options in updates.items():
+                        cls.notification_preferences[name]['frequency'] = options['frequency']
+                    data = {'notification_preferences': [cls.notification_preferences[name] for name in updates]}
+                    if cls.notification_ack_shape == 'ambiguous':
+                        data = {'private_body': 'Synthetic never log notification error', 'notification_preferences': []}
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path == '/api/v1/users/self/dashboard_positions':
                     cls.preference_write = body
                     cls.dashboard_positions.update(body['dashboard_positions'])
@@ -773,6 +800,98 @@ class E2E(unittest.TestCase):
             self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         finally:
             type(self).user_settings = original
+
+    def test_own_channels_and_wrapped_preferences_are_private_and_paginated_over_tls(self):
+        before = len(self.calls)
+        listing = self.invoke('channels')
+        self.assertEqual(listing.returncode, 0, listing.stderr)
+        self.assertEqual(len(json.loads(listing.stdout)['communication_channels']), 2)
+        for secret in ('synthetic-contact@example.edu', 'synthetic-private-push-token', 'Synthetic private bounce details'):
+            self.assertNotIn(secret, listing.stdout)
+        explicit = self.invoke('channels', '--include-addresses', '--format', 'brief')
+        self.assertEqual(explicit.returncode, 0, explicit.stderr)
+        self.assertIn('synthetic-contact@example.edu', explicit.stdout)
+        self.assertNotIn('synthetic-private-push-token', explicit.stdout)
+        reading = self.invoke('notification-preferences', '19', '--category', 'announcement', '--format', 'brief')
+        self.assertEqual(reading.returncode, 0, reading.stderr)
+        self.assertIn('new_announcement | daily | announcement', reading.stdout)
+        self.assertNotIn('submission_comment |', reading.stdout)
+        self.assertIn('default notification-policy', reading.stdout)
+        for command in (('channels',), ('notification-preferences', '19')):
+            capped = self.invoke(*command, '--max-pages', '1')
+            self.assertNotEqual(capped.returncode, 0)
+            self.assertEqual(capped.stdout, '')
+            self.assertIn('Page limit', capped.stderr)
+        self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+
+    def test_notification_batch_is_exact_and_bound_to_channel_and_current_frequencies(self):
+        original = {key: row.copy() for key, row in self.notification_preferences.items()}
+        original_channels = [row.copy() for row in self.communication_channels]
+        try:
+            command = ('notification-preferences-set', '19', '--set', 'new_announcement=immediately')
+            before = len(self.calls)
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            self.assertEqual(data['body'], {'notification_preferences': {'new_announcement': {'frequency': 'immediately'}}})
+            self.assertNotIn('synthetic-contact@example.edu', preview.stdout)
+            refused = self.invoke(*command, '--yes', '--confirm', 'wrong')
+            self.assertNotEqual(refused.returncode, 0)
+            self.communication_channels[0]['address'] = 'changed-contact@example.edu'
+            stale = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn('Preview changed', stale.stderr)
+            self.communication_channels[0]['address'] = original_channels[0]['address']
+            self.notification_preferences['new_announcement']['frequency'] = 'never'
+            stale = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn('Preview changed', stale.stderr)
+            self.notification_preferences['new_announcement']['frequency'] = 'daily'
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            sent = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+            self.assertEqual(sent.returncode, 0, sent.stderr)
+            self.assertIn('new_announcement | immediately', sent.stdout)
+            self.assertEqual(self.notification_write, data['body'])
+            self.assertEqual(self.notification_preferences['submission_comment'], original['submission_comment'])
+            self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [('PUT', data['route'])])
+            before = len(self.calls)
+            for command in (('notification-preferences-set', '19', '--set', 'unknown_notice=never'),
+                            ('notification-preferences-set', '99', '--set', 'new_announcement=never'),
+                            ('notification-preferences-set', '19', '--set', 'new_announcement=asap')):
+                denied = self.invoke(*command)
+                self.assertNotEqual(denied.returncode, 0)
+                self.assertEqual(denied.stdout, '')
+            self.communication_channels[0]['user_id'] = 8
+            denied = self.invoke('notification-preferences', '19')
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertEqual(denied.stdout, '')
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).notification_preferences = original
+            type(self).communication_channels = original_channels
+
+    def test_ambiguous_notification_ack_is_one_write_and_requires_manual_verification(self):
+        original = {key: row.copy() for key, row in self.notification_preferences.items()}
+        old_shape = self.notification_ack_shape
+        try:
+            command = ('notification-preferences-set', '19', '--set', 'new_announcement=weekly',
+                       '--set', 'submission_comment=daily')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            type(self).notification_ack_shape = 'ambiguous'
+            before = len(self.calls)
+            result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '')
+            self.assertIn('partially applied', result.stderr)
+            self.assertNotIn('Synthetic never log notification error', result.stderr)
+            self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [('PUT', data['route'])])
+            self.assertEqual(self.notification_preferences['new_announcement']['frequency'], 'weekly')
+            self.assertEqual(self.notification_preferences['submission_comment']['frequency'], 'daily')
+        finally:
+            type(self).notification_preferences = original
+            type(self).notification_ack_shape = old_shape
 
     def test_dashboard_order_and_single_position_are_confirmed_merges_over_tls(self):
         original = self.dashboard_positions.copy()
