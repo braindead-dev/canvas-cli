@@ -60,6 +60,10 @@ canvas-pocket activity --course 123 --type AssessmentRequest
 canvas-pocket activity-summary
 canvas-pocket activity-dismiss 789  # 789 is an activity ID, not the source assignment ID
 canvas-pocket activity-dismiss-all --all
+canvas-pocket topic-ratings 123 456
+canvas-pocket entry-rate 123 456 789 --rating 1
+canvas-pocket entry-rate 123 456 789 --rating 0  # remove your like, not the entry
+canvas-pocket topic-ratings 123 456 --context group
 canvas-pocket file-info 789
 canvas-pocket inbox --scope unread --course 123
 canvas-pocket conversation 456
@@ -327,6 +331,10 @@ Adding the first custom favorite can replace the default displayed selection. Re
 `activity-dismiss ID` previews hiding only that notification from your own feed. `activity-dismiss-all --all` explicitly previews hiding **all your stream items**, including any outside the visible feed; it is not limited to the displayed page or list. Both bind the account, site and full current item revisions without echoing private bodies, then require `--yes --confirm DIGEST`. Hiding neither deletes the underlying message/content nor submits, grades or completes anything; Pocket has no restore command. Canvas's native acknowledgement is not a task-completion check. Pagination, content boundaries and hiding have synthetic HTTPS tests only. See the [official activity-stream API](https://developerdocs.instructure.com/services/canvas/resources/users) and [serialization source](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/stream_item.rb).
 
 ## Discussion contexts and entry changes
+
+`topic-ratings CONTEXT TOPIC` reads only your own native likes and the entry IDs covered by Canvas's cached discussion view, not participant details or bodies. `--context group` uses the group namespace. Ratings must be explicitly enabled and post-first/visibility restrictions apply. The cached view is eventually consistent; an absent vote is only known for an entry represented in that snapshot, not a newly unmaterialized reply. Disabled ratings are reported without fetching the cached thread. Canvas may record content-access analytics for these GETs; Pocket sends no rating or read-marker writes when reading.
+
+`entry-rate CONTEXT TOPIC ENTRY --rating 1` previews setting your like; `--rating 0` previews removing it. Execution requires `--yes --confirm DIGEST` and binds the signed-in account/site, own current rating, current topic and exact visible entry revision. Changed bodies invalidate the preview even without a timestamp change. Cached private bodies are not echoed in previews; use `entry` to inspect the target. Only one native rating POST is issued, with an empty HTTP 204 required as acknowledgement; an unexpected response is never retried. Canvas enforces grader-only and other permissions. This changes a like, not a grade, entry text or explicit read marker. Reads and writes have synthetic HTTPS coverage only. See the [official discussion API](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics).
 
 Discussion listings, topic reads, full threads, entries, replies and `post` accept `--context group` for a group ID instead of a course ID. Existing commands default to courses. The namespace is explicit in the route, thread output and write preview; course/group IDs are not interchangeable. Topic identity/publication/lock checks are shared, and entry reads or replies respect initial-post restrictions. Group access remains subject to Canvas permissions; no membership or role is assumed. Reads do not issue read-state writes, and posts still need the account-bound confirmation digest. Group routes have synthetic HTTPS coverage only.
 

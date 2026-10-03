@@ -495,6 +495,18 @@ def parser():
         if name != 'entry':
             s.add_argument('--confirm', help='Digest returned by the preview')
             s.add_argument('--yes', action='store_true', help='Execute only if the fresh preview matches --confirm')
+    ratings = sub.add_parser('topic-ratings', help='Read only your own discussion likes without cached bodies')
+    ratings.add_argument('course', type=identifier, help='Course or group ID, selected by --context')
+    ratings.add_argument('topic', type=identifier)
+    ratings.add_argument('--context', choices=('course', 'group'), default='course')
+    rate = sub.add_parser('entry-rate', help='Preview setting your own like, not a grade or read marker')
+    rate.add_argument('course', type=identifier, help='Course or group ID, selected by --context')
+    rate.add_argument('topic', type=identifier)
+    rate.add_argument('entry', type=identifier)
+    rate.add_argument('--rating', required=True, type=int, choices=(0, 1), help='1 likes; 0 removes your like')
+    rate.add_argument('--context', choices=('course', 'group'), default='course')
+    rate.add_argument('--yes', action='store_true')
+    rate.add_argument('--confirm')
     for name in ('topic-subscribe', 'topic-unsubscribe', 'topic-mark-read', 'topic-mark-unread',
                  'entry-mark-read', 'entry-mark-unread'):
         s = sub.add_parser(name, help='Preview changing only your discussion subscription or read marker')
@@ -931,6 +943,12 @@ def run(args):
         return state(client, args.course, args.topic, args.command.rsplit('-', 1)[1],
                      entry_id=getattr(args, 'entry', None), forced=getattr(args, 'forced_read_state', None),
                      max_pages=args.max_pages, context_type=args.context, yes=args.yes, confirm=args.confirm)
+    if args.command in ('topic-ratings', 'entry-rate'):
+        from . import ratings
+        if args.command == 'topic-ratings':
+            return ratings.read(client, args.course, args.topic, args.context)
+        return ratings.change(client, args.course, args.topic, args.entry, args.rating,
+                              context_type=args.context, max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('quiz', 'rubric', 'assignment-group'):
         resource = {'quiz': 'quizzes', 'rubric': 'rubrics',
                     'assignment-group': 'assignment_groups'}[args.command]
@@ -1041,6 +1059,17 @@ def brief(data):
                 lines.append('  ' + row['html_url'])
         lines.append(data['note'])
         return '\n'.join(lines)
+    if isinstance(data, dict) and 'own_entry_ratings' in data:
+        lines = [f"Own ratings: {data.get('topic_title') or data['topic_id']}"]
+        if not data['ratings_enabled']:
+            lines.append('Ratings disabled.')
+        for key, rating in data['own_entry_ratings'].items():
+            lines.append(f"{key}: {'liked' if rating == 1 else 'like removed'}")
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'discussion_rating' in data:
+        row = data['discussion_rating']
+        return f"Entry {row['entry_id']}: {'liked' if row['rating'] == 1 else 'like removed'}\n{data['note']}"
     if isinstance(data, dict) and 'activity_summary' in data:
         return '\n'.join(f"{row['type']}" + (f" ({row['notification_category']})" if row.get('notification_category') else '') +
                          f": {row['unread_count']} unread / {row['count']} notifications"

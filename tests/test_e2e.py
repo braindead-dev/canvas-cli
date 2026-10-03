@@ -35,7 +35,9 @@ class E2E(unittest.TestCase):
                         'updated_at': '2026-10-02T12:00:00Z', 'deleted_at': None}
         cls.entry = {'id': 301, 'user_id': 7, 'message': '<p>Synthetic original entry</p>',
                      'updated_at': '2026-10-02T12:00:00Z'}
-        cls.topic_state = {'subscribed': False, 'read_state': 'unread'}
+        cls.topic_state = {'subscribed': False, 'read_state': 'unread', 'allow_rating': True}
+        cls.own_entry_ratings = {'301': 1}
+        cls.rating_ack_status = 204
         cls.personal_file = {'id': 881, 'folder_id': 91, 'display_name': 'synthetic-personal.txt',
                              'size': 20, 'uuid': 'synthetic-file-verifier', 'updated_at': '2026-10-02T12:00:00Z'}
         cls.personal_root = {'id': 91, 'context_type': 'User', 'context_id': 7, 'name': 'Root',
@@ -223,6 +225,12 @@ class E2E(unittest.TestCase):
                 elif self.path in ('/api/v1/courses/101/discussion_topics/202/entry_list?ids%5B%5D=301&per_page=100&page=2',
                                    '/api/v1/groups/11/discussion_topics/203/entry_list?ids%5B%5D=301&per_page=100&page=2'):
                     data = [cls.entry]
+                elif self.path in ('/api/v1/courses/101/discussion_topics/202/view?include_new_entries=1',
+                                   '/api/v1/groups/11/discussion_topics/203/view?include_new_entries=1'):
+                    data = {'entry_ratings': cls.own_entry_ratings,
+                            'participants': [{'id': 8, 'name': 'Synthetic private participant'}],
+                            'view': [{'id': 302, 'message': 'Synthetic cached peer body', 'replies': [cls.entry]}],
+                            'new_entries': [{'id': 303, 'message': 'Synthetic new entry body'}]}
                 elif self.path == '/api/v1/groups/11/discussion_topics/203/entries?per_page=100':
                     data = [{'id': 301, 'message': 'Synthetic group entry', 'has_more_replies': True}]
                 elif self.path == '/api/v1/groups/11/discussion_topics/203/entries/301/replies?per_page=100':
@@ -548,6 +556,13 @@ class E2E(unittest.TestCase):
                     self.send_response(200); self.end_headers()
                     self.wfile.write(json.dumps(data).encode()); return
                 state_paths = ('/api/v1/courses/101/discussion_topics/202', '/api/v1/groups/11/discussion_topics/203')
+                if any(self.path == prefix + '/entries/301/rating' for prefix in state_paths):
+                    cls.rating_write = body
+                    cls.own_entry_ratings['301'] = body['rating']
+                    self.send_response(cls.rating_ack_status); self.end_headers()
+                    if cls.rating_ack_status != 204:
+                        self.wfile.write(json.dumps({'private': 'Synthetic response not for output'}).encode())
+                    return
                 if any(self.path == prefix + suffix for prefix in state_paths
                        for suffix in ('/read', '/subscribed', '/entries/301/read')):
                     cls.state_write = body
@@ -772,6 +787,100 @@ class E2E(unittest.TestCase):
             self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         finally:
             type(self).dashboard_positions = original
+
+    def test_discussion_rating_reads_return_own_votes_without_cached_bodies_or_read_writes(self):
+        before = len(self.calls)
+        result = self.invoke('topic-ratings', '101', '202')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data['own_entry_ratings'], type(self).own_entry_ratings)
+        self.assertEqual(data['snapshot_entry_ids'], [301, 302, 303])
+        self.assertNotIn('Synthetic cached peer body', result.stdout)
+        self.assertNotIn('Synthetic private participant', result.stdout)
+        self.assertEqual(self.calls[before:], [
+            ('GET', '/api/v1/users/self/profile'), ('GET', '/api/v1/courses/101/discussion_topics/202'),
+            ('GET', '/api/v1/courses/101/discussion_topics/202/view?include_new_entries=1')])
+        group = self.invoke('--format', 'brief', 'topic-ratings', '11', '203', '--context', 'group')
+        self.assertEqual(group.returncode, 0, group.stderr)
+        self.assertIn('Own ratings:', group.stdout)
+
+    def test_like_and_unlike_course_and_group_use_account_bound_preview_and_leave_content_untouched(self):
+        saved = type(self).own_entry_ratings.copy()
+        entry = type(self).entry.copy()
+        topic_state = type(self).topic_state.copy()
+        try:
+            for context_id, topic_id, context, value in (('101', '202', 'course', '0'), ('11', '203', 'group', '1')):
+                command = ('entry-rate', context_id, topic_id, '301', '--rating', value, '--context', context)
+                preview = self.invoke(*command)
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                data = json.loads(preview.stdout)
+                self.assertEqual(data['method'], 'POST')
+                self.assertEqual(data['body'], {'rating': int(value)})
+                self.assertNotIn(entry['message'], preview.stdout)
+                before = len(self.calls)
+                sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                self.assertEqual(sent.returncode, 0, sent.stderr)
+                self.assertEqual(json.loads(sent.stdout)['discussion_rating']['rating'], int(value))
+                self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                                 [('POST', f'/api/v1/{context}s/{context_id}/discussion_topics/{topic_id}/entries/301/rating')])
+                self.assertEqual(type(self).rating_write, {'rating': int(value)})
+                self.assertEqual(type(self).entry, entry)
+                self.assertEqual(type(self).topic_state, topic_state)
+        finally:
+            type(self).own_entry_ratings = saved
+
+    def test_rating_changed_body_or_own_vote_invalidates_preview_and_pagination_limit_blocks_write(self):
+        saved = type(self).own_entry_ratings.copy()
+        entry = type(self).entry.copy()
+        try:
+            command = ('entry-rate', '101', '202', '301', '--rating', '0')
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            digest = json.loads(preview.stdout)['confirm']
+            for alteration in ('vote', 'body'):
+                if alteration == 'vote':
+                    type(self).own_entry_ratings = {}
+                else:
+                    type(self).own_entry_ratings = saved.copy()
+                    type(self).entry = {**entry, 'message': 'Synthetic changed body, same timestamp'}
+                before = len(self.calls)
+                refused = self.invoke(*command, '--yes', '--confirm', digest)
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertIn('Preview changed', refused.stderr)
+                self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            limited = self.invoke('--max-pages', '1', *command)
+            self.assertNotEqual(limited.returncode, 0)
+            self.assertIn('Page limit reached', limited.stderr)
+        finally:
+            type(self).own_entry_ratings = saved
+            type(self).entry = entry
+
+    def test_rating_post_first_disabled_and_ambiguous_ack_fail_without_retries_or_body_echo(self):
+        saved_topic = type(self).topic_state.copy()
+        saved_ratings = type(self).own_entry_ratings.copy()
+        command = ('entry-rate', '101', '202', '301', '--rating', '0')
+        try:
+            for flags in ({'allow_rating': False}, {'require_initial_post': True, 'user_can_see_posts': False}):
+                type(self).topic_state = {**saved_topic, **flags}
+                before = len(self.calls)
+                refused = self.invoke(*command)
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                self.assertFalse(any('/view?' in route or '/entry_list?' in route for _, route in self.calls[before:]))
+            type(self).topic_state = saved_topic.copy()
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            type(self).rating_ack_status = 200
+            before = len(self.calls)
+            ambiguous = self.invoke(*command, '--yes', '--confirm', json.loads(preview.stdout)['confirm'])
+            self.assertNotEqual(ambiguous.returncode, 0)
+            self.assertIn('empty 204 acknowledgement', ambiguous.stderr)
+            self.assertNotIn('Synthetic response not for output', ambiguous.stderr + ambiguous.stdout)
+            self.assertEqual(sum(method == 'POST' for method, _ in self.calls[before:]), 1)
+        finally:
+            type(self).topic_state = saved_topic
+            type(self).own_entry_ratings = saved_ratings
+            type(self).rating_ack_status = 204
 
     def test_missing_work_paginates_native_filters_and_does_not_treat_planner_marker_as_submitted(self):
         before = len(self.calls)
