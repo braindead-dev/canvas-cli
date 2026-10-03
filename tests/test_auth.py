@@ -67,7 +67,7 @@ class AuthenticationTests(unittest.TestCase):
                 with self.subTest(value=value), patch('canvas_cli.auth.config_path', return_value=path):
                     with self.assertRaises(CanvasError) as error:
                         auth.load()
-                    self.assertRegex(str(error.exception), 'Run canvas-cli auth login|Use an HTTPS Canvas origin')
+                    self.assertRegex(str(error.exception), 'Run canvas auth login|Use an HTTPS Canvas origin')
                     self.assertNotIn('Synthetic hidden record', str(error.exception))
 
     @patch('canvas_cli.auth.secure_keyring')

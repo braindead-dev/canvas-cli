@@ -26,12 +26,14 @@ src/canvas_cli/
   formatting.py   human summaries; no credentials/network
   client.py       HTTPS transport, guarded paths, pagination
   writes.py       identity and confirmation digests
+  text.py         bounded explicit UTF-8 file inputs
   download.py     credential-free binary transport
   <domain>.py     resource-specific validation/projection/behavior
 tests/
   test_<domain>.py  focused unit tests
   e2e/
     fixture.py       shared synthetic Canvas/storage HTTPS server
+    appointments.py  focused synthetic Scheduler routes and state
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 

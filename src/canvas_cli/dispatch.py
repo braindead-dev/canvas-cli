@@ -5,9 +5,25 @@ from urllib.parse import quote, urlencode
 
 from .auth import config_path
 from .client import CanvasError
+from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('appointment-groups', 'appointment-group', 'appointment-reserve', 'appointment-cancel'):
+        from . import appointments
+        if args.command == 'appointment-groups':
+            return appointments.listing(client, args.max_pages, courses=args.course,
+                                        include_past=args.include_past, include_details=args.include_details)
+        if args.command == 'appointment-group':
+            return appointments.read(client, args.appointment_group, include_details=args.include_details)
+        if args.command == 'appointment-cancel':
+            return appointments.cancel(client, args.appointment_group, args.reservation,
+                                       reason=args.reason, yes=args.yes, confirm=args.confirm)
+        comments = None
+        if args.comments_file is not None:
+            comments = read_utf8(args.comments_file, label='Reservation comments')
+        return appointments.reserve(client, args.appointment_group, args.slot, comments=comments,
+                                    max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('profile', 'profile-set'):
         from . import profile
         if args.command == 'profile':
@@ -16,14 +32,7 @@ def execute(client, args):
                                                       'pronunciation', 'pronouns') if getattr(args, key) is not None}
         if args.bio_file is not None:
             # Bound memory before parsing; re-read for every preview/confirmation invocation.
-            with args.bio_file.open('rb') as source:
-                content = source.read(40001)
-            if len(content) > 40000:
-                raise CanvasError('Biography file exceeds local UTF-8 size bounds')
-            try:
-                changes['bio'] = content.decode('utf-8')
-            except UnicodeError:
-                raise CanvasError('Biography file must be UTF-8 text') from None
+            changes['bio'] = read_utf8(args.bio_file, label='Biography')
         if args.timezone is not None:
             changes['time_zone'] = args.timezone
         return profile.change(client, changes, acknowledge_shared=args.acknowledge_shared_profile,

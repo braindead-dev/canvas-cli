@@ -20,6 +20,6 @@ jobs:
       - run: |
           python -m venv /tmp/canvas-cli-wheel-check
           /tmp/canvas-cli-wheel-check/bin/python -m pip install dist/*.whl
-          /tmp/canvas-cli-wheel-check/bin/canvas-cli capabilities --format brief
-          /tmp/canvas-cli-wheel-check/bin/canvas-cli help --format brief
+          /tmp/canvas-cli-wheel-check/bin/canvas capabilities --format brief
+          /tmp/canvas-cli-wheel-check/bin/canvas help --format brief
           /tmp/canvas-cli-wheel-check/bin/python -m unittest discover -s tests -v

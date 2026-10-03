@@ -87,10 +87,13 @@ def fields(title=None, details=None, location=None, address=None,
     return changes
 
 
-def read(client, event_id):
+def read(client, event_id, *, exclude_children=False):
     if not isinstance(event_id, str) or not re.fullmatch(r'[1-9][0-9]*', event_id):
         raise CanvasError('Expected a positive calendar event ID, not an assignment ID')
-    record, _ = client.request(f'/api/v1/calendar_events/{event_id}')
+    route = f'/api/v1/calendar_events/{event_id}'
+    if exclude_children:
+        route += '?excludes%5B%5D=child_events'
+    record, _ = client.request(route)
     if (not isinstance(record, dict) or type(record.get('id')) is not int or
             str(record['id']) != event_id):
         raise CanvasError('Canvas returned a different or malformed calendar event')

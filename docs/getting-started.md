@@ -8,14 +8,14 @@ Python 3.10+ and a supported OS keyring are required. Install [pipx](https://pip
 
 ```sh
 pipx install git+https://github.com/braindead-dev/canvas-cli.git
-canvas-cli auth login --origin https://canvas.example.edu
-canvas-cli auth status
-canvas-cli courses --active --format brief
+canvas auth login --origin https://canvas.example.edu
+canvas auth status
+canvas courses --active --format brief
 ```
 
 This is a developer preview; no npm/PyPI release is published.
 
-Upgrading from Canvas Pocket? Install from the new URL above, check `canvas-cli auth status`, then remove the old pipx package with `pipx uninstall canvas-pocket`. The new command is `canvas-cli`; saved authentication and sync storage are unchanged.
+Upgrading from Canvas Pocket? Install from the new URL above, check `canvas auth status`, then remove the old pipx package with `pipx uninstall canvas-pocket`. The new command is `canvas`; saved authentication and sync storage are unchanged.
 
 ## Personal-token login
 
@@ -38,9 +38,9 @@ Configuration lives at `$XDG_CONFIG_HOME/canvas-pocket/config.json`, or `~/.conf
 JSON is complete; `--format brief` is a human summary. `--format` and `--max-pages` work before or after commands.
 
 ```sh
-canvas-cli help --search feedback --format brief
-canvas-cli help feedback --format brief
-canvas-cli schema feedback
+canvas help --search feedback --format brief
+canvas help feedback --format brief
+canvas schema feedback
 ```
 
 Help/schema run offline without configuration, keyring, or network. The versioned schema derives flags, positionals, choices, defaults, accumulation, exclusion groups, and nested auth commands from the actual parser.

@@ -30,6 +30,26 @@ def _diff_lines(diff):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    if isinstance(data, dict) and ('appointment_groups' in data or 'appointment_group' in data) and not data.get('dry_run'):
+        groups = data.get('appointment_groups', [data.get('appointment_group')])
+        lines = ['Native Canvas Scheduler']
+        for group in groups:
+            lines.append(f"{group['id']} | {group.get('title') or '(untitled)'} | {group['participant_type']} booking")
+            for slot in group.get('appointments', []):
+                own = 'reserved by you' if slot.get('reserved') is True else 'not reserved by you' if slot.get('reserved') is False else 'own status unknown'
+                count = slot.get('available_slots')
+                available = f'{count} available' if count is not None else 'capacity count not reported'
+                lines.append(f"  slot {slot['id']} | {slot.get('start_at') or 'undated'} to {slot.get('end_at') or 'unknown'} | {own} | {available}")
+            for reservation in group.get('reserved_times') or []:
+                lines.append(f"  own reservation {reservation['id']} | {reservation.get('start_at') or 'undated'} to {reservation.get('end_at') or 'unknown'}")
+        if not groups:
+            lines.append('No groups returned within the selected native scope.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'appointment_reservation' in data:
+        row = data['appointment_reservation']
+        return (f"Own Scheduler reservation {row['id']} | group {row['appointment_group_id']} | slot {row['parent_event_id']} | "
+                f"{'cancelled' if data['cancelled'] else 'reserved'}\n{row.get('start_at') or 'undated'} to {row.get('end_at') or 'unknown'}\n{data['note']}")
     if isinstance(data, dict) and 'help_text' in data:
         return f"{data['safety']}\n\n{data['help_text'].rstrip()}"
     if isinstance(data, dict) and 'schema_version' in data and 'commands' in data:

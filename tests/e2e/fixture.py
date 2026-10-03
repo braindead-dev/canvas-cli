@@ -14,6 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from . import appointments
+
 
 @unittest.skipUnless(shutil.which('openssl'), 'openssl required for local TLS fixture')
 
@@ -30,6 +32,7 @@ class CanvasFixture(unittest.TestCase):
                         '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'],
                        check=True, capture_output=True)
         cls.calls = []
+        appointments.initialize(cls)
         cls.event = {'id': 61, 'context_code': 'user_7', 'title': 'Synthetic event',
                      'start_at': '2026-10-05T09:00:00-07:00', 'end_at': '2026-10-05T10:00:00-07:00',
                      'all_day': False, 'workflow_state': 'active', 'updated_at': '2026-10-01T12:00:00Z'}
@@ -174,6 +177,8 @@ class CanvasFixture(unittest.TestCase):
                     return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if appointments.read(cls, self):
+                    return
                 if self.path == '/api/v1/users/self/profile' and cls.profile_fail_readback and cls.profile_written:
                     self.send_response(403); self.end_headers(); return
                 if self.path == '/api/v1/redirect':
@@ -649,6 +654,8 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if appointments.write(cls, self, body):
+                    return
                 if self.path == '/api/v1/users/self':
                     if cls.profile_denied:
                         self.send_response(403); self.end_headers(); return

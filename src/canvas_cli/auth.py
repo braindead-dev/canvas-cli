@@ -36,7 +36,7 @@ def load():
             raise ValueError('Invalid configuration shape')
         host = origin(configuration['origin'])
     except (OSError, ValueError, KeyError):
-        raise CanvasError('Run canvas-cli auth login first, or set CANVAS_ORIGIN and CANVAS_TOKEN.') from None
+        raise CanvasError('Run canvas auth login first, or set CANVAS_ORIGIN and CANVAS_TOKEN.') from None
     return host
 
 

@@ -317,6 +317,23 @@ def parser():
     remove_event.add_argument('event', type=identifier)
     remove_event.add_argument('--reason', help='Optional cancellation reason shown in the preview')
     _confirmation(remove_event)
+    appointments = sub.add_parser('appointment-groups', help='Paginated own-reservable native Scheduler groups, not external advising')
+    appointments.add_argument('--course', type=identifier, action='append', default=[])
+    appointments.add_argument('--include-past', action='store_true', help='Include past native appointment groups')
+    appointments.add_argument('--include-details', action='store_true', help='Opt in to organizer description text')
+    appointments = sub.add_parser('appointment-group', help='Visible current slots and own individual reservation IDs for one Scheduler group')
+    appointments.add_argument('appointment_group', type=identifier)
+    appointments.add_argument('--include-details', action='store_true', help='Opt in to organizer description text')
+    for name in ('appointment-reserve', 'appointment-cancel'):
+        appointments = sub.add_parser(name, help='Preview one own individual Scheduler reservation change, never group/admin allocation')
+        appointments.add_argument('appointment_group', type=identifier)
+        if name == 'appointment-reserve':
+            appointments.add_argument('slot', type=identifier, help='Parent slot ID from appointment-group, not a reservation ID')
+            appointments.add_argument('--comments-file', type=Path, help='Optional UTF-8 comments shared with the organizer; local size bounds apply')
+        else:
+            appointments.add_argument('reservation', type=identifier, help='Own reservation ID from reserved_times, never the parent slot')
+            appointments.add_argument('--reason', help='Optional reason visible to the organizer')
+        _confirmation(appointments)
     sub.add_parser('overview', help='Active courses, upcoming work, and to-do items')
     due = sub.add_parser('deadlines', help='Assignment deadlines across active courses')
     due.add_argument('--days', type=int, default=14, help='Look ahead this many days; default 14')

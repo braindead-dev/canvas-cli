@@ -22,6 +22,9 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn('docs/getting-started.md', readme)
         self.assertIn('docs/safety.md', readme)
         self.assertIn('docs/development.md', readme)
+        self.assertEqual(readme.splitlines()[0], '# Canvas CLI')
+        for document in self.documents():
+            self.assertNotRegex(document.read_text(), r'(?:^|`)canvas-cli(?:\s|`)', document.name)
 
     def test_local_markdown_links_and_heading_fragments_resolve(self):
         for document in self.documents():
@@ -63,7 +66,7 @@ class DocumentationTests(unittest.TestCase):
             for block in re.findall(r'```sh\n(.*?)\n```', document.read_text(), re.DOTALL):
                 for line in block.splitlines():
                     words = shlex.split(line, comments=True)
-                    if not words or words[0] != 'canvas-cli':
+                    if not words or words[0] != 'canvas':
                         continue
                     with self.subTest(document=document.name, example=line):
                         root.parse_args(words[1:])

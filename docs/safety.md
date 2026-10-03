@@ -7,8 +7,8 @@
 Canvas writes default to previews. Review exact account/site, audience, destination, content, selected fields, and warnings, then repeat the same command/options with both flags.
 
 ```sh
-canvas-cli post 123 456 --message-file reply.txt
-canvas-cli post 123 456 --message-file reply.txt --yes --confirm DIGEST
+canvas post 123 456 --message-file reply.txt
+canvas post 123 456 --message-file reply.txt --yes --confirm DIGEST
 ```
 
 Digests bind origin, signed-in numeric user, target/content, and relevant current state. Changed identity/site/content/state requires a fresh preview. Renewing a token for the same user/site does not print credentials.

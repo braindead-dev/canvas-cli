@@ -5,11 +5,11 @@
 ## Inbox
 
 ```sh
-canvas-cli inbox --scope unread --course 123
-canvas-cli conversation 456
-canvas-cli recipients --search 'Example Name' --course 123
-canvas-cli inbox-compose --recipient 789 --subject 'Question' --message-file message.txt
-canvas-cli inbox-reply 456 --message-file reply.txt
+canvas inbox --scope unread --course 123
+canvas conversation 456
+canvas recipients --search 'Example Name' --course 123
+canvas inbox-compose --recipient 789 --subject 'Question' --message-file message.txt
+canvas inbox-reply 456 --message-file reply.txt
 ```
 
 Conversation reads explicitly disable automatic mark-as-read; unsafe GETs are blocked even through expert get. Recipient search is the authorized messageable directory. Numeric user lookup cannot also select course context because Canvas ignores that filter.
@@ -27,9 +27,9 @@ Content-free previews bind account/current state/message revision. New messages 
 ## Discussions
 
 ```sh
-canvas-cli thread 123 456 --format brief
-canvas-cli entry 123 456 789
-canvas-cli post 123 456 --reply-to 789 --message-file reply.txt
+canvas thread 123 456 --format brief
+canvas entry 123 456 789
+canvas post 123 456 --reply-to 789 --message-file reply.txt
 ```
 
 Discussion/announcement listings, topics, threads, entries/replies, posts, edits, ratings, subscriptions, and markers support explicit group context; course is default. Namespaces are not interchangeable. Publication, locks, permissions, and initial-post restrictions remain enforced.
@@ -57,7 +57,7 @@ Forced-read-state sets a manual override; its explicit negation clears it; omiss
 ## Peer reviews
 
 ```sh
-canvas-cli peer-reviews 123 456 --include-comments --include-users
+canvas peer-reviews 123 456 --include-comments --include-users
 ```
 
 Default scope is reviews of your submission, not reviews owed. Output always states incomplete owed-review coverage. Visible scope adds only native authorized records, not elevation/enumeration.
@@ -69,10 +69,10 @@ No allocation, completion, grading, attempt, or read-state write occurs.
 ## Activity and announcements
 
 ```sh
-canvas-cli news --days 30 --format brief
-canvas-cli activity --active --format brief
-canvas-cli activity --course 123 --type AssessmentRequest
-canvas-cli activity-summary
+canvas news --days 30 --format brief
+canvas activity --active --format brief
+canvas activity --course 123 --type AssessmentRequest
+canvas activity-summary
 ```
 
 News reads posted announcements per course, reporting unavailable courses. JSON includes visible bodies; brief is a title/date index. Window is posting time, not later edits.

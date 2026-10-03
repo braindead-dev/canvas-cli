@@ -5,9 +5,9 @@ Developer preview for the owner's account. Coverage follows the [native Canvas A
 Exact commands/options and safety classifications are available offline:
 
 ```sh
-canvas-cli help --format brief
-canvas-cli capabilities
-canvas-cli schema --search upload
+canvas help --format brief
+canvas capabilities
+canvas schema --search upload
 ```
 
 ## Coverage
@@ -21,7 +21,7 @@ canvas-cli schema --search upload
 | [Files and exports](docs/content.md) | Private downloads, bounded batch downloads, scoped uploads, own-file/folder organization, asynchronous exports | No recursive deletion/rich sharing changes; exports and uploads can be role-restricted |
 | [Communication](docs/communication.md) | Inbox read/compose/reply/own organization, discussions/replies/own edits, likes/subscriptions/read markers | No bulk/group compose attachments, topic administration, or initial-post bypass |
 | [Activity and peer reviews](docs/communication.md) | Own activity/announcement feeds and dismissal; authorized received/visible reviews | Not a complete owed-review inventory; review allocation/completion/grading excluded |
-| [Planning](docs/planning.md) | Own notes/events, calendar/planner feeds, previewed checkbox overrides | Checkboxes can affect module progress but do not submit/grade; no appointments/series mutations |
+| [Planning](docs/planning.md) | Own notes/events, calendar/planner feeds, checkbox overrides, Scheduler discovery and verified individual reservation changes | Checkboxes do not submit/grade; group bookings, appointment administration and series mutations remain open |
 | [Account settings](docs/account.md) | Whitelisted profile with verified edits, favorites, aliases, colors, interface/dashboard settings, exact-key notification preferences | Defaults can have native GET effects; shared profile text needs acknowledgement |
 | [Groups and enrollment](docs/account.md) | Scoped rosters/permission/group-set reads, own community joins/leaves and pending invitation responses | Not university registration; project switches/moderation/admin allocation excluded |
 | [Authentication](docs/getting-started.md) | Own personal-token testing, secure OS keyring or process environment | Multiuser OAuth needs institution-enabled developer key; no cookie scraping |
