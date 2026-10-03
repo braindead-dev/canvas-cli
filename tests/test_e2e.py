@@ -54,6 +54,18 @@ class E2E(unittest.TestCase):
         cls.user_settings = {'manual_mark_as_read': False, 'collapse_global_nav': True,
                              'collapse_course_nav': False, 'hide_dashcard_color_overlays': False}
         cls.dashboard_positions = {'course_101': 1, 'course_102': 2, 'group_12': '9'}
+        cls.activity_hidden_ids = set()
+        cls.activity_items = [
+            {'id': 71, 'type': 'Conversation', 'conversation_id': 12, 'title': 'Synthetic activity message',
+             'read_state': False, 'message': 'Synthetic private body',
+             'latest_messages': [{'body': 'Synthetic message content'}]},
+            {'id': 72, 'type': 'AssessmentRequest', 'assessment_request_id': 61,
+             'course_id': 101, 'context_type': 'course', 'title': 'Synthetic peer-review notice', 'read_state': False},
+            {'id': 73, 'type': 'DiscussionTopic', 'discussion_topic_id': 202, 'course_id': 101,
+             'context_type': 'course', 'title': 'Synthetic activity topic', 'require_initial_post': True,
+             'user_has_posted': False, 'read_state': True, 'message': 'Synthetic cached prompt',
+             'root_discussion_entries': [{'message': 'Synthetic cached peer entry'}]},
+        ]
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -166,7 +178,8 @@ class E2E(unittest.TestCase):
                             'allowed_extensions': ['txt']}
                 elif self.path == '/api/v1/courses/101/discussion_topics/202':
                     data = {'id': 202, 'context_id': 101, 'title': 'Synthetic discussion',
-                            'published': True, 'locked_for_user': False, **cls.topic_state}
+                            'published': True, 'locked_for_user': False,
+                            'message': 'Synthetic current prompt', **cls.topic_state}
                 elif self.path == '/api/v1/groups/11/discussion_topics?per_page=100':
                     data = [{'id': 203, 'title': 'Synthetic group discussion', 'published': True}]
                 elif self.path == '/api/v1/groups/11/discussion_topics?per_page=100&only_announcements=true':
@@ -352,6 +365,22 @@ class E2E(unittest.TestCase):
                     data = cls.user_settings
                 elif self.path == '/api/v1/users/self/dashboard_positions':
                     data = {'dashboard_positions': cls.dashboard_positions}
+                elif self.path.startswith(('/api/v1/users/self/activity_stream', '/api/v1/courses/101/activity_stream')):
+                    stream = [row for row in cls.activity_items if row['id'] not in cls.activity_hidden_ids]
+                    if '/courses/' in self.path or 'only_active_courses=true' in self.path:
+                        stream = [row for row in stream if row.get('course_id') == 101]
+                    if '/summary' in self.path:
+                        counts = {}
+                        for row in stream:
+                            counts.setdefault(row['type'], {'type': row['type'], 'count': 0, 'unread_count': 0})
+                            counts[row['type']]['count'] += 1
+                            counts[row['type']]['unread_count'] += row.get('read_state') is False
+                        data = list(counts.values())
+                    elif 'page=2' in self.path:
+                        data = stream
+                    else:
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = []
                 elif self.path == '/api/v1/users/self/favorites/courses?per_page=100':
                     self.send_header('Link', '</api/v1/users/self/favorites/courses?page=2>; rel="next"')
                     data = []
@@ -393,6 +422,13 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path.startswith('/api/v1/users/self/activity_stream'):
+                    if self.path == '/api/v1/users/self/activity_stream':
+                        cls.activity_hidden_ids.update(row['id'] for row in cls.activity_items)
+                    else:
+                        cls.activity_hidden_ids.add(int(self.path.rsplit('/', 1)[1]))
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps({'hidden': True}).encode()); return
                 if self.path == '/api/v1/users/self/settings':
                     cls.preference_write = body
                     cls.user_settings.update(body)
@@ -710,6 +746,83 @@ class E2E(unittest.TestCase):
             self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         finally:
             type(self).dashboard_positions = original
+
+    def test_activity_reads_paginate_without_marking_read_and_gate_cached_discussion_entries(self):
+        original = self.topic_state.copy()
+        try:
+            type(self).topic_state.update({'require_initial_post': True, 'user_can_see_posts': False})
+            before = len(self.calls)
+            listing = self.invoke('activity')
+            self.assertEqual(listing.returncode, 0, listing.stderr)
+            data = json.loads(listing.stdout)
+            self.assertEqual([row['id'] for row in data['activity']], [71, 72, 73])
+            self.assertNotIn('Synthetic private body', listing.stdout)
+            self.assertFalse(data['complete_coursework_inventory'])
+            notices = self.invoke('activity', '--type', 'AssessmentRequest', '--format', 'brief')
+            self.assertEqual(notices.returncode, 0, notices.stderr)
+            self.assertIn('72 | AssessmentRequest', notices.stdout)
+            self.assertNotIn('71 |', notices.stdout)
+            content = self.invoke('activity', '--active', '--include-content')
+            self.assertEqual(content.returncode, 0, content.stderr)
+            self.assertIn('Synthetic current prompt', content.stdout)
+            self.assertNotIn('Synthetic cached peer entry', content.stdout)
+            self.assertNotIn('Synthetic private body', content.stdout)
+            self.assertIn('entries_withheld', content.stdout)
+            course = self.invoke('activity', '--course', '101')
+            self.assertEqual(course.returncode, 0, course.stderr)
+            self.assertEqual([row['id'] for row in json.loads(course.stdout)['activity']], [72, 73])
+            counts = self.invoke('activity-summary', '--course', '101')
+            self.assertEqual(counts.returncode, 0, counts.stderr)
+            self.assertEqual(sum(row['count'] for row in json.loads(counts.stdout)['activity_summary']), 2)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            self.assertEqual([row['read_state'] for row in self.activity_items], [False, False, True])
+        finally:
+            type(self).topic_state = original
+
+    def test_activity_hiding_is_revision_bound_and_does_not_touch_underlying_messages(self):
+        original_hidden = self.activity_hidden_ids.copy()
+        original_items = [row.copy() for row in self.activity_items]
+        try:
+            command = ('activity-dismiss', '71')
+            before = len(self.calls)
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            self.assertNotIn('Synthetic private body', preview.stdout)
+            type(self).activity_items[0]['message'] = 'Changed synthetic body'
+            stale = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn('Preview changed', stale.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            type(self).activity_items = [row.copy() for row in original_items]
+            sent = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+            self.assertEqual(sent.returncode, 0, sent.stderr)
+            self.assertIn('hide acknowledged: 71', sent.stdout)
+            self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                             [('DELETE', '/api/v1/users/self/activity_stream/71')])
+            current = self.invoke('activity')
+            self.assertEqual([row['id'] for row in json.loads(current.stdout)['activity']], [72, 73])
+            self.assertEqual(self.inbox_state['message_count'], 1)
+            self.assertEqual(self.inbox_messages[0]['body'], 'Synthetic private message')
+            before = len(self.calls)
+            required = self.invoke('activity-dismiss-all')
+            self.assertNotEqual(required.returncode, 0)
+            self.assertEqual(len(self.calls), before)
+            truncated = self.invoke('activity-dismiss-all', '--all', '--max-pages', '1')
+            self.assertNotEqual(truncated.returncode, 0)
+            self.assertIn('Page limit', truncated.stderr)
+            all_preview = self.invoke('activity-dismiss-all', '--all')
+            self.assertEqual(all_preview.returncode, 0, all_preview.stderr)
+            all_data = json.loads(all_preview.stdout)
+            self.assertIn('outside the current visible feed', all_data['effect'])
+            all_sent = self.invoke('activity-dismiss-all', '--all', '--yes', '--confirm', all_data['confirm'])
+            self.assertEqual(all_sent.returncode, 0, all_sent.stderr)
+            current = self.invoke('activity')
+            self.assertEqual(json.loads(current.stdout)['activity'], [])
+            self.assertEqual(self.inbox_state['message_count'], 1)
+        finally:
+            type(self).activity_hidden_ids = original_hidden
+            type(self).activity_items = original_items
 
     def test_favorites_changes_are_preview_first_and_reset_restores_defaults(self):
         original = {context: ids.copy() for context, ids in self.favorite_ids.items()}

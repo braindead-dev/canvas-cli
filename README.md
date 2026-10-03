@@ -54,6 +54,12 @@ canvas-pocket settings-set --set manual_mark_as_read=true --set collapse_course_
 canvas-pocket dashboard-positions
 canvas-pocket dashboard-position-set 123 --position 0
 canvas-pocket dashboard-order course_123 course_456 group_789
+canvas-pocket activity --format brief
+canvas-pocket activity --active --include-content
+canvas-pocket activity --course 123 --type AssessmentRequest
+canvas-pocket activity-summary
+canvas-pocket activity-dismiss 789  # 789 is an activity ID, not the source assignment ID
+canvas-pocket activity-dismiss-all --all
 canvas-pocket file-info 789
 canvas-pocket inbox --scope unread --course 123
 canvas-pocket conversation 456
@@ -302,6 +308,14 @@ Adding the first custom favorite can replace the default displayed selection. Re
 `settings` reads the known own-user interface booleans and reports keys the deployment did not return. It never requests mobile settings or prints unknown response fields. `settings-set --set KEY=true --set OTHER=false` accepts exact, distinct supported keys; it sends only those fields after an account/current-state-bound preview and matching confirmation. A requested setting missing from the deployment's read response is refused rather than guessed. `manual_mark_as_read` changes future browser discussion read behavior, not existing read markers; feature-gated settings may not visibly affect the current UI. No setting changes automatically during login or ordinary reads.
 
 `dashboard-positions` reads your saved positions, not a complete inventory of visible dashboard cards. `dashboard-position-set ITEM --position N --context course|group|user` sets one position from -1000 through 1000. `dashboard-order course_123 course_456 group_789` assigns positions 0, 1 and 2 in that order. Both preview the current full map and verified targets, then require `--yes --confirm DIGEST`. The API **merges** specified positions; unspecified positions remain, equal positions may be ambiguous, and neither favorites nor card visibility change. User-context writes require your own user ID. These settings/order actions have synthetic HTTPS tests only, not live write validation. They use the [documented Users API and official implementation](https://github.com/instructure/canvas-lms/blob/master/app/controllers/users_controller.rb).
+
+## Activity notifications
+
+`activity` reads the own global activity stream with full pagination; `--course COURSE` selects the authorized course stream, and `--active` filters the global feed to active courses. `--type AssessmentRequest` (or another exact native type) filters after pagination and preserves the endpoint count. Default output includes identifiers, titles, dates, read state and safe links, not private bodies. `activity-summary` reads Canvas's native notification counts, optionally by course or active courses. Neither an empty feed nor its unread count proves there is no coursework or peer review owed.
+
+`--include-content` opts in to bodies and selected associations; these can contain private academic or message data. Discussion prompts are read from the current authorized topic rather than a stale cached prompt. Cached peer entries require a fresh published/unlocked topic and confirmed entry access; unknown or initial-post-restricted access is withheld. Standalone discussion-entry notices lacking a verified topic are metadata-only. Cached replies and message previews can be incomplete or outdated; use `thread`, `conversation` or `submission` for the full source. Reads do not issue read-marker writes.
+
+`activity-dismiss ID` previews hiding only that notification from your own feed. `activity-dismiss-all --all` explicitly previews hiding **all your stream items**, including any outside the visible feed; it is not limited to the displayed page or list. Both bind the account, site and full current item revisions without echoing private bodies, then require `--yes --confirm DIGEST`. Hiding neither deletes the underlying message/content nor submits, grades or completes anything; Pocket has no restore command. Canvas's native acknowledgement is not a task-completion check. Pagination, content boundaries and hiding have synthetic HTTPS tests only. See the [official activity-stream API](https://developerdocs.instructure.com/services/canvas/resources/users) and [serialization source](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/stream_item.rb).
 
 ## Discussion contexts and entry changes
 

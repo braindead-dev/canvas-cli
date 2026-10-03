@@ -112,6 +112,22 @@ def parser():
                                     help='Explicit course_ID/group_ID/own user_ID values in desired order; unspecified values remain')
         preference.add_argument('--confirm', help='Digest returned by the preview')
         preference.add_argument('--yes', action='store_true')
+    for name in ('activity', 'activity-summary'):
+        stream = sub.add_parser(name, help='Read own notifications, not a complete coursework inventory')
+        stream.add_argument('--course', type=identifier, help='Use the authorized course-specific feed')
+        stream.add_argument('--active', action='store_true', help='Global feed: only active courses')
+        if name == 'activity':
+            stream.add_argument('--type', help='Exact native type, e.g. AssessmentRequest; filter after full pagination')
+            stream.add_argument('--include-content', action='store_true', help='Opt in to cached bodies; initial-post restrictions still apply')
+    for name in ('activity-dismiss', 'activity-dismiss-all'):
+        stream = sub.add_parser(name, help='Preview hiding own notifications, never delete underlying content')
+        if name == 'activity-dismiss':
+            stream.add_argument('item', type=identifier, help='Activity ID, not an assignment or conversation ID')
+        else:
+            stream.add_argument('--all', dest='all_items', action='store_true', required=True,
+                                help='Acknowledge hiding ALL your notifications, not just the current page')
+        stream.add_argument('--confirm', help='Digest returned by the preview')
+        stream.add_argument('--yes', action='store_true')
     sub.add_parser('groups', help='Your active Canvas groups')
     group = sub.add_parser('group', help='One visible group')
     group.add_argument('group', type=identifier)
@@ -743,6 +759,15 @@ def run(args):
         changes = ({f'{args.context}_{args.item}': args.position} if args.command == 'dashboard-position-set' else
                    preferences.ordered_positions(args.assets))
         return preferences.change_positions(client, changes, yes=args.yes, confirm=args.confirm)
+    if args.command in ('activity', 'activity-summary', 'activity-dismiss', 'activity-dismiss-all'):
+        from . import activity
+        if args.command == 'activity':
+            return activity.feed(client, args.max_pages, course_id=args.course, active=args.active,
+                                 type_filter=args.type, include_content=args.include_content)
+        if args.command == 'activity-summary':
+            return activity.summary(client, course_id=args.course, active=args.active)
+        return activity.dismiss(client, getattr(args, 'item', None), all_items=args.command == 'activity-dismiss-all',
+                                max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'groups':
         return client.list('/api/v1/users/self/groups?per_page=100', args.max_pages)
     if args.command == 'group':
@@ -990,6 +1015,22 @@ def brief(data):
     if isinstance(data, dict) and ('settings_change' in data or 'positions_change' in data):
         changes = data.get('settings_change', data.get('positions_change'))
         return '\n'.join(f'{key}: {value}' for key, value in changes.items()) + f"\n{data['note']}"
+    if isinstance(data, dict) and 'activity_hidden' in data:
+        record = data['activity_hidden']
+        return f"Activity hide acknowledged: {'all items' if record['all_items'] else record['item_id']}\n{data['note']}"
+    if isinstance(data, dict) and 'activity_summary' in data:
+        return '\n'.join(f"{row['type']}" + (f" ({row['notification_category']})" if row.get('notification_category') else '') +
+                         f": {row['unread_count']} unread / {row['count']} notifications"
+                         for row in data['activity_summary']) + f"\n{data['note']}"
+    if isinstance(data, dict) and 'activity' in data:
+        lines = [f"Activity: {data['scope']}"]
+        for row in data['activity']:
+            marker = 'unread' if row.get('read_state') is False else 'read' if row.get('read_state') is True else 'unknown'
+            lines.append(f"{row['id']} | {row['type']} | {marker} | {row.get('title') or '(untitled)'}")
+            if row.get('html_url'):
+                lines.append('  ' + row['html_url'])
+        lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'peer_reviews' in data:
         lines = [f"Peer reviews: {data.get('assignment_name') or data['assignment_id']} ({data['scope']})"]
         for review in data['peer_reviews']:
