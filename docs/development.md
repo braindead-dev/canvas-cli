@@ -30,7 +30,9 @@ src/canvas_pocket/
   <domain>.py     resource-specific validation/projection/behavior
 tests/
   test_<domain>.py  focused unit tests
-  test_e2e.py       subprocess/local-TLS lifecycle regressions
+  e2e/
+    fixture.py       shared synthetic Canvas/storage HTTPS server
+    test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 
 Argparse is the sole syntax source; navigation derives help/schema and capabilities supplies safety labels. Do not hand-maintain an exhaustive duplicate Markdown option catalog.

@@ -3,6 +3,31 @@
 import json
 
 
+def _diff_lines(diff):
+    """A field-name index shared by sync and explicitly selected offline diffs."""
+    count = len(diff['course_changed_fields']) + sum(
+        len(group[key]) for group in diff['changes'].values()
+        for key in ('added', 'removed', 'changed'))
+    observed = sum(len(items) for items in diff['observed_changes'].values())
+    lines = [f'{count} change(s) in fully covered resources; '
+             f'{observed} change(s) observed in partial resources.']
+    if diff['course_changed_fields']:
+        lines.append('Course fields: ' + ', '.join(diff['course_changed_fields']))
+    for kind, group in diff['changes'].items():
+        for action in ('added', 'removed', 'changed'):
+            for row in group[action]:
+                fields = ' [' + ', '.join(row['fields']) + ']' if action == 'changed' else ''
+                lines.append(f"{kind} {action}: {row['title']} ({row['id']}){fields}")
+    for kind, rows in diff['observed_changes'].items():
+        for row in rows:
+            lines.append(f"{kind} observed change: {row['title']} ({row['id']}) "
+                         '[' + ', '.join(row['fields']) + ']')
+    if diff['skipped']:
+        lines.append('Skipped full inventory comparisons: ' + ', '.join(sorted(diff['skipped'])) +
+                     '. Unseen changes remain unknown.')
+    return lines
+
+
 def brief(data):
     """Small human index. JSON remains the complete representation."""
     if isinstance(data, dict) and 'help_text' in data:
@@ -319,15 +344,17 @@ def brief(data):
         if data['baseline']:
             lines.append('Baseline created; no earlier snapshot to compare.')
         else:
-            diff = data['diff']
-            count = len(diff['course_changed_fields']) + sum(
-                len(group[key]) for group in diff['changes'].values()
-                for key in ('added', 'removed', 'changed'))
-            observed = sum(len(items) for items in diff['observed_changes'].values())
-            lines.append(f'{count} change(s) in fully covered resources; '
-                         f'{observed} change(s) observed in partial resources.')
-            if diff['skipped']:
-                lines.append('Some resource inventories were incomplete; see JSON for details.')
+            lines.extend(_diff_lines(data['diff']))
+        return '\n'.join(lines)
+    if isinstance(data, dict) and all(key in data for key in
+                                       ('course_changed_fields', 'changes', 'observed_changes', 'skipped',
+                                        'viewer_identity_verified', 'viewer_note')):
+        viewer = str(data['viewer_user_id']) if data['viewer_identity_verified'] else 'unverified'
+        lines = [f"Snapshot diff: course {data['course_id']}; viewer {viewer}; origin {data['origin']}",
+                 f"{data.get('older_captured_at') or 'unknown date'} → "
+                 f"{data.get('newer_captured_at') or 'unknown date'}"]
+        lines.extend(_diff_lines(data))
+        lines.append(data['viewer_note'])
         return '\n'.join(lines)
     if isinstance(data, dict) and 'pages' in data and 'source' in data and 'complete' in data:
         lines = [f"{len(data['pages'])} readable page(s) in course {data['course_id']}."]

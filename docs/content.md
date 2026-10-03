@@ -54,7 +54,7 @@ Batches require an existing private directory and [confirmation](safety.md#confi
 ```sh
 canvas-pocket snapshot 123 --output /private/path/course.json
 canvas-pocket sync 123 --include-linked-files
-canvas-pocket snapshot-diff /private/path/older.json /private/path/newer.json
+canvas-pocket snapshot-diff /private/path/older.json /private/path/newer.json --format brief
 canvas-pocket snapshot-search /private/path/course.json --query 'research paper'
 canvas-pocket snapshot-markdown /private/path/course.json --output /private/path/course.md
 ```
@@ -72,6 +72,8 @@ Baselines are per origin, numeric signed-in viewer, and course. Identity is chec
 Legacy unscoped files and other viewers' histories stay untouched and are never automatic baselines. The upgraded naming scheme starts fresh without migration/rename/deletion/implicit merge. Files accumulate until you prune them. Failed refreshes preserve the prior baseline.
 
 Offline diff refuses known viewer mismatches and labels explicit legacy comparisons identity-unverified. File metadata is not current authorization. Output shows titles/changed field names, not full bodies. Incomplete categories skip full add/remove claims; overlapping partial pages/files report observed changes. Absent older discussion/file coverage is skipped, not invented as additions.
+
+Brief diff and sync share a field-name index: additions/removals, changed fields, observed partial changes, and skipped inventories. Zero observed changes is not a claim that unseen content is unchanged.
 
 ### Offline search and Markdown
 
