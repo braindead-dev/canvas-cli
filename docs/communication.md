@@ -99,7 +99,21 @@ Each verb previews one native boolean change on an ordinary ungraded topic. Exac
 
 Published is not a promise of immediate availability: existing opening dates, course/module restrictions and future jobs remain native. Close affects replies, not deletion. Reopening a closed topic with `lock_at` clears that closing date and requires separate acknowledgement. Opening an already open topic is a no-op, not cancellation of its future closing schedule.
 
-Pin/unpin requires ordering acknowledgement because moving to the bottom of a native ordering scope can shift other topics. Account, exact prompt/audience/eligibility, scope and complete accessible inventory bind confirmation. One PUT must independently read back the requested state, any acknowledged closing-date removal and a matching inventory entry. Ignored states or unverified outcomes fail without retry/cleanup. Other observed fields and added/removed/changed inventory IDs are labeled, not attributed exclusively to the write; hidden ordering, notifications and future effects are not proven. Advanced date/view/audience configuration remains open.
+Pin/unpin requires ordering acknowledgement because moving to the bottom of a native ordering scope can shift other topics. Account, exact prompt/audience/eligibility, scope and complete accessible inventory bind confirmation. One PUT must independently read back the requested state, any acknowledged closing-date removal and a matching inventory entry. Ignored states or unverified outcomes fail without retry/cleanup. Other observed fields and added/removed/changed inventory IDs are labeled, not attributed exclusively to the write; hidden ordering, notifications and future effects are not proven.
+
+### Configure replies, likes and default views
+
+```sh
+canvas topic-configure 123 456 --sort-order desc --expanded --expanded-locked --acknowledge-shared-topic
+canvas topic-configure 123 456 --no-allow-rating --acknowledge-shared-topic
+canvas topic-configure 123 456 --require-initial-post --acknowledge-shared-topic --acknowledge-reply-visibility-change
+```
+
+These settings affect the shared topic, not your personal reading preferences. Omitted options are preserved; boolean options have explicit positive/negative forms. Use `canvas help topic-configure` for the supported reply/like/sort/expansion choices. `flat` is a native model discussion type. Course/group context is explicit; group updates do not accept `require_initial_post`. Locking expansion requires the effective final state to be expanded, including current values you did not select.
+
+Changing the initial-post requirement needs separate visibility acknowledgement because existing replies can become visible or hidden to other participants. Only the prompt/settings are inspected, never peers' replies. Exact native update permission governs access; ownership and role-name guesses do not substitute for it. Institution-enabled granular permissions or blueprint restrictions can reject or discard options. Their absence is not guessed, and an ignored/partially applied selection fails verification rather than being reported as success.
+
+The existing account/content/audience/inventory-bound pipeline performs one PUT and independently verifies every selected stored value plus the inventory entry. Unrequested metadata/inventory changes remain observations, not exclusive causal proof. No entry rewriting/deletion, read-marker change, automatic retry, cleanup or rollback. Advanced dates, podcasts and audience/assignment configuration remain open.
 
 ## Peer reviews
 

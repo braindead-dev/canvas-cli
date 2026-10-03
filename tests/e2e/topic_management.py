@@ -41,6 +41,8 @@ def initialize(state, *, enabled=False):
     state.topic_publication_override = None
     state.topic_state_enabled = state.topic_state_lose_edit = state.topic_state_keep_schedule = False
     state.topic_state_hide_after = state.topic_state_inventory_denied = False
+    state.topic_config_enabled = state.topic_granular_options_enabled = False
+    state.topic_edit_options = state.topic_edit_views = True
 
 
 def _route(state, handler):
@@ -144,6 +146,39 @@ def write(state, handler, body):
         _send(handler, {'private': 'synthetic-private-native-topic-permission-denial'}, 403)
         return True
     if set(body) - {'title', 'message'} or parse_qs(url.query) != {'no_verifiers': ['true']}:
+        option_keys = {'discussion_type', 'require_initial_post', 'allow_rating', 'only_graders_can_rate',
+                       'sort_order', 'sort_order_locked', 'expanded', 'expanded_locked'}
+        if (state.topic_config_enabled and handler.command == 'PUT' and body and set(body) <= option_keys and
+                parse_qs(url.query) == {'no_verifiers': ['true']}):
+            # Independent native option filtering and validation, not production validators.
+            options = dict(body)
+            if prefix.startswith('/api/v1/groups/'):
+                options.pop('require_initial_post', None)
+            elif state.topic_granular_options_enabled:
+                if not state.topic_edit_options:
+                    for key in ('discussion_type', 'require_initial_post', 'allow_rating', 'only_graders_can_rate',
+                                'expanded', 'expanded_locked'):
+                        options.pop(key, None)
+                if not state.topic_edit_views:
+                    for key in ('sort_order', 'sort_order_locked'):
+                        options.pop(key, None)
+            selected = row | options
+            if (any(type(value) is not bool for key, value in options.items() if key not in ('discussion_type', 'sort_order')) or
+                    selected['discussion_type'] not in ('side_comment', 'not_threaded', 'threaded', 'flat') or
+                    selected['sort_order'] not in ('asc', 'desc') or selected['expanded_locked'] and not selected['expanded']):
+                _send(handler, {'private': 'synthetic-private-native-invalid-options'}, 400)
+                return True
+            state.topic_written = True
+            if not state.topic_ignore:
+                row.update({key: value for key, value in options.items() if key not in state.topic_ignored_fields})
+                if state.topic_state_lose_edit:
+                    row['permissions']['update'] = False
+                state.topic_notifications.append(identifier)
+            response = copy.deepcopy(row)
+            if state.topic_ack_patch is not None:
+                response = {**response, **state.topic_ack_patch} if isinstance(state.topic_ack_patch, dict) else state.topic_ack_patch
+            _send(handler, response)
+            return True
         if (state.topic_state_enabled and handler.command == 'PUT' and len(body) == 1 and
                 set(body) <= {'published', 'locked', 'pinned'} and all(type(value) is bool for value in body.values()) and
                 parse_qs(url.query) == {'no_verifiers': ['true']}):

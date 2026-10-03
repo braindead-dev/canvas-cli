@@ -45,7 +45,7 @@ def _brief(data):
         return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'edited_topic' in data:
         row = data['edited_topic']
-        verb = 'updated' if 'topic_state' in data else 'edited'
+        verb = 'updated' if 'topic_state' in data or 'configured_topic_settings' in data else 'edited'
         lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} {verb}",
                  row['title'], row['html_url']]
         if 'topic_state' in data:
@@ -53,6 +53,10 @@ def _brief(data):
             lines.append(f"Native {state['field']}={str(state['value']).lower()} verified.")
             if state['closing_schedule_cleared']:
                 lines.append('Closing schedule cleared.')
+        if 'configured_topic_settings' in data:
+            values = data['configured_topic_settings']['values']
+            lines.append('Native options verified: ' + ', '.join(sorted(values)))
+        if 'observed_inventory_changes' in data:
             inventory = data['observed_inventory_changes']
             lines.append(f"Observed inventory changes: {len(inventory['added_ids'])} added, "
                          f"{len(inventory['removed_ids'])} removed, {len(inventory['changed'])} changed; not causal proof.")

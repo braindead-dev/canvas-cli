@@ -9,6 +9,14 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'topic-configure':
+        from .topic_management import change
+        from .topic_options import FIELDS
+        return change(client, args.context_id, args.topic_id, context_type=args.context,
+                      options={key: getattr(args, key) for key in FIELDS if getattr(args, key) is not None},
+                      acknowledge_shared=args.acknowledge_shared_topic,
+                      acknowledge_reply_visibility=args.acknowledge_reply_visibility_change,
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if getattr(args, 'topic_action', None) is not None:
         from .topic_management import change
         return change(client, args.context_id, args.topic_id, context_type=args.context, action=args.topic_action,

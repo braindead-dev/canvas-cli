@@ -44,6 +44,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'topic-configure (shared ungraded reply structure/likes/default views; exact update permission, additional initial-post visibility acknowledgement, account/content/audience/inventory-bound preview and exact option readback; native granular permission stripping is not hidden, no peer reads/retry/rollback)',
             'topic-publish/topic-unpublish/topic-close/topic-open/topic-pin/topic-unpin (ordinary ungraded shared states; native update/eligibility flags, closing-date/order acknowledgements, exact state and separate paginated inventory readback; observed collateral changes labeled, no retry/rollback)',
             'topic-create (shared ungraded discussion; dynamic native creation and moderation permissions, explicit publication preview, new-ID/own-author/exact-readback/inventory proof, no retry/cleanup)',
             'topic-edit/topic-delete (exact readable ungraded non-anonymous discussion prompts; native update/delete permission, shared/removal acknowledgement, account/content/audience/inventory-bound preview and independent readback; normalization and collateral fields labeled, linked assignment/root/child/announcement workflows excluded, no retry/rollback)',

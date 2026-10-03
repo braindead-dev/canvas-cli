@@ -684,6 +684,20 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
+    from .topic_options import FIELDS
+    configuration = sub.add_parser('topic-configure', help='Preview shared ungraded reply/like/view settings, not personal preferences')
+    configuration.add_argument('context_id', type=identifier)
+    configuration.add_argument('topic_id', type=identifier)
+    configuration.add_argument('--context', choices=('course', 'group'), default='course')
+    for key, choices in FIELDS.items():
+        if choices is None:
+            configuration.add_argument('--' + key.replace('_', '-'), action=argparse.BooleanOptionalAction, default=None)
+        else:
+            configuration.add_argument('--' + key.replace('_', '-'), choices=choices)
+    configuration.add_argument('--acknowledge-shared-topic', action='store_true')
+    configuration.add_argument('--acknowledge-reply-visibility-change', action='store_true',
+                               help='Required when setting require-initial-post; other participants can gain/lose reply visibility')
+    _confirmation(configuration)
     for name in ('publish', 'unpublish', 'close', 'open', 'pin', 'unpin'):
         state = sub.add_parser('topic-' + name, help='Preview one native shared discussion state change with independent readback')
         state.set_defaults(topic_action=name)

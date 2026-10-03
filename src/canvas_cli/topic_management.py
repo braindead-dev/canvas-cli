@@ -4,6 +4,7 @@ from .client import CanvasError
 from .discussion import _message
 from .events import timestamp
 from .group_content import _context, _id, _number, base
+from .topic_options import validate, validate_current
 from .writes import account, check_flags, confirmed, digest
 
 FIELDS = ('id', 'title', 'published', 'locked', 'pinned', 'position', 'created_at', 'posted_at',
@@ -29,6 +30,12 @@ STATE_WARNING = ('Native state controls affect the shared topic and its audience
                  'not topic deletion. Reopening a closed topic can clear lock_at. Pin/unpin moves the topic to the '
                  'bottom of its native ordering scope and can shift other positions. Only accessible inventory '
                  'changes are observed, not all hidden topics or causal proof. No retry, cleanup or rollback.')
+OPTIONS_WARNING = ('Changes shared reply structure, likes or default views, not your personal display preferences. '
+                   'Changing require_initial_post can reveal or hide existing replies for other participants; '
+                   'no peer entries or cached replies are read here. Course granular permissions and blueprint '
+                   'restrictions can reject or discard options; exact stored values must independently read back. '
+                   'Expansion cannot be both collapsed and locked. Existing entries are not rewritten or deleted. '
+                   'Observed inventory changes are not exclusive causal proof; no retry, cleanup or rollback.')
 
 
 def _parent(row, item, context_type):
@@ -160,7 +167,8 @@ def _inventory_delta(before, after):
 
 def change(client, item, topic_id, *, context_type='course', title=None, message=None, delete=False,
            action=None, acknowledge_shared=False, acknowledge_removal=False, acknowledge_ordering=False,
-           acknowledge_schedule_removal=False, max_pages=100, yes=False, confirm=None):
+           acknowledge_schedule_removal=False, options=None, acknowledge_reply_visibility=False,
+           max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     if context_type not in ('course', 'group'):
         raise CanvasError('Topic management requires a course or group context')
@@ -174,13 +182,20 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if (type(acknowledge_ordering) is not bool or type(acknowledge_schedule_removal) is not bool or
             action is not None and (not isinstance(action, str) or action not in ACTIONS)):
         raise CanvasError('Select a known topic state action and explicit boolean acknowledgements')
-    if (delete and (title is not None or message is not None or action is not None) or
-            action is not None and (title is not None or message is not None)):
+    if (delete and (title is not None or message is not None or action is not None or options is not None) or
+            action is not None and (title is not None or message is not None or options is not None) or
+            options is not None and (title is not None or message is not None)):
         raise CanvasError('Topic deletion and state controls cannot include other operations or content edits')
     if ((action in ('pin', 'unpin')) != acknowledge_ordering or
             acknowledge_schedule_removal and action != 'open'):
         raise CanvasError('Pin/unpin requires --acknowledge-topic-ordering-change; schedule-removal acknowledgement is only for opening')
-    changes = dict([ACTIONS[action]]) if action is not None else None if delete else _changes(title, message)
+    if options is not None:
+        options = validate(options, context_type)
+    if (type(acknowledge_reply_visibility) is not bool or
+            acknowledge_reply_visibility != (options is not None and 'require_initial_post' in options)):
+        raise CanvasError('Changing require_initial_post requires --acknowledge-reply-visibility-change, including previews; not for other operations')
+    changes = options if options is not None else dict([ACTIONS[action]]) if action is not None else None if delete else _changes(title, message)
+    controlled = action is not None or options is not None
     identity = account(client)
     route, context = _scope(client, item, context_type)
     before = _read(client, route, item, topic_id, context_type)
@@ -194,16 +209,19 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     clears_schedule = action == 'open' and before['locked'] and before['lock_at'] is not None
     if clears_schedule and not acknowledge_schedule_removal:
         raise CanvasError('Opening this closed topic clears its closing date; use --acknowledge-closing-schedule-removal, including previews')
+    if options is not None:
+        validate_current(options, before)
     if not delete and all(before['message_digest'] == digest(value) if key == 'message' else before[key] == value
                           for key, value in changes.items()):
-        raise CanvasError('The selected topic state already matches; no state update needed' if action is not None else
+        raise CanvasError('The selected topic settings already match; no update needed' if options is not None else
+                          'The selected topic state already matches; no state update needed' if action is not None else
                           'The selected topic text already matches; no edit needed')
     inventory = _inventory(client, route, item, context_type, max_pages)
     listed = {key: before[key] for key in ('id', 'title', 'published', 'locked', 'pinned', 'position')}
     if listed not in inventory or _read(client, route, item, topic_id, context_type) != before or account(client) != identity:
         raise CanvasError('Discussion/account changed during preflight; review a fresh preview')
-    if action is not None and (_scope(client, item, context_type) != (route, context) or
-                               _inventory(client, route, item, context_type, max_pages) != inventory or account(client) != identity):
+    if controlled and (_scope(client, item, context_type) != (route, context) or
+                       _inventory(client, route, item, context_type, max_pages) != inventory or account(client) != identity):
         raise CanvasError('Discussion context/inventory changed during state preflight')
     preview = {**identity, 'context_type': context_type, f'{context_type}_id': int(item), 'context': context,
                'topic': before, 'inventory_digest': digest(inventory), 'acknowledge_shared_topic': True,
@@ -213,6 +231,9 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
         preview.update(topic_state_action=action, acknowledge_topic_ordering_change=acknowledge_ordering,
                        acknowledge_closing_schedule_removal=acknowledge_schedule_removal,
                        clears_closing_schedule=clears_schedule, warning=WARNING + ' ' + STATE_WARNING)
+    if options is not None:
+        preview.update(acknowledge_reply_visibility_change=acknowledge_reply_visibility,
+                       warning=WARNING + ' ' + OPTIONS_WARNING)
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -240,12 +261,15 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             else:
                 raise CanvasError('The deleted discussion is still readable')
         elif (_read(client, next_route, item, topic_id, context_type) != after or
-              action is None and after['permissions']['update'] is not True):
+              not controlled and after['permissions']['update'] is not True):
             raise CanvasError('Stored topic acknowledgement and readback do not agree')
+        if options is not None and any(after[key] != value for key, value in options.items()):
+            raise CanvasError('Canvas did not store every selected native discussion option')
         if action is not None:
             field, value = ACTIONS[action]
             if after[field] is not value or clears_schedule and after['lock_at'] is not None:
                 raise CanvasError('Canvas did not store the requested native state or clear its closing date')
+        if controlled:
             remaining = _inventory(client, next_route, item, context_type, max_pages)
             if {key: after[key] for key in listed} not in remaining:
                 raise CanvasError('The updated topic is not verified in the accessible inventory')
@@ -270,13 +294,17 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             'note': 'One native PUT and independent exact-topic readback with stable account/context verified. '
                     'Requested-text equality and other observed field changes are labeled; native HTML rewriting is not hidden. '
                     'No private prompt, attachment URLs or raw response emitted, no reply/read-marker write, retry or rollback.'}
-    if action is not None:
+    if controlled:
         result.update(stored_text_matches_request={},
-                      topic_state={'action': action, 'field': field, 'value': value, 'verified': True,
-                                   'closing_schedule_cleared': True if clears_schedule else None},
                       observed_inventory_changes=_inventory_delta(inventory, remaining),
-                      note='One native PUT, exact state and independent topic/inventory readback with stable account/context verified. '
+                      note='One native PUT, exact selected settings and independent topic/inventory readback with stable account/context verified. '
                            'Other observed field/inventory changes are labeled, not attributed exclusively to this write. '
                            'Opening/availability/future jobs and notification/module/pacing effects remain unverified. '
                            'No private prompt, signed URLs, peer reply reads, retries or rollback.')
+    if action is not None:
+        result['topic_state'] = {'action': action, 'field': field, 'value': value, 'verified': True,
+                                'closing_schedule_cleared': True if clears_schedule else None}
+    if options is not None:
+        result['configured_topic_settings'] = {'values': options, 'verified': True,
+                                               'reply_visibility_change_acknowledged': acknowledge_reply_visibility}
     return result
