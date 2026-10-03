@@ -5,10 +5,16 @@ from canvas_pocket.client import CanvasError
 from canvas_pocket.preferences import (
     change_color,
     change_nickname,
+    change_positions,
+    change_settings,
     color,
     colors,
     nickname,
     nicknames,
+    ordered_positions,
+    positions,
+    setting_pairs,
+    settings,
 )
 
 
@@ -196,3 +202,126 @@ class PreferencesTests(unittest.TestCase):
                 change_color(self.client, '101', 'ABC', yes=True, confirm=preview['confirm'])
             self.assertEqual(self.client.request.call_count, 4)
             self.assertNotIn('private response body', str(error.exception))
+
+    def test_settings_reads_filter_unknown_fields_and_never_request_mobile_keys(self):
+        self.client.request.return_value = ({'manual_mark_as_read': False, 'collapse_global_nav': True,
+                                             'pendo_mobile_api_key': 'not for output', 'unknown_future_option': False}, '')
+        result = settings(self.client)
+        self.assertEqual(result['settings'], {'manual_mark_as_read': False, 'collapse_global_nav': True})
+        self.assertIn('widget_dashboard_dark_mode', result['unreported_keys'])
+        self.assertNotIn('not for output', str(result))
+        self.client.request.assert_called_once_with('/api/v1/users/self/settings')
+        for record in ([], {'manual_mark_as_read': 1}, {'manual_mark_as_read': 'true'}):
+            self.client.request.return_value = (record, '')
+            with self.assertRaises(CanvasError):
+                settings(self.client)
+
+    def test_settings_options_are_exact_unique_booleans_before_network(self):
+        self.assertEqual(setting_pairs(['manual_mark_as_read=true', 'collapse_global_nav=false']),
+                         {'manual_mark_as_read': True, 'collapse_global_nav': False})
+        for values in (['email=true'], ['manual_mark_as_read=TRUE'], ['manual_mark_as_read=1'],
+                       ['manual_mark_as_read'], ['manual_mark_as_read=true=false'],
+                       ['manual_mark_as_read=true', 'manual_mark_as_read=false'], [None]):
+            with self.subTest(values=values), self.assertRaises(CanvasError):
+                setting_pairs(values)
+        for changes in ({}, [], {'manual_mark_as_read': 1}, {'time_zone': 'Example'}, {'unknown': True}):
+            with self.subTest(changes=changes), self.assertRaises(CanvasError):
+                change_settings(self.client, changes)
+        self.client.request.assert_not_called()
+
+    def test_settings_set_sends_only_requested_fields_and_binds_current_state(self):
+        state = {'manual_mark_as_read': False, 'collapse_global_nav': True}
+        change = {'manual_mark_as_read': True}
+        self.client.request.side_effect = [({'id': 7}, ''), (state, '')]
+        preview = change_settings(self.client, change)
+        self.assertEqual(preview['body'], change)
+        self.assertEqual(self.client.request.call_count, 2)
+        self.client.request.side_effect = [({'id': 7}, ''), (state, ''), ({**state, **change}, '')]
+        result = change_settings(self.client, change, yes=True, confirm=preview['confirm'])
+        self.assertTrue(result['acknowledged'])
+        self.client.request.assert_called_with('/api/v1/users/self/settings', 'PUT', change)
+        self.client.request.reset_mock()
+        self.client.request.side_effect = [({'id': 7}, ''), ({**state, 'collapse_global_nav': False}, '')]
+        with self.assertRaisesRegex(CanvasError, 'Preview changed'):
+            change_settings(self.client, change, yes=True, confirm=preview['confirm'])
+        self.assertEqual(self.client.request.call_count, 2)
+
+    def test_settings_refuse_unreported_or_unacknowledged_values_without_retry(self):
+        state = {'manual_mark_as_read': False}
+        self.client.request.side_effect = [({'id': 7}, ''), (state, '')]
+        with self.assertRaisesRegex(CanvasError, 'not reported'):
+            change_settings(self.client, {'collapse_global_nav': True})
+        self.client.request.side_effect = [({'id': 7}, ''), (state, '')]
+        preview = change_settings(self.client, {'manual_mark_as_read': True})
+        for response in (None, [], {}, state, {'manual_mark_as_read': 1}):
+            self.client.request.reset_mock()
+            self.client.request.side_effect = [({'id': 7}, ''), (state, ''), (response, '')]
+            with self.assertRaisesRegex(CanvasError, 'verify Canvas'):
+                change_settings(self.client, {'manual_mark_as_read': True}, yes=True, confirm=preview['confirm'])
+            self.assertEqual(self.client.request.call_count, 3)
+
+    def test_dashboard_reads_preserve_native_values_without_claiming_visible_cards(self):
+        record = {'dashboard_positions': {'course_101': '01', 'group_11': -2}}
+        self.client.request.return_value = (record, '')
+        self.assertEqual(positions(self.client), record)
+        self.client.request.assert_called_with('/api/v1/users/self/dashboard_positions')
+        for record in ([], {}, {'dashboard_positions': []}, {'dashboard_positions': {'course_1': True}},
+                       {'dashboard_positions': {'course_1': 1001}}, {'dashboard_positions': {'course_1': 'abc'}}):
+            self.client.request.return_value = (record, '')
+            with self.assertRaises(CanvasError):
+                positions(self.client)
+
+    def test_ordering_inputs_are_unique_and_never_guess_contexts(self):
+        self.assertEqual(ordered_positions(['course_101', 'group_11', 'user_7']),
+                         {'course_101': 0, 'group_11': 1, 'user_7': 2})
+        for assets in ([], ['course_101', 'course_101'], ['101'], ['course_01'], ['course_0'],
+                       ['account_1'], ['course_١'], 'course_101'):
+            with self.subTest(assets=assets), self.assertRaises(CanvasError):
+                ordered_positions(assets)
+        for changes in ({}, [], {'course_101': True}, {'course_101': 1.0}, {'course_101': 1001},
+                        {'group_11': -1001}, {'account_1': 0}, {'course_01': 0}):
+            with self.subTest(changes=changes), self.assertRaises(CanvasError):
+                change_positions(self.client, changes)
+        self.client.request.assert_not_called()
+
+    def test_position_merge_preserves_unspecified_values_and_all_destination_identities(self):
+        current = {'dashboard_positions': {'course_102': '9', 'course_101': 2}}
+        change = {'course_101': -1, 'group_11': 0, 'user_7': 1}
+        reads = [({'id': 7}, ''), (self.target, ''), ({'id': 11, 'name': 'Synthetic group'}, ''), (current, '')]
+        self.client.request.side_effect = reads
+        preview = change_positions(self.client, change)
+        self.assertEqual(preview['body'], {'dashboard_positions': change})
+        self.assertEqual(len(preview['targets']), 3)
+        self.assertIn('Unspecified', preview['warning'])
+        self.assertEqual(self.client.request.call_count, 4)
+        self.client.request.reset_mock()
+        self.client.request.side_effect = [*reads, ({'dashboard_positions': {**current['dashboard_positions'], **change}}, '')]
+        result = change_positions(self.client, change, yes=True, confirm=preview['confirm'])
+        self.assertTrue(result['acknowledged'])
+        self.assertEqual(self.client.request.call_count, 5)
+        self.client.request.assert_called_with('/api/v1/users/self/dashboard_positions', 'PUT',
+                                              {'dashboard_positions': change})
+
+    def test_positions_refuse_other_users_different_targets_and_changed_order(self):
+        self.client.request.side_effect = [({'id': 7}, '')]
+        with self.assertRaisesRegex(CanvasError, 'own user ID'):
+            change_positions(self.client, {'user_8': 0})
+        self.client.request.side_effect = [({'id': 7}, ''), ({'id': 102}, '')]
+        with self.assertRaisesRegex(CanvasError, 'different dashboard destination'):
+            change_positions(self.client, {'course_101': 0})
+        current = {'dashboard_positions': {'course_101': 1}}
+        reads = [({'id': 7}, ''), (self.target, ''), (current, '')]
+        self.client.request.side_effect = reads
+        preview = change_positions(self.client, {'course_101': 0})
+        self.client.request.reset_mock()
+        self.client.request.side_effect = [*reads[:2], ({'dashboard_positions': {'course_101': 2}}, '')]
+        with self.assertRaisesRegex(CanvasError, 'Preview changed'):
+            change_positions(self.client, {'course_101': 0}, yes=True, confirm=preview['confirm'])
+        self.assertEqual(self.client.request.call_count, 3)
+        for response in ({}, {'dashboard_positions': {}}, {'dashboard_positions': {'course_101': 1}},
+                         {'dashboard_positions': {'course_101': False}}):
+            self.client.request.reset_mock()
+            self.client.request.side_effect = [*reads, (response, '')]
+            with self.assertRaisesRegex(CanvasError, 'verify Canvas'):
+                change_positions(self.client, {'course_101': 0}, yes=True, confirm=preview['confirm'])
+            self.assertEqual(self.client.request.call_count, 4)

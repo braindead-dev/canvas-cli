@@ -51,6 +51,9 @@ class E2E(unittest.TestCase):
         cls.inbox_messages = [{'id': 31, 'author_id': 7, 'body': 'Synthetic private message'}]
         cls.course_nicknames = {101: 'Synthetic nickname', 102: 'Another nickname'}
         cls.custom_colors = {'course_101': '#abc'}
+        cls.user_settings = {'manual_mark_as_read': False, 'collapse_global_nav': True,
+                             'collapse_course_nav': False, 'hide_dashcard_color_overlays': False}
+        cls.dashboard_positions = {'course_101': 1, 'course_102': 2, 'group_12': '9'}
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -345,6 +348,10 @@ class E2E(unittest.TestCase):
                     data = {'course_id': item, 'name': course['name'], 'nickname': cls.course_nicknames.get(item)}
                 elif self.path == '/api/v1/users/self/colors':
                     data = {'custom_colors': cls.custom_colors}
+                elif self.path == '/api/v1/users/self/settings':
+                    data = cls.user_settings
+                elif self.path == '/api/v1/users/self/dashboard_positions':
+                    data = {'dashboard_positions': cls.dashboard_positions}
                 elif self.path == '/api/v1/users/self/favorites/courses?per_page=100':
                     self.send_header('Link', '</api/v1/users/self/favorites/courses?page=2>; rel="next"')
                     data = []
@@ -386,6 +393,16 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path == '/api/v1/users/self/settings':
+                    cls.preference_write = body
+                    cls.user_settings.update(body)
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(cls.user_settings).encode()); return
+                if self.path == '/api/v1/users/self/dashboard_positions':
+                    cls.preference_write = body
+                    cls.dashboard_positions.update(body['dashboard_positions'])
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps({'dashboard_positions': cls.dashboard_positions}).encode()); return
                 if self.path.startswith('/api/v1/users/self/course_nicknames'):
                     cls.preference_write = body
                     if self.path == '/api/v1/users/self/course_nicknames':
@@ -629,6 +646,70 @@ class E2E(unittest.TestCase):
             self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         finally:
             type(self).custom_colors = original
+
+    def test_own_settings_changes_preserve_unrequested_fields_and_reject_stale_state(self):
+        original = self.user_settings.copy()
+        try:
+            listing = self.invoke('settings')
+            self.assertEqual(listing.returncode, 0, listing.stderr)
+            self.assertEqual(json.loads(listing.stdout)['settings'], original)
+            command = ('settings-set', '--set', 'manual_mark_as_read=true', '--set', 'collapse_course_nav=true')
+            before = len(self.calls)
+            preview = self.invoke(*command)
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            data = json.loads(preview.stdout)
+            refused = self.invoke(*command, '--yes', '--confirm', 'wrong')
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            sent = self.invoke(*command, '--yes', '--confirm', data['confirm'], '--format', 'brief')
+            self.assertEqual(sent.returncode, 0, sent.stderr)
+            self.assertIn('manual_mark_as_read: True', sent.stdout)
+            self.assertEqual(self.preference_write, {'manual_mark_as_read': True, 'collapse_course_nav': True})
+            self.assertEqual(self.user_settings['collapse_global_nav'], original['collapse_global_nav'])
+            self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                             [('PUT', '/api/v1/users/self/settings')])
+            before = len(self.calls)
+            stale = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn('Preview changed', stale.stderr)
+            missing = self.invoke('settings-set', '--set', 'widget_dashboard_dark_mode=true')
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn('not reported', missing.stderr)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).user_settings = original
+
+    def test_dashboard_order_and_single_position_are_confirmed_merges_over_tls(self):
+        original = self.dashboard_positions.copy()
+        try:
+            commands = [('dashboard-order', 'course_102', 'course_101', 'group_11'),
+                        ('dashboard-position-set', '7', '--context', 'user', '--position', '-1')]
+            for command in commands:
+                before = len(self.calls)
+                preview = self.invoke(*command)
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                data = json.loads(preview.stdout)
+                refused = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+                sent = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                self.assertEqual(sent.returncode, 0, sent.stderr)
+                self.assertTrue(json.loads(sent.stdout)['acknowledged'])
+                self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'],
+                                 [('PUT', '/api/v1/users/self/dashboard_positions')])
+                self.assertEqual(self.preference_write, data['body'])
+            current = self.invoke('dashboard-positions')
+            self.assertEqual(current.returncode, 0, current.stderr)
+            self.assertEqual(json.loads(current.stdout)['dashboard_positions'],
+                             {'course_101': 1, 'course_102': 0, 'group_11': 2, 'group_12': '9', 'user_7': -1})
+            before = len(self.calls)
+            for command in [('dashboard-order', 'course_101', 'course_101'), ('dashboard-order', 'course_01'),
+                            ('dashboard-position-set', '8', '--context', 'user', '--position', '0')]:
+                denied = self.invoke(*command)
+                self.assertNotEqual(denied.returncode, 0)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).dashboard_positions = original
 
     def test_favorites_changes_are_preview_first_and_reset_restores_defaults(self):
         original = {context: ids.copy() for context, ids in self.favorite_ids.items()}

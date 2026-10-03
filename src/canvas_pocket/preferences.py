@@ -1,9 +1,16 @@
-"""Own-user dashboard nicknames and custom calendar colors, one write at a time."""
+"""Own-user dashboard and interface preferences, with explicit field-only writes."""
 
 import re
 
 from .client import CanvasError
 from .writes import account, check_flags, confirmed
+
+SETTING_KEYS = (
+    'manual_mark_as_read', 'collapse_global_nav', 'collapse_course_nav',
+    'hide_dashcard_color_overlays', 'release_notes_badge_disabled',
+    'comment_library_suggestions_enabled', 'elementary_dashboard_disabled',
+    'default_to_block_editor', 'widget_dashboard_user_preference', 'widget_dashboard_dark_mode',
+)
 
 
 def _number(value):
@@ -142,3 +149,140 @@ def change_color(client, item_id, hexcode, *, context_type='course', yes=False, 
         raise CanvasError('Color response did not confirm the requested value; verify Canvas before repeating')
     return {'color_change': {'asset_string': asset, 'hexcode': response['hexcode']}, 'acknowledged': True,
             'note': 'Only your own custom display color changed. Other users and enrollment are unchanged.'}
+
+
+def _settings(record):
+    if not isinstance(record, dict):
+        raise CanvasError('Canvas returned invalid own-user settings')
+    visible = {key: record[key] for key in SETTING_KEYS if key in record}
+    if any(type(value) is not bool for value in visible.values()):
+        raise CanvasError('Canvas returned a non-boolean display setting')
+    return {'settings': visible, 'unreported_keys': [key for key in SETTING_KEYS if key not in record]}
+
+
+def settings(client):
+    # Never request mobile_settings: it can include service keys and telemetry configuration.
+    return _settings(client.request('/api/v1/users/self/settings')[0])
+
+
+def setting_pairs(values):
+    """Parse repeated exact KEY=true|false options without accepting arbitrary user fields."""
+    changes = {}
+    for value in values:
+        if not isinstance(value, str) or value.count('=') != 1:
+            raise CanvasError('Each setting must be KEY=true or KEY=false')
+        key, literal = value.split('=')
+        if key not in SETTING_KEYS or literal not in ('true', 'false') or key in changes:
+            raise CanvasError('Setting keys must be supported, unique and use exactly true or false')
+        changes[key] = literal == 'true'
+    return changes
+
+
+def change_settings(client, changes, *, yes=False, confirm=None):
+    check_flags(yes, confirm)
+    if (not isinstance(changes, dict) or not changes or
+            any(key not in SETTING_KEYS or type(value) is not bool for key, value in changes.items())):
+        raise CanvasError('Provide at least one supported boolean setting')
+    identity = account(client)
+    current = settings(client)
+    if any(key not in current['settings'] for key in changes):
+        raise CanvasError('A requested setting was not reported by this Canvas deployment; it will not be guessed')
+    preview = {**identity, 'method': 'PUT', 'route': '/api/v1/users/self/settings',
+               'body': dict(changes), 'current': current,
+               'effect': 'Change only the specified own-user interface preferences.',
+               'warning': 'manual_mark_as_read affects future browser discussion read behavior, not existing markers. '
+                          'Institution features may override the visible effect of some preferences.'}
+    response = confirmed(client, preview, yes, confirm)
+    if not yes:
+        return response
+    try:
+        result = _settings(response)
+        matches = all(result['settings'].get(key) is value for key, value in changes.items())
+    except CanvasError:
+        matches = False
+    if not matches:
+        raise CanvasError('Settings response did not confirm the requested values; verify Canvas before repeating')
+    return {'settings_change': dict(changes), 'acknowledged': True,
+            'note': 'Only specified own-user preferences were sent. Existing read markers and course content are unchanged.'}
+
+
+def _position(value):
+    if isinstance(value, str) and re.fullmatch(r'[+-]?[0-9]+', value):
+        value = int(value)
+    if type(value) is not int or abs(value) > 1000:
+        raise CanvasError('Dashboard position must be an integer between -1000 and 1000')
+    return value
+
+
+def _asset_parts(asset):
+    if not isinstance(asset, str) or not re.fullmatch(r'(?:course|group|user)_[1-9][0-9]*', asset):
+        raise CanvasError('Dashboard context must be course_ID, group_ID or your own user_ID')
+    context, item_id = asset.split('_', 1)
+    return context, item_id
+
+
+def _positions(record):
+    if not isinstance(record, dict) or not isinstance(record.get('dashboard_positions'), dict):
+        raise CanvasError('Canvas returned an invalid dashboard position map')
+    mapping = record['dashboard_positions']
+    for asset, value in mapping.items():
+        if not isinstance(asset, str):
+            raise CanvasError('Canvas returned an invalid dashboard context')
+        _position(value)
+    return {'dashboard_positions': dict(mapping)}
+
+
+def positions(client):
+    return _positions(client.request('/api/v1/users/self/dashboard_positions')[0])
+
+
+def ordered_positions(assets):
+    if not isinstance(assets, (list, tuple)) or not assets or len(assets) > 1001:
+        raise CanvasError('Provide between one and 1001 dashboard contexts in desired order')
+    for asset in assets:
+        _asset_parts(asset)
+    if len(set(assets)) != len(assets):
+        raise CanvasError('Dashboard ordering cannot repeat a context')
+    return {asset: index for index, asset in enumerate(assets)}
+
+
+def change_positions(client, changes, *, yes=False, confirm=None):
+    check_flags(yes, confirm)
+    if not isinstance(changes, dict) or not changes:
+        raise CanvasError('Provide at least one dashboard position')
+    body = {}
+    for asset, value in changes.items():
+        _asset_parts(asset)
+        body[asset] = _position(value)
+    identity = account(client)
+    targets = []
+    for asset in body:
+        context, item = _asset_parts(asset)
+        if context == 'user':
+            if int(item) != identity['user_id']:
+                raise CanvasError('User dashboard preferences are restricted to your own user ID')
+            target = {'id': identity['user_id'], 'name': 'Your personal context'}
+        else:
+            target, _ = client.request(f'/api/v1/{context}s/{item}')
+            if not isinstance(target, dict) or type(target.get('id')) is not int or str(target['id']) != item:
+                raise CanvasError('Canvas returned a different dashboard destination')
+            target = {key: target.get(key) for key in ('id', 'name')}
+        targets.append({'asset_string': asset, **target})
+    current = positions(client)
+    preview = {**identity, 'method': 'PUT', 'route': '/api/v1/users/self/dashboard_positions',
+               'body': {'dashboard_positions': body}, 'current': current, 'targets': targets,
+               'effect': 'Merge only these positions into your own saved dashboard order.',
+               'warning': 'Unspecified saved positions remain. Equal positions can leave UI ordering ambiguous; '
+                          'this does not change favorites or guarantee a card is visible.'}
+    response = confirmed(client, preview, yes, confirm)
+    if not yes:
+        return response
+    try:
+        result = _positions(response)['dashboard_positions']
+        matches = all(asset in result and _position(result[asset]) == value for asset, value in body.items())
+    except CanvasError:
+        matches = False
+    if not matches:
+        raise CanvasError('Dashboard response did not confirm the requested positions; verify Canvas before repeating')
+    return {'positions_change': body, 'acknowledged': True,
+            'note': 'Only requested own dashboard positions were sent. Favorites, enrollment and course content are unchanged.'}

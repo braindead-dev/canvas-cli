@@ -94,6 +94,24 @@ def parser():
             preference.add_argument('--hex', required=True, help='Three- or six-digit RGB code, optionally prefixed with #')
             preference.add_argument('--confirm', help='Digest returned by the preview')
             preference.add_argument('--yes', action='store_true')
+    sub.add_parser('settings', help='Read supported own-user interface settings, not mobile keys')
+    preference = sub.add_parser('settings-set', help='Preview only explicitly selected boolean interface preferences')
+    preference.add_argument('--set', dest='changes', action='append', required=True, metavar='KEY=true|false',
+                            help='Repeat for several distinct settings; use settings to see reported keys')
+    preference.add_argument('--confirm', help='Digest returned by the preview')
+    preference.add_argument('--yes', action='store_true')
+    sub.add_parser('dashboard-positions', help='Read saved own dashboard positions, not a complete visible card inventory')
+    for name in ('dashboard-position-set', 'dashboard-order'):
+        preference = sub.add_parser(name, help='Preview own dashboard position changes without changing favorites')
+        if name == 'dashboard-position-set':
+            preference.add_argument('item', type=identifier)
+            preference.add_argument('--context', choices=('course', 'group', 'user'), default='course')
+            preference.add_argument('--position', required=True, type=int, help='Saved position from -1000 through 1000')
+        else:
+            preference.add_argument('assets', nargs='+', metavar='CONTEXT_ID',
+                                    help='Explicit course_ID/group_ID/own user_ID values in desired order; unspecified values remain')
+        preference.add_argument('--confirm', help='Digest returned by the preview')
+        preference.add_argument('--yes', action='store_true')
     sub.add_parser('groups', help='Your active Canvas groups')
     group = sub.add_parser('group', help='One visible group')
     group.add_argument('group', type=identifier)
@@ -712,6 +730,19 @@ def run(args):
             return preferences.color(client, args.item, args.context)
         return preferences.change_color(client, args.item, args.hex, context_type=args.context,
                                         yes=args.yes, confirm=args.confirm)
+    if args.command in ('settings', 'settings-set'):
+        from . import preferences
+        if args.command == 'settings':
+            return preferences.settings(client)
+        return preferences.change_settings(client, preferences.setting_pairs(args.changes),
+                                           yes=args.yes, confirm=args.confirm)
+    if args.command in ('dashboard-positions', 'dashboard-position-set', 'dashboard-order'):
+        from . import preferences
+        if args.command == 'dashboard-positions':
+            return preferences.positions(client)
+        changes = ({f'{args.context}_{args.item}': args.position} if args.command == 'dashboard-position-set' else
+                   preferences.ordered_positions(args.assets))
+        return preferences.change_positions(client, changes, yes=args.yes, confirm=args.confirm)
     if args.command == 'groups':
         return client.list('/api/v1/users/self/groups?per_page=100', args.max_pages)
     if args.command == 'group':
@@ -956,6 +987,9 @@ def brief(data):
     if isinstance(data, dict) and 'color_change' in data:
         record = data['color_change']
         return f"Color {record['asset_string']}: {record['hexcode']}\n{data['note']}"
+    if isinstance(data, dict) and ('settings_change' in data or 'positions_change' in data):
+        changes = data.get('settings_change', data.get('positions_change'))
+        return '\n'.join(f'{key}: {value}' for key, value in changes.items()) + f"\n{data['note']}"
     if isinstance(data, dict) and 'peer_reviews' in data:
         lines = [f"Peer reviews: {data.get('assignment_name') or data['assignment_id']} ({data['scope']})"]
         for review in data['peer_reviews']:

@@ -49,6 +49,11 @@ canvas-pocket color 123
 canvas-pocket color-set 123 --hex '#abc123'
 canvas-pocket color-set 456 --context group --hex 'abc'
 canvas-pocket color-set 789 --context user --hex '123abc'  # 789 must be your own user ID
+canvas-pocket settings
+canvas-pocket settings-set --set manual_mark_as_read=true --set collapse_course_nav=false
+canvas-pocket dashboard-positions
+canvas-pocket dashboard-position-set 123 --position 0
+canvas-pocket dashboard-order course_123 course_456 group_789
 canvas-pocket file-info 789
 canvas-pocket inbox --scope unread --course 123
 canvas-pocket conversation 456
@@ -293,6 +298,10 @@ Adding the first custom favorite can replace the default displayed selection. Re
 `nicknames` lists your saved course aliases with full pagination; `nickname COURSE` shows the actual course name and your optional alias. `nickname-set COURSE --name NAME`, `nickname-clear COURSE` and `nicknames-reset` are preview-first writes requiring `--yes --confirm DIGEST`. Set changes only the calling user's nickname, not the shared course name. Clearing one restores its actual name in your subsequent API responses; resetting clears **all** your course nicknames, not just one course. Names must be nonempty, shorter than 60 characters and free of control characters. An absent nickname is not silently treated as a successful removal.
 
 `colors` and `color ITEM --context course|group|user` report only saved custom colors; an unset custom value is `null`, not a claim about the default UI color. `color-set` accepts a three- or six-digit RGB hex value, previews the exact target and current preference, then requires matching confirmation. User-context changes are restricted to your own personal calendar. Colors affect only your display preferences; there is no documented color-clear endpoint, so Pocket does not invent one. These actions have synthetic HTTPS lifecycle tests, not live write validation. See the [official Users and course-nickname API](https://developerdocs.instructure.com/services/canvas/resources/users).
+
+`settings` reads the known own-user interface booleans and reports keys the deployment did not return. It never requests mobile settings or prints unknown response fields. `settings-set --set KEY=true --set OTHER=false` accepts exact, distinct supported keys; it sends only those fields after an account/current-state-bound preview and matching confirmation. A requested setting missing from the deployment's read response is refused rather than guessed. `manual_mark_as_read` changes future browser discussion read behavior, not existing read markers; feature-gated settings may not visibly affect the current UI. No setting changes automatically during login or ordinary reads.
+
+`dashboard-positions` reads your saved positions, not a complete inventory of visible dashboard cards. `dashboard-position-set ITEM --position N --context course|group|user` sets one position from -1000 through 1000. `dashboard-order course_123 course_456 group_789` assigns positions 0, 1 and 2 in that order. Both preview the current full map and verified targets, then require `--yes --confirm DIGEST`. The API **merges** specified positions; unspecified positions remain, equal positions may be ambiguous, and neither favorites nor card visibility change. User-context writes require your own user ID. These settings/order actions have synthetic HTTPS tests only, not live write validation. They use the [documented Users API and official implementation](https://github.com/instructure/canvas-lms/blob/master/app/controllers/users_controller.rb).
 
 ## Discussion contexts and entry changes
 

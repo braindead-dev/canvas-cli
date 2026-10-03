@@ -6,6 +6,7 @@ def describe():
         'read': [
             'courses', 'doctor', 'find', 'me', 'favorites', 'groups', 'group', 'course-groups',
             'nicknames', 'nickname', 'colors', 'color',
+            'settings', 'dashboard-positions',
             'inbox', 'conversation (no read-state change)', 'recipients',
             'todo', 'upcoming', 'calendar', 'event', 'planner', 'planner-notes', 'planner-note',
             'planner-overrides', 'planner-override', 'module-progress', 'overview', 'deadlines', 'work', 'agenda',
@@ -29,6 +30,7 @@ def describe():
         'canvas_write': [
             'favorite-add/favorite-remove/favorites-reset (own course/group favorites; account-bound preview, displayed-default warning and matching digest required)',
             'nickname-set/nickname-clear/nicknames-reset/color-set (own display preferences; account-bound preview and matching digest required, no shared course renaming)',
+            'settings-set/dashboard-position-set/dashboard-order (selected own interface preferences only; account-bound preview and matching digest required)',
             'event-create/event-edit/event-delete (personal calendar only; account-bound preview and matching digest required)',
             'task-create/task-edit/task-delete (personal planner notes; account-bound preview and matching digest required)',
             'planner-override-create/planner-override-edit/planner-override-delete (planner completion/dismissal; account-bound preview, explicit module-progress acknowledgement for course content)',
