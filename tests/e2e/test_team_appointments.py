@@ -211,3 +211,22 @@ class TeamAppointmentE2E(CanvasFixture):
         malformed = self.invoke('appointment-team-reservations', '503', '13')
         self.assertNotEqual(malformed.returncode, 0)
         self.assertEqual(malformed.stdout, '')
+
+    def test_human_terminal_output_is_inert_while_json_preserves_actual_unicode_source(self):
+        name = 'Synthetic\x1b]52;c;U3ludGhldGlj\x07\r\x9b2J\u202e👩\u200d💻中文'
+        self.team_context['name'] = name
+        human = self.invoke('appointment-team-reservations', '503', '13', '--format', 'brief')
+        self.assertEqual(human.returncode, 0, human.stderr)
+        self.assertFalse(any(ord(char) < 32 and char not in '\t\n' or 0x7f <= ord(char) <= 0x9f for char in human.stdout))
+        self.assertNotIn('\u202e', human.stdout)
+        self.assertIn('\\u001b', human.stdout)
+        self.assertIn('👩\u200d💻中文', human.stdout)
+        structured = self.invoke('appointment-team-reservations', '503', '13')
+        self.assertEqual(structured.returncode, 0, structured.stderr)
+        self.assertEqual(json.loads(structured.stdout)['team']['name'], name)
+
+    def test_literal_surrogate_in_native_metadata_has_a_readable_human_projection(self):
+        self.team_context['name'] = 'Synthetic \ud800 label'
+        human = self.invoke('appointment-team-reservations', '503', '13', '--format', 'brief')
+        self.assertEqual(human.returncode, 0, human.stderr)
+        self.assertIn('Synthetic \\ud800 label', human.stdout)

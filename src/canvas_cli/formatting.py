@@ -2,6 +2,8 @@
 
 import json
 
+from .text import terminal_safe
+
 
 def _diff_lines(diff):
     """A field-name index shared by sync and explicitly selected offline diffs."""
@@ -30,6 +32,10 @@ def _diff_lines(diff):
 
 def brief(data):
     """Small human index. JSON remains the complete representation."""
+    return terminal_safe(_brief(data))
+
+
+def _brief(data):
     if isinstance(data, dict) and 'team_reservations' in data and not data.get('dry_run'):
         team, group = data['team'], data['appointment_group']
         lines = [f"Team {team['id']} | {team.get('name') or '(unnamed)'} | Scheduler group {group['id']}"]

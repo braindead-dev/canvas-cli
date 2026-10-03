@@ -1,6 +1,18 @@
-"""Bounded explicit text-file inputs, with no private data in diagnostics."""
+"""Bounded explicit UTF-8 inputs and inert human-facing terminal text."""
 
 from .client import CanvasError
+
+TERMINAL_ESCAPES = {
+    code: f'\\u{code:04x}' for code in (
+        *range(32), *range(0x7f, 0xa0), *range(0xd800, 0xe000),
+        0x061c, 0x200e, 0x200f, *range(0x202a, 0x202f), *range(0x2066, 0x206a)
+    ) if code not in (9, 10)
+}
+
+
+def terminal_safe(value):
+    """Expose controls/bidi overrides/surrogates, preserving ordinary Unicode, tabs and lines."""
+    return value.translate(TERMINAL_ESCAPES)
 
 
 def read_utf8(path, *, label, max_bytes=40000):

@@ -12,6 +12,27 @@ def snapshot():
 
 
 class DiffFormattingTests(unittest.TestCase):
+    def test_untrusted_names_and_notes_cannot_send_terminal_controls_from_any_summary(self):
+        name = 'Synthetic \x1b]52;c;U3ludGhldGlj\x07 \u202eHidden\u202c'
+        samples = ({'appointment_groups': [{'id': 501, 'title': name, 'participant_type': 'User'}], 'note': name},
+                   {'team': {'id': 11, 'name': name}, 'appointment_group': {'id': 501}, 'team_reservations': [], 'note': name},
+                   {'own_profile': {'name': name}, 'note': name}, [{'id': 101, 'name': name}],
+                   {'unknown_synthetic_record': name})
+        for data in samples:
+            with self.subTest(data=data):
+                result = brief(data)
+                self.assertNotIn('\x1b', result)
+                self.assertNotIn('\x07', result)
+                self.assertNotIn('\u202e', result)
+                self.assertIn('Synthetic', result)
+
+    def test_terminal_projection_does_not_mutate_the_data_used_by_json_or_confirmation(self):
+        record = {'own_profile': {'name': 'Synthetic \x1b[31mname\r\u202e'}, 'note': 'Private metadata'}
+        name = record['own_profile']['name']
+        result = brief(record)
+        self.assertEqual(record['own_profile']['name'], name)
+        self.assertIn('\\u001b[31mname\\u000d\\u202e', result)
+
     def test_brief_diff_names_changes_without_printing_values(self):
         old = snapshot()
         new = {**old, 'captured_at': '2026-10-02T00:00:00Z',

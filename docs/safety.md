@@ -38,6 +38,8 @@ No telemetry/backend/cookie extraction/credential export. Keyring is outside Git
 
 JSON, names, posts, grades, message bodies, links, snapshots, downloads, and exports can be private/copyrighted. Metadata-first is not public-safe. Never publish live outputs/captures.
 
+Human brief output renders C0/C1 terminal controls (except tabs/newlines), bidirectional formatting controls and surrogate codepoints as visible Unicode escapes. Source strings cannot emit color/cursor/title/hyperlink/clipboard commands or hidden bidi overrides. Ordinary Unicode and emoji joiners remain intact. This display boundary does not change JSON data, input files, snapshots, confirmation digests or submitted content; source text still remains untrusted and private.
+
 Private local writes refuse overwrite/Git destinations, including symlinked parents. Known token-shaped fields are stripped from snapshots, not every private fact. Review before sharing.
 
 Ignore rules cover common exports/env/cookie/capture paths but are not a privacy guarantee. Only synthetic fixtures belong in public tests/issues/CI.
@@ -51,3 +53,5 @@ Auth/network/rate-limit/malformed responses fail, not empty success. Permission/
 Own Inbox deletion is not delete-for-all; file removal is irreversible; group/invitation changes can remove access. Read command-specific caveats before confirming.
 
 [Validation](development.md#validation) distinguishes unit, synthetic HTTPS, CI, live reads, and untested real writes.
+
+Terminal handling follows [xterm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html) and Unicode's [Bidi_Control property](https://www.unicode.org/Public/UCD/latest/ucd/PropList.txt).
