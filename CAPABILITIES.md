@@ -14,7 +14,7 @@ canvas schema --search upload
 
 | Area | Implemented | Boundary / next work |
 | --- | --- | --- |
-| [Coursework](docs/coursework.md) | Assignment/deadline/own-status views, missing work, grades, feedback/rubrics, module progress | Feeds are not complete coursework/owed-review inventories; unknown stays unknown |
+| [Coursework](docs/coursework.md) | Assignment/deadline/own-status views, missing work, grades, feedback/rubrics, module progress, scoped item inspection and native previous/next sequences; verified preview-first own done/not-done/read events | Sequence is capped at ten occurrences; feeds are not complete coursework/owed-review inventories; reads do not simulate submissions/scores; planner/downstream effects stay unverified |
 | [Submission](docs/coursework.md#turn-in-work-deliberately) | Previewed text/URL/multi-file submission and comments; assignment-file staging | Upload is not submission; final permission/group acceptance stays native |
 | [Content](docs/content.md) | Visible course/group pages, files, folders, navigation, search, access diagnostics; RCE history and previewed shared create/edit/restore/delete/duplicate/schedule with native permissions, exact IDs and separate readback | Course RCE scheduling verifies an enabled root feature and stored draft/date, not future jobs; duplication verifies assignment lineage/differences; deletion acknowledges cascades; wiki writes are not atomic; block authoring and group/linked scheduling remain open |
 | [Local snapshots](docs/content.md#private-snapshots) | Private capture, account-separated sync, offline diff/search/Markdown | No legacy automatic merge; incremental resource sync remains open |

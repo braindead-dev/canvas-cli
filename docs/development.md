@@ -43,6 +43,7 @@ tests/
     page_deletion.py  native soft-delete evidence and assignment cascades
     page_duplication.py  native course copies and assignment lineage
     page_scheduling.py  native publication callbacks reusing the RCE fixture
+    module_items.py  own progression events, pagination and Horizon read-side effects
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 

@@ -63,13 +63,34 @@ Reads never include `read_status`, submit, start attempts, or grade.
 ```sh
 canvas outline 123
 canvas module-progress 123 --format brief
+canvas module-item 123 234 345 --format brief
+canvas module-sequence 123 ModuleItem 345 --format brief
+canvas module-sequence 123 Page welcome
 canvas quizzes 123
 canvas new-quizzes 123
 ```
 
-Outline fetches module items separately because embedded lists may be capped/omitted. Progress preserves all/one rules and completed/incomplete/unknown/not-required states. Locked modules are not opened; denied item inventories remain partial. No view/completion event is sent.
+Outline fetches module items separately because embedded lists may be capped/omitted. Progress preserves all/one rules and completed/incomplete/unknown/not-required states. Locked modules are not opened; denied item inventories remain partial. No explicit view/completion event is sent. Native evaluation can materialize/recalculate progression records.
+
+Single-item inspection uses the complete paginated list, avoiding the single-item GET that can mark content read in Horizon courses. It checks the exact course/module/item and reports whitelisted metadata, requirements and a Canvas navigation link, not external launch URLs or content bodies. Locked content metadata can be reported without opening it. Missing completion is unknown.
+
+Sequence returns native previous/current/next neighbors for a module-item ID or a File/Page/Discussion/Assignment/Quiz/ExternalTool asset. Page uses a URL slug, not an absolute URL. Prefer ModuleItem for one exact occurrence. Quiz/discussion items can point to an associated assignment; that ID is checked separately when needed. Canvas limits results to ten occurrences, which may be incomplete. Lock/completion status is not probed. Mastery-path flags/set IDs are metadata only; no path is chosen and no supplied content/launch URL is followed.
 
 Classic quiz takes a quiz ID; New Quiz takes its assignment ID. Both expose metadata, never questions/attempts. Permissions/deployed engine can deny listings.
+
+## Explicit module progress
+
+```sh
+canvas module-item-done 123 234 345 --acknowledge-module-progress
+canvas module-item-not-done 123 234 345 --acknowledge-module-progress
+canvas module-item-mark-read 123 234 345 --acknowledge-module-progress --acknowledge-content-viewed
+```
+
+These are [preview-first](safety.md#confirmation) own-student events. Done/not-done requires an actual reported `must_mark_done` checkbox, never a score/submission/contribution requirement. Mark-read is for content already accessed separately; the CLI does not open a page/file, launch LTI, or start a quiz. Only an actual `must_view` requirement can verify that read event's completion; otherwise the result explicitly says the stored view event is unverifiable.
+
+Previews bind own identity, native participation permission, course, module policy and the full item inventory. A localized native “OK” is not proof: a separate paginated read verifies the selected requirement state and stable metadata. Unknown/malformed state, locks, truncated inventories, stale previews and already-selected checkbox states fail without an event. No automatic retry or rollback.
+
+Done/not-done may sync your planner checkbox; completing a module can change downstream availability or publish an existing final grade to the SIS when configured. Policy is shown in the preview. Those downstream/planner/SIS effects are not independently verified, and confirmation is not an atomic lock. No shared module edits, assessment attempts, submissions or grade edits are requested.
 
 ## Turn in work deliberately
 
@@ -90,3 +111,5 @@ Comments are not submissions. Group/graded work may have a shared audience; revi
 ## Sources
 
 [Assignments](https://developerdocs.instructure.com/services/canvas/resources/assignments), [Submissions](https://developerdocs.instructure.com/services/canvas/resources/submissions), [Modules](https://developerdocs.instructure.com/services/canvas/resources/modules), [New Quizzes](https://developerdocs.instructure.com/services/canvas/resources/new_quizzes).
+
+[Native module events and Horizon reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/context_module_items_api_controller.rb), [Sequence association and ten-occurrence limit](https://github.com/instructure/canvas-lms/blob/master/app/helpers/application_helper.rb).

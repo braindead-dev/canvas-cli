@@ -136,6 +136,19 @@ def execute(client, args):
     if args.command == 'module-progress':
         from .progress import module_progress
         return module_progress(client, args.course, args.max_pages)
+    if args.command == 'module-sequence':
+        from .module_navigation import sequence
+        return sequence(client, args.course_id, args.asset_type, args.asset_id)
+    if args.command in ('module-item', 'module-item-done', 'module-item-not-done', 'module-item-mark-read'):
+        from . import module_items
+        if args.command == 'module-item':
+            return module_items.read(client, args.course_id, args.module_id, args.item_id, max_pages=args.max_pages)
+        return module_items.change(client, args.course_id, args.module_id, args.item_id,
+                                   {'module-item-done': 'done', 'module-item-not-done': 'not-done',
+                                    'module-item-mark-read': 'read'}[args.command],
+                                   acknowledge_progress=args.acknowledge_module_progress,
+                                   acknowledge_viewed=getattr(args, 'acknowledge_content_viewed', False),
+                                   max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('exports', 'export-status', 'export-create', 'export-download'):
         from . import content_exports
         if args.command == 'exports':

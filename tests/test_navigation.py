@@ -63,7 +63,7 @@ class NavigationTests(unittest.TestCase):
                 command_help(parser(), **kwargs)
 
     def test_native_get_side_effects_are_not_classified_as_side_effect_free(self):
-        for name in ('notification-preferences', 'root-folder', 'my-root', 'folder-path', 'get'):
+        for name in ('notification-preferences', 'root-folder', 'my-root', 'folder-path', 'get', 'module-progress', 'module-item', 'module-sequence'):
             self.assertEqual(command_help(parser(), name)['safety'], 'Canvas GET (server-side effects possible)')
         self.assertEqual(command_help(parser(), 'channels')['safety'], 'Read-only')
         self.assertEqual(command_help(parser(), 'notification-preferences-set')['safety'], 'Canvas writes (preview-first)')

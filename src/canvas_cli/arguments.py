@@ -279,6 +279,22 @@ def parser():
     _confirmation(remove_task)
     progress = sub.add_parser('module-progress', help='Read visible module requirements and completion status')
     progress.add_argument('course', type=identifier)
+    sequence = sub.add_parser('module-sequence', help='Native previous/next asset occurrences, at most ten; no content navigation or mastery choice')
+    sequence.add_argument('course_id', type=identifier)
+    sequence.add_argument('asset_type', choices=('ModuleItem', 'File', 'Page', 'Discussion', 'Assignment', 'Quiz', 'ExternalTool'))
+    sequence.add_argument('asset_id', help='Positive numeric asset ID, or one page URL slug for Page')
+    for name in ('module-item', 'module-item-done', 'module-item-not-done', 'module-item-mark-read'):
+        item = sub.add_parser(name, help='Inspect one scoped item or preview an explicit own module event, never an assessment attempt')
+        item.add_argument('course_id', type=identifier)
+        item.add_argument('module_id', type=identifier)
+        item.add_argument('item_id', type=identifier)
+        if name != 'module-item':
+            item.add_argument('--acknowledge-module-progress', action='store_true',
+                              help='Acknowledge own planner/module unlocking and configured SIS completion effects')
+            if name == 'module-item-mark-read':
+                item.add_argument('--acknowledge-content-viewed', action='store_true',
+                                  help='Use only after accessing the content separately; the CLI does not open it')
+            _confirmation(item)
     exports = sub.add_parser('exports', help='List authorized course export jobs without signed download URLs')
     exports.add_argument('course', type=identifier)
     export_status = sub.add_parser('export-status', help='Read one export job without creating a new job')

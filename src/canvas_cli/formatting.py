@@ -36,6 +36,27 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'module_sequence' in data:
+        lines = [f"Course {data['course_id']} | {data['asset_type']} {data['asset_id']} | {data['matched_occurrences']} occurrence(s)"]
+        for node in data['module_sequence']:
+            for key in ('prev', 'current', 'next'):
+                item = node[key]
+                lines.append(f"{key}: {item['title']} ({item['id']}) | {item['html_url']}" if item else f'{key}: none')
+            if node['mastery_path']:
+                lines.append('Mastery-path metadata is reported; see JSON. No choice was made.')
+        if data['at_native_limit']:
+            lines.append('At the native ten-occurrence limit; additional occurrences may exist.')
+        return '\n'.join([*lines, data['note']])
+    if isinstance(data, dict) and 'module_item' in data and not data.get('dry_run'):
+        item = data['module_item']
+        lines = [f"Course {data['course_id']} module {data['module']['id']} item {item['id']}",
+                 f"{item['title']} | {item['type']} | {item['completion']}", item['html_url']]
+        if item['locked_for_user']:
+            lines.append('Content is locked for this user; no content was opened.')
+        if data.get('event_acknowledged'):
+            lines.append('Native event acknowledged; requirement state ' +
+                         ('verified.' if data['requirement_status_verified'] is True else 'not verifiable for this read event.'))
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'scheduled_page' in data:
         page = data['scheduled_page']
         date = page['publish_at'] or 'cancelled'
