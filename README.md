@@ -38,6 +38,12 @@ canvas-pocket favorite-remove 456 --context group
 canvas-pocket favorites-reset --context course
 canvas-pocket groups
 canvas-pocket course-groups 123
+canvas-pocket course-users 123 --enrollment-type teacher --enrollment-type ta --include-enrollments
+canvas-pocket course-users 123 --search 'Example Name' --section 456
+canvas-pocket group-users 789 --exclude-inactive
+canvas-pocket group-membership 789
+canvas-pocket group-join 789  # preview; student-organized/community groups only
+canvas-pocket group-leave 789  # preview; never another user's membership
 canvas-pocket my-files --search 'paper'
 canvas-pocket nicknames
 canvas-pocket nickname 123
@@ -318,6 +324,16 @@ canvas-pocket submission-comment 123 456 --message-file question.txt --yes --con
 ```
 
 Discussion-post and text-entry submission inputs are plain UTF-8 text, safely escaped to HTML. Discussion posts also re-check the topic ID, title and lock state before a separately confirmed send. Inbox replies use the plain UTF-8 body specified by the Canvas API. URL submissions read one absolute HTTP(S) URL from a file, keeping private URLs out of shell history. Assignment submission previews check the current assignment ID, publication/lock state and allowed type, then require `--yes` with a matching digest from the preview. These commands can publish real content under your account. Follow your course rules and review the destination and content. Writes are never retried automatically; after a timeout verify Canvas before retrying. The guarded send routes have synthetic TLS end-to-end tests; URL preview was tested against a live assignment, but no live submission was made. The CLI does not take quizzes, change grades, or bypass initial-post restrictions.
+
+## Rosters and own group membership
+
+`course-users COURSE` and `group-users GROUP` fully paginate the native authorized roster. `--search` performs a native partial-name/full-ID search. Course rosters support repeated `--enrollment-type`, `--enrollment-state` and `--section` filters; `--include-enrollments` opts into course/user-verified role/state/section metadata, **never grades**. Group rosters support explicit `--exclude-inactive` or `--no-exclude-inactive`; omission preserves the native default. Names/Canvas IDs are shown, email only with `--include-email` and only if Canvas returns it. SIS/login IDs, biographies, avatars, analytics and unknown private fields are never projected. Live roster output is private, not suitable for a public repository.
+
+Completeness means the entire authorized endpoint **for those filters**, not everyone in the institution/course. Native section restrictions can omit people. A group's reported member count and optional `is_full` are separate from the returned roster; Pocket never infers capacity from a visible count or relies on the capped `include[]=users` shortcut. A denied or truncated roster is an error, not an empty success.
+
+`group-membership GROUP` reads the fully paginated membership endpoint but emits **only your own** accepted membership, invitation or request. No active record returned does not prove that no deleted/rejected membership ever existed. Requests/invitations are not accepted membership. Reading does not join, leave, mark messages read or change enrollment; Canvas may log access analytics.
+
+`group-join GROUP` and `group-leave GROUP` require a fresh account/group/current-membership-bound preview and matching `--yes --confirm DIGEST`. They use only `user_id=self` or the own `/users/self` route, require an explicit native join/leave permission, and refuse project groups, unknown group types, concluded contexts and differentiation tags. This first write surface is limited to the native `student_organized`/`communities` roles, which allow multiple memberships. Project group-set switches can implicitly remove another membership and recompute submissions; those require a separate future workflow. Invitation-only acceptance and moderation are not implemented. Already accepted/pending joins are refused rather than duplicated. Join acknowledgement reports the actual returned native state; a request is not reported as accepted. Leaving can remove content access or cancel a pending request/invitation, and native notifications may be sent. No other user's membership/moderator role is changed. Preflight checks are not an atomic server-side lock. Ambiguous outcomes are never retried and must be checked in Canvas before repeating. Roster and membership lifecycles have synthetic HTTPS tests only, not live write validation. See the [official Groups API](https://developerdocs.instructure.com/services/canvas/resources/groups), [course roster API](https://developerdocs.instructure.com/services/canvas/resources/courses) and [native membership-role rules](https://github.com/instructure/canvas-lms/blob/master/app/models/group_category.rb).
 
 ## Peer-review read scope
 

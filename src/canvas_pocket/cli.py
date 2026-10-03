@@ -144,6 +144,27 @@ def parser():
     group.add_argument('group', type=identifier)
     course_groups = sub.add_parser('course-groups', help='Visible groups in a course')
     course_groups.add_argument('course', type=identifier)
+    for name in ('course-users', 'group-users'):
+        roster = sub.add_parser(name, help='Fully paginate an authorized roster; metadata only by default')
+        roster.add_argument('context_id', type=identifier)
+        roster.add_argument('--search', help='Native partial name/full ID search, at least two characters')
+        roster.add_argument('--include-email', action='store_true', help='Print email only if authorized and returned; never SIS/login IDs')
+        if name == 'course-users':
+            from .roster import ENROLLMENT_STATES, ENROLLMENT_TYPES
+            roster.add_argument('--enrollment-type', choices=ENROLLMENT_TYPES, action='append', default=[])
+            roster.add_argument('--enrollment-state', choices=ENROLLMENT_STATES, action='append', default=[])
+            roster.add_argument('--section', type=identifier, action='append', default=[])
+            roster.add_argument('--include-enrollments', action='store_true', help='Include scoped enrollment metadata, never grades')
+        else:
+            roster.add_argument('--exclude-inactive', action=argparse.BooleanOptionalAction, default=None,
+                                help='Explicit native inactive-user filter; omitted preserves the native default')
+    membership = sub.add_parser('group-membership', help='Your active membership/request/invitation only, with complete pagination')
+    membership.add_argument('group', type=identifier)
+    for name in ('group-join', 'group-leave'):
+        membership = sub.add_parser(name, help='Preview only your student-organized/community membership change')
+        membership.add_argument('group', type=identifier)
+        membership.add_argument('--confirm', help='Digest returned by the preview')
+        membership.add_argument('--yes', action='store_true')
     doctor = sub.add_parser('doctor', help='Read-only course API reachability check without content output')
     doctor.add_argument('course', type=identifier)
     finder = sub.add_parser('find', help='Search visible titles across several areas of one course')
@@ -852,6 +873,22 @@ def run(args):
         return client.request(f'/api/v1/groups/{args.group}')[0]
     if args.command == 'course-groups':
         return client.list(f'/api/v1/courses/{args.course}/groups?per_page=100', args.max_pages)
+    if args.command in ('course-users', 'group-users'):
+        from .roster import listing
+        return listing(client, args.context_id, 'course' if args.command == 'course-users' else 'group', args.max_pages,
+                       search=args.search, include_email=args.include_email,
+                       enrollment_types=getattr(args, 'enrollment_type', ()),
+                       enrollment_states=getattr(args, 'enrollment_state', ()),
+                       sections=getattr(args, 'section', ()),
+                       include_enrollments=getattr(args, 'include_enrollments', False),
+                       exclude_inactive=getattr(args, 'exclude_inactive', None))
+    if args.command == 'group-membership':
+        from .group_membership import read
+        return read(client, args.group, args.max_pages)
+    if args.command in ('group-join', 'group-leave'):
+        from .group_membership import change
+        return change(client, args.group, args.command.split('-')[1], max_pages=args.max_pages,
+                      yes=args.yes, confirm=args.confirm)
     if args.command == 'doctor':
         from .doctor import course_doctor
         return course_doctor(client, args.course)
@@ -1092,6 +1129,20 @@ def brief(data):
             lines.append('No matching commands. Try help without --search.')
         lines.append(data['note'])
         return '\n'.join(lines)
+    if isinstance(data, dict) and 'returned_user_count' in data and 'users' in data:
+        lines = [f"Visible roster ({data['context_type']} {data[data['context_type'] + '_id']}): {data['returned_user_count']} returned"]
+        for row in data['users']:
+            lines.append(f"{row['id']} | {row.get('name') or row.get('short_name') or '(name unavailable)'}" +
+                         (f" | {row['email']}" if row.get('email') is not None else ''))
+            for enrollment in row.get('enrollments', []):
+                lines.append(f"  {enrollment.get('type') or 'unknown role'} | {enrollment.get('enrollment_state') or 'unknown state'}" +
+                             (f" | section {enrollment['course_section_id']}" if 'course_section_id' in enrollment else ''))
+        lines.append(data['note'])
+        return '\n'.join(lines)
+    if isinstance(data, dict) and 'membership' in data:
+        item = data['membership']
+        state = item['workflow_state'] if item else 'no active record returned'
+        return f"Own group membership ({data['group_id']}): {state}\n{data['note']}"
     if isinstance(data, dict) and data.get('context_type') == 'group' and 'resource' in data and 'items' in data:
         return (f"Group {data['group_id']} {data['resource']}: {data.get('group_name') or '(unnamed)'}\n" +
                 brief(data['items']) + f"\n{data['note']}")

@@ -5,6 +5,7 @@ def describe():
     return {
         'read': [
             'courses', 'doctor', 'find', 'me', 'favorites', 'groups', 'group', 'course-groups',
+            'course-users', 'group-users', 'group-membership',
             'nicknames', 'nickname', 'colors', 'color',
             'settings', 'dashboard-positions',
             'channels',
@@ -36,6 +37,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'group-join/group-leave (own student-organized/community groups only; explicit native permission, account/group/current-membership-bound preview and matching digest required)',
             'favorite-add/favorite-remove/favorites-reset (own course/group favorites; account-bound preview, displayed-default warning and matching digest required)',
             'nickname-set/nickname-clear/nicknames-reset/color-set (own display preferences; account-bound preview and matching digest required, no shared course renaming)',
             'settings-set/dashboard-position-set/dashboard-order (selected own interface preferences only; account-bound preview and matching digest required)',

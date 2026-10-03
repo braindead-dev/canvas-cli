@@ -78,6 +78,24 @@ class E2E(unittest.TestCase):
         cls.upload_denied = False
         cls.upload_ack_patch = {}
         cls.upload_readback_patch = {}
+        cls.membership_group_options = {'role': 'student_organized', 'group_category_id': 3,
+                                        'non_collaborative': False, 'concluded': False,
+                                        'join_level': 'parent_context_auto_join', 'members_count': 20, 'is_full': False}
+        cls.group_memberships = [{'id': 72, 'group_id': 11, 'user_id': 8, 'workflow_state': 'accepted', 'moderator': False}]
+        cls.membership_permissions = {'join': True, 'leave': True}
+        cls.membership_ack = 'normal'
+        cls.membership_denied = False
+        cls.membership_write = None
+        cls.roster_users = [
+            {'id': 7, 'name': 'Synthetic teacher', 'email': 'synthetic-roster-contact@example.edu',
+             'sis_user_id': 'synthetic-private-roster-sis', 'login_id': 'synthetic-private-roster-login',
+             'avatar_url': 'https://storage.example.edu/?token=synthetic-private-roster-avatar',
+             'enrollments': [{'id': 27, 'course_id': 101, 'user_id': 7, 'course_section_id': 31,
+                              'type': 'TeacherEnrollment', 'enrollment_state': 'active',
+                              'grades': {'current_score': 100}}]},
+            {'id': 8, 'name': 'Synthetic TA', 'email': 'synthetic-roster-ta@example.edu',
+             'enrollments': [{'id': 28, 'course_id': 101, 'user_id': 8, 'course_section_id': 32,
+                              'type': 'TaEnrollment', 'enrollment_state': 'invited', 'grades': {'current_score': 99}}]}]
         cls.activity_hidden_ids = set()
         cls.activity_items = [
             {'id': 71, 'type': 'Conversation', 'conversation_id': 12, 'title': 'Synthetic activity message',
@@ -126,6 +144,8 @@ class E2E(unittest.TestCase):
                     self.send_response(302)
                     self.send_header('Location', '/api/v1/users/self/profile')
                     self.end_headers(); return
+                if self.path.startswith('/api/v1/courses/102/users?'):
+                    self.send_response(403); self.end_headers(); return
                 if self.path.startswith(('/api/v1/courses/101/files?per_page=',
                                          '/api/v1/courses/103/files?per_page=')):
                     self.send_response(403); self.end_headers(); return
@@ -143,7 +163,24 @@ class E2E(unittest.TestCase):
                     self.send_response(404); self.end_headers(); return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
-                if self.path == '/api/v1/courses?per_page=100':
+                if self.path.startswith(('/api/v1/courses/101/users?', '/api/v1/groups/11/users?')):
+                    query = parse_qs(urlsplit(self.path).query)
+                    if 'page=2' not in self.path:
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = []
+                    else:
+                        data = [{**row} for row in cls.roster_users]
+                        if 'enrollments' not in query.get('include[]', []):
+                            data = [{key: value for key, value in row.items() if key != 'enrollments'} for row in data]
+                elif self.path.startswith('/api/v1/groups/11/memberships?'):
+                    if 'page=2' not in self.path:
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = []
+                    else:
+                        data = cls.group_memberships
+                elif self.path.startswith('/api/v1/groups/11/permissions?'):
+                    data = cls.membership_permissions
+                elif self.path == '/api/v1/courses?per_page=100':
                     self.send_header('Link', '</api/v1/courses?page=2>; rel="next"')
                     data = [{'id': 101, 'name': 'Synthetic course'}]
                 elif self.path == '/api/v1/courses?page=2': data = [{'id': 102}]
@@ -515,6 +552,8 @@ class E2E(unittest.TestCase):
                                    '/api/v1/groups/11', '/api/v1/groups/12'):
                     context = 'group' if '/groups/' in self.path else 'course'
                     data = next(row for row in cls.favorite_defaults[context] if row['id'] == int(self.path.rsplit('/', 1)[1]))
+                    if self.path == '/api/v1/groups/11':
+                        data = {**data, **cls.membership_group_options}
                 elif self.path == '/api/v1/conversations?per_page=100&scope=unread':
                     data = [{'id': 12, 'subject': 'Synthetic inbox thread'}]
                 elif self.path == '/api/v1/conversations/12?auto_mark_as_read=false':
@@ -544,6 +583,25 @@ class E2E(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if self.path in ('/api/v1/groups/11/memberships', '/api/v1/groups/11/users/self'):
+                    if cls.membership_denied:
+                        self.send_response(403); self.end_headers(); return
+                    cls.membership_write = body
+                    if self.command == 'POST':
+                        own = {'id': 71, 'group_id': 11, 'user_id': 7, 'moderator': False,
+                               'workflow_state': 'requested' if cls.membership_group_options['role'] == 'communities' and
+                               cls.membership_group_options['join_level'] == 'parent_context_request' else 'accepted'}
+                        cls.group_memberships = [row for row in cls.group_memberships if row['user_id'] != 7] + [own]
+                        data = own
+                    elif self.command == 'DELETE':
+                        cls.group_memberships = [row for row in cls.group_memberships if row['user_id'] != 7]
+                        data = {'ok': True}
+                    else:
+                        self.send_response(400); self.end_headers(); return
+                    if cls.membership_ack == 'ambiguous':
+                        data = {'private': 'Synthetic never log membership error'}
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(json.dumps(data).encode()); return
                 if self.path.startswith('/api/v1/users/self/activity_stream'):
                     if self.path == '/api/v1/users/self/activity_stream':
                         cls.activity_hidden_ids.update(row['id'] for row in cls.activity_items)
@@ -750,6 +808,168 @@ class E2E(unittest.TestCase):
         r = self.invoke('courses')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([x['id'] for x in json.loads(r.stdout)], [101, 102])
+
+    def test_rosters_paginate_encode_filters_and_project_private_fields_over_tls(self):
+        before = len(self.calls)
+        result = self.invoke('course-users', '101', '--search', 'Example & Name',
+                             '--enrollment-type', 'teacher', '--enrollment-type', 'ta',
+                             '--enrollment-state', 'active', '--enrollment-state', 'invited',
+                             '--section', '32', '--section', '31', '--include-enrollments')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data['complete_for_endpoint'])
+        self.assertEqual([row['id'] for row in data['users']], [7, 8])
+        self.assertEqual(data['users'][1]['enrollments'][0]['enrollment_state'], 'invited')
+        self.assertNotIn('synthetic-private-roster', result.stdout)
+        self.assertNotIn('synthetic-roster-contact', result.stdout)
+        self.assertNotIn('grades', str(data['users']))
+        calls = self.calls[before:]
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(method == 'GET' for method, _ in calls))
+        query = parse_qs(urlsplit(calls[1][1]).query)
+        self.assertEqual(query['search_term'], ['Example & Name'])
+        self.assertEqual(query['enrollment_type[]'], ['ta', 'teacher'])
+        self.assertEqual(query['section_ids[]'], ['31', '32'])
+        self.assertEqual(query['include[]'], ['enrollments'])
+        result = self.invoke('group-users', '11', '--no-exclude-inactive', '--include-email', '--format', 'brief')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Visible roster (group 11): 2 returned', result.stdout)
+        self.assertIn('synthetic-roster-contact@example.edu', result.stdout)
+        self.assertNotIn('synthetic-private-roster', result.stdout)
+        self.assertEqual(parse_qs(urlsplit(self.calls[-1][1]).query)['exclude_inactive'], ['false'])
+        result = self.invoke('group-users', '11')
+        data = json.loads(result.stdout)
+        self.assertEqual(data['returned_user_count'], 2)
+        self.assertEqual(data['reported_members_count'], 20)
+        self.assertFalse(data['native_is_full'])
+        self.assertNotIn('exclude_inactive', urlsplit(self.calls[-1][1]).query)
+
+    def test_roster_denied_truncated_invalid_and_foreign_enrollments_emit_no_partial_success(self):
+        original = list(self.roster_users)
+        try:
+            for command in (('course-users', '102'), ('course-users', '101', '--max-pages', '1'),
+                            ('group-users', '11', '--max-pages', '1')):
+                result = self.invoke(*command)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(result.stdout, '')
+            before = len(self.calls)
+            result = self.invoke('course-users', '101', '--search', 'x')
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(self.calls[before:], [])
+            type(self).roster_users = [*original, original[0]]
+            result = self.invoke('group-users', '11')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('duplicate', result.stderr)
+            self.assertEqual(result.stdout, '')
+            type(self).roster_users = [{**original[0], 'enrollments': [{**original[0]['enrollments'][0], 'course_id': 102}]}]
+            result = self.invoke('course-users', '101', '--include-enrollments')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('outside the requested course/user', result.stderr)
+            self.assertEqual(result.stdout, '')
+        finally:
+            type(self).roster_users = original
+
+    def test_own_group_membership_join_request_leave_lifecycle_is_preview_first(self):
+        original_members, original_options = list(self.group_memberships), self.membership_group_options.copy()
+        try:
+            before = len(self.calls)
+            result = self.invoke('group-membership', '11')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIsNone(json.loads(result.stdout)['membership'])
+            for role, level, expected_state in (('student_organized', 'parent_context_auto_join', 'accepted'),
+                                                 ('communities', 'parent_context_request', 'requested')):
+                self.membership_group_options.update(role=role, join_level=level)
+                for action in ('join', 'leave'):
+                    command = ('group-' + action, '11')
+                    start = len(self.calls)
+                    preview = self.invoke(*command)
+                    self.assertEqual(preview.returncode, 0, preview.stderr)
+                    data = json.loads(preview.stdout)
+                    self.assertEqual(data['user_id'], 7)
+                    self.assertTrue(all(method == 'GET' for method, _ in self.calls[start:]))
+                    refused = self.invoke(*command, '--yes', '--confirm', 'wrong')
+                    self.assertEqual(refused.returncode, 1)
+                    self.assertTrue(all(method == 'GET' for method, _ in self.calls[start:]))
+                    result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    accepted = json.loads(result.stdout)
+                    self.assertTrue(accepted['acknowledged'])
+                    self.assertEqual(self.membership_write, {'user_id': 'self'} if action == 'join' else {})
+                    self.assertEqual([call for call in self.calls[start:] if call[0] != 'GET'], [(data['method'], data['route'])])
+                    self.assertEqual([row for row in self.group_memberships if row['user_id'] == 8], original_members)
+                    self.assertEqual(accepted['membership']['workflow_state'] if action == 'join' else accepted['membership'],
+                                     expected_state if action == 'join' else None)
+                    current = self.invoke('group-membership', '11', '--format', 'brief')
+                    self.assertEqual(current.returncode, 0, current.stderr)
+                    self.assertIn(expected_state if action == 'join' else 'no active record returned', current.stdout)
+            self.assertFalse(any('/courses/' in route or '/users/8' in route for _, route in self.calls[before:]))
+        finally:
+            type(self).group_memberships = original_members
+            type(self).membership_group_options = original_options
+
+    def test_group_membership_guard_stale_preview_and_truncated_inventory_never_write(self):
+        original_members, original_options = list(self.group_memberships), self.membership_group_options.copy()
+        original_permissions = self.membership_permissions.copy()
+        try:
+            before = len(self.calls)
+            preview = self.invoke('group-join', '11')
+            digest = json.loads(preview.stdout)['confirm']
+            self.membership_group_options['join_level'] = 'parent_context_request'
+            result = self.invoke('group-join', '11', '--yes', '--confirm', digest)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Preview changed', result.stderr)
+            for options in ({'role': None}, {'non_collaborative': True}, {'concluded': True}):
+                self.membership_group_options.update(options)
+                result = self.invoke('group-join', '11')
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('project groups', result.stderr)
+                self.membership_group_options.update(original_options)
+            self.membership_permissions['join'] = False
+            result = self.invoke('group-join', '11')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('explicitly grant', result.stderr)
+            self.membership_permissions.update(original_permissions)
+            result = self.invoke('group-join', '11', '--max-pages', '1')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Page limit', result.stderr)
+            self.group_memberships.append({'id': 71, 'group_id': 12, 'user_id': 7, 'workflow_state': 'accepted', 'moderator': False})
+            result = self.invoke('group-membership', '11')
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, '')
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).group_memberships = original_members
+            type(self).membership_group_options = original_options
+            type(self).membership_permissions = original_permissions
+
+    def test_ambiguous_and_denied_membership_writes_are_never_retried(self):
+        original_members = list(self.group_memberships)
+        try:
+            for action in ('join', 'leave'):
+                for mode in ('denied', 'ambiguous'):
+                    type(self).group_memberships = list(original_members)
+                    if action == 'leave':
+                        self.group_memberships.append({'id': 71, 'group_id': 11, 'user_id': 7,
+                                                       'workflow_state': 'accepted', 'moderator': False})
+                    command = ('group-' + action, '11')
+                    preview = self.invoke(*command)
+                    self.assertEqual(preview.returncode, 0, preview.stderr)
+                    data = json.loads(preview.stdout)
+                    type(self).membership_denied = mode == 'denied'
+                    type(self).membership_ack = mode
+                    before = len(self.calls)
+                    result = self.invoke(*command, '--yes', '--confirm', data['confirm'])
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stdout, '')
+                    self.assertNotIn('Synthetic never log', result.stderr)
+                    self.assertIn('denied access' if mode == 'denied' else 'may have succeeded', result.stderr)
+                    self.assertEqual([call for call in self.calls[before:] if call[0] != 'GET'], [(data['method'], data['route'])])
+                    type(self).membership_denied = False
+                    type(self).membership_ack = 'normal'
+        finally:
+            type(self).group_memberships = original_members
+            type(self).membership_denied = False
+            type(self).membership_ack = 'normal'
 
     def test_nickname_lifecycle_is_account_bound_and_preserves_actual_course_name(self):
         original = self.course_nicknames.copy()
