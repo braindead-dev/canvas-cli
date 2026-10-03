@@ -373,6 +373,13 @@ def parser():
     submission = sub.add_parser('submission', help='Read your own assignment submission and feedback')
     submission.add_argument('course', type=identifier)
     submission.add_argument('assignment', type=identifier)
+    submissions = sub.add_parser('submissions', help='Read only your own course submission records, with opt-in history')
+    submissions.add_argument('course', type=identifier)
+    submissions.add_argument('--assignment', type=identifier, action='append', help='Limit to an assignment; repeatable')
+    submissions.add_argument('--state', choices=('submitted', 'unsubmitted', 'graded', 'pending_review'))
+    submissions.add_argument('--include-history', action='store_true')
+    submissions.add_argument('--include-comments', action='store_true', help='Comment metadata; bodies require --include-content')
+    submissions.add_argument('--include-content', action='store_true', help='Opt in to private bodies, attachment links and feedback text')
     peer_reviews = sub.add_parser('peer-reviews', help='Read reviews of your submission, not a complete list of reviews you owe')
     peer_reviews.add_argument('course', type=identifier)
     peer_reviews.add_argument('assignment', type=identifier)
@@ -955,6 +962,11 @@ def run(args):
         return client.request(base + f'/{resource}/{args.item}')[0]
     if args.command == 'submission':
         return client.request(base + f'/assignments/{args.assignment}/submissions/self?include[]=submission_comments&include[]=rubric_assessment')[0]
+    if args.command == 'submissions':
+        from .submissions import read
+        return read(client, args.course, args.max_pages, assignment_ids=args.assignment, state=args.state,
+                    include_history=args.include_history, include_comments=args.include_comments,
+                    include_content=args.include_content)
     if args.command == 'peer-reviews':
         from .peer_reviews import read
         return read(client, args.course, args.assignment, args.max_pages, scope=args.scope,
@@ -1070,6 +1082,16 @@ def brief(data):
     if isinstance(data, dict) and 'discussion_rating' in data:
         row = data['discussion_rating']
         return f"Entry {row['entry_id']}: {'liked' if row['rating'] == 1 else 'like removed'}\n{data['note']}"
+    if isinstance(data, dict) and 'submissions' in data:
+        lines = [f"Own submissions: course {data['course_id']}"]
+        for row in data['submissions']:
+            assignment = row.get('assignment') or {}
+            lines.append(f"{row['assignment_id']} | {assignment.get('name') or '(unknown title)'} | "
+                         f"{row.get('workflow_state') or 'unknown'} | attempt {row.get('attempt', 'unknown')}")
+            if row.get('grade_matches_current_submission') is False:
+                lines.append('  Grade does not match the current submission attempt.')
+        lines.append(data['note'])
+        return '\n'.join(lines)
     if isinstance(data, dict) and 'activity_summary' in data:
         return '\n'.join(f"{row['type']}" + (f" ({row['notification_category']})" if row.get('notification_category') else '') +
                          f": {row['unread_count']} unread / {row['count']} notifications"

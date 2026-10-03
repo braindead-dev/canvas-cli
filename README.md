@@ -79,6 +79,9 @@ canvas-pocket overview
 canvas-pocket --format brief overview
 canvas-pocket deadlines --days 30
 canvas-pocket work --days 30
+canvas-pocket submissions 123 --state submitted
+canvas-pocket submissions 123 --assignment 456 --include-history
+canvas-pocket submissions 123 --include-comments --include-content
 canvas-pocket --format brief missing --timezone America/Los_Angeles
 canvas-pocket missing --course 123 --course 456 --submittable --current-grading-period
 canvas-pocket missing --include-planner
@@ -315,6 +318,12 @@ Adding the first custom favorite can replace the default displayed selection. Re
 `settings` reads the known own-user interface booleans and reports keys the deployment did not return. It never requests mobile settings or prints unknown response fields. `settings-set --set KEY=true --set OTHER=false` accepts exact, distinct supported keys; it sends only those fields after an account/current-state-bound preview and matching confirmation. A requested setting missing from the deployment's read response is refused rather than guessed. `manual_mark_as_read` changes future browser discussion read behavior, not existing read markers; feature-gated settings may not visibly affect the current UI. No setting changes automatically during login or ordinary reads.
 
 `dashboard-positions` reads your saved positions, not a complete inventory of visible dashboard cards. `dashboard-position-set ITEM --position N --context course|group|user` sets one position from -1000 through 1000. `dashboard-order course_123 course_456 group_789` assigns positions 0, 1 and 2 in that order. Both preview the current full map and verified targets, then require `--yes --confirm DIGEST`. The API **merges** specified positions; unspecified positions remain, equal positions may be ambiguous, and neither favorites nor card visibility change. User-context writes require your own user ID. These settings/order actions have synthetic HTTPS tests only, not live write validation. They use the [documented Users API and official implementation](https://github.com/instructure/canvas-lms/blob/master/app/controllers/users_controller.rb).
+
+## Own submission inventory
+
+`submissions COURSE` uses Canvas's [paginated multi-assignment submission API](https://developerdocs.instructure.com/services/canvas/resources/submissions) with the signed-in user's numeric ID explicitly selected. It never accepts another student or `all`. Repeat `--assignment ID` and use `--state submitted|unsubmitted|graded|pending_review` for native filters. Every returned parent record must match the own user, selected assignment and course association; mismatches and page-limit failures produce errors without partial output.
+
+Default output is status/grade/attempt metadata and assignment titles, not private work or feedback. `--include-history` adds attempt metadata; `--include-comments` adds comment metadata; `--include-content` explicitly enables authorized bodies, attachment links and fetched feedback text. Historical nulls or absent associations remain unknown, not fabricated attempts. Content for an explicitly invisible or unpublished assignment is withheld. `grade_matches_current_submission=false` means an earlier attempt's grade may still be shown. These are GET-only reads with no `read_status` inclusion, no assessment attempts and no grading/submission writes. This is submission-endpoint coverage, not a complete coursework checklist, and has synthetic HTTPS coverage only.
 
 ## Native missing work
 

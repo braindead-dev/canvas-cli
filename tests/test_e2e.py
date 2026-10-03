@@ -80,6 +80,14 @@ class E2E(unittest.TestCase):
              'due_at': '2026-09-28T16:00:00Z', 'locked_for_user': False,
              'course': {'id': 102, 'name': 'Synthetic second course'}, 'fixture_current_period': True},
         ]
+        cls.student_submissions = [{
+            'id': 31, 'assignment_id': 88, 'user_id': 7, 'attempt': 2, 'workflow_state': 'submitted',
+            'grade_matches_current_submission': False, 'body': 'Synthetic private submitted body',
+            'assignment': {'id': 88, 'course_id': 101, 'name': 'Synthetic paper', 'published': True},
+            'submission_history': [{'assignment_id': 88, 'user_id': 7, 'attempt': 1,
+                                    'body': 'Synthetic first attempt'}, None],
+            'submission_comments': [{'id': 41, 'author_id': 8, 'comment': 'Synthetic private feedback'}],
+        }]
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
             def do_GET(self):
@@ -139,6 +147,16 @@ class E2E(unittest.TestCase):
                 elif self.path == '/api/v1/courses/101/assignments?per_page=100':
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()}]
+                elif self.path.startswith('/api/v1/courses/101/students/submissions?'):
+                    query = parse_qs(urlsplit(self.path).query)
+                    data = cls.student_submissions
+                    if query.get('assignment_ids[]'):
+                        data = [row for row in data if str(row['assignment_id']) in query['assignment_ids[]']]
+                    if query.get('workflow_state'):
+                        data = [row for row in data if row.get('workflow_state') == query['workflow_state'][0]]
+                    if not query.get('page'):
+                        self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
+                        data = []
                 elif self.path == '/api/v1/courses/103/assignments?per_page=100':
                     data = []
                 elif self.path == '/api/v1/courses/101/assignments?per_page=100&search_term=Synthetic':
@@ -787,6 +805,55 @@ class E2E(unittest.TestCase):
             self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
         finally:
             type(self).dashboard_positions = original
+
+    def test_bulk_own_submissions_paginate_filters_and_opt_in_private_history_without_writes(self):
+        before = len(self.calls)
+        result = self.invoke('submissions', '101', '--assignment', '88', '--assignment', '88',
+                             '--state', 'submitted', '--include-history', '--include-comments')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data['assignment_ids'], [88])
+        row = data['submissions'][0]
+        self.assertEqual(row['submission_history'][0]['attempt'], 1)
+        self.assertIsNone(row['submission_history'][1])
+        self.assertEqual(row['submission_comments'], [{'id': 41, 'author_id': 8}])
+        self.assertNotIn('Synthetic private', result.stdout)
+        self.assertNotIn('Synthetic first attempt', result.stdout)
+        self.assertEqual(len(self.calls[before:]), 3)
+        self.assertTrue(all(method == 'GET' and 'read_status' not in route for method, route in self.calls[before:]))
+        self.assertIn('student_ids%5B%5D=7', self.calls[-1][1])
+        self.assertEqual(self.calls[-1][1].count('assignment_ids%5B%5D=88'), 1)
+        content = self.invoke('submissions', '101', '--include-history', '--include-comments', '--include-content')
+        self.assertEqual(content.returncode, 0, content.stderr)
+        self.assertIn('Synthetic private submitted body', content.stdout)
+        self.assertIn('Synthetic first attempt', content.stdout)
+        self.assertIn('Synthetic private feedback', content.stdout)
+        brief = self.invoke('--format', 'brief', 'submissions', '101', '--include-content')
+        self.assertEqual(brief.returncode, 0, brief.stderr)
+        self.assertIn('Grade does not match', brief.stdout)
+        self.assertNotIn('Synthetic private', brief.stdout)
+
+    def test_bulk_own_submission_page_limit_and_foreign_owner_or_history_do_not_emit_partial_content(self):
+        limited = self.invoke('--max-pages', '1', 'submissions', '101')
+        self.assertNotEqual(limited.returncode, 0)
+        self.assertEqual(limited.stdout, '')
+        saved = type(self).student_submissions
+        try:
+            for row in ({**saved[0], 'user_id': 8},
+                        {**saved[0], 'submission_history': [{'user_id': 8, 'body': 'Synthetic foreign work'}]}):
+                type(self).student_submissions = [row]
+                refused = self.invoke('submissions', '101', '--include-history', '--include-content')
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertEqual(refused.stdout, '')
+                self.assertNotIn('Synthetic foreign work', refused.stderr)
+            type(self).student_submissions = [{**saved[0], 'assignment_visible': False}]
+            withheld = self.invoke('submissions', '101', '--include-history', '--include-comments', '--include-content')
+            self.assertEqual(withheld.returncode, 0, withheld.stderr)
+            self.assertIn('content_withheld', withheld.stdout)
+            self.assertNotIn('Synthetic private', withheld.stdout)
+            self.assertNotIn('Synthetic first attempt', withheld.stdout)
+        finally:
+            type(self).student_submissions = saved
 
     def test_discussion_rating_reads_return_own_votes_without_cached_bodies_or_read_writes(self):
         before = len(self.calls)
