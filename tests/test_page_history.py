@@ -2,6 +2,7 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 from urllib.parse import urlsplit
 
 from canvas_cli.cli import brief, parser
@@ -300,11 +301,11 @@ class PageHistoryTests(unittest.TestCase):
         self.assertEqual(self.writes(), [])
 
     def test_malformed_or_wrong_revision_details_and_missing_history_do_not_restore(self):
-        for patch in ({'revision_id': True}, {'revision_id': 0}, {'revision_id': 8}, {'latest': 1},
+        for values in ({'revision_id': True}, {'revision_id': 0}, {'revision_id': 8}, {'latest': 1},
                       {'body': []}, {'title': None}, {'url': ''}, {'updated_at': 'bad'}):
             self.setUp()
-            self.client.detail_patch = patch
-            with self.subTest(patch=patch), self.assertRaises(CanvasError):
+            self.client.detail_patch = values
+            with self.subTest(values=values), self.assertRaises(CanvasError):
                 self.restore()
             self.assertEqual(self.writes(), [])
         self.setUp()
@@ -316,11 +317,11 @@ class PageHistoryTests(unittest.TestCase):
         self.client.pages[9]['body'] = self.client.revisions[3]['body'] = None
         self.assertEqual(self.read('latest', content=True)['page_revision']['body'], '')
         self.assertTrue(self.execute(self.restore())['html_matches_revision'])
-        for patch in ({'editor': 'block_content_editor'}, {'block_editor_attributes': {}},
+        for values in ({'editor': 'block_content_editor'}, {'block_editor_attributes': {}},
                       {'hidden_for_user': True}, {'locked_for_user': True}, {'page_id': 8}):
             self.setUp()
-            self.client.pages[9].update(patch)
-            with self.subTest(patch=patch), self.assertRaises(CanvasError):
+            self.client.pages[9].update(values)
+            with self.subTest(values=values), self.assertRaises(CanvasError):
                 self.read('latest')
             self.assertEqual(self.writes(), [])
         self.setUp()
@@ -338,12 +339,73 @@ class PageHistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(CanvasError, 'changed during revision inspection'):
             self.read('latest')
 
+    def test_latest_false_and_historical_latest_true_are_not_accepted_as_authoritative(self):
+        self.client.detail_patch = {'latest': False}
+        with self.assertRaisesRegex(CanvasError, 'current page revision'):
+            self.read('latest')
+        self.client.detail_patch = {'latest': True}
+        with self.assertRaisesRegex(CanvasError, 'outside the observed current history'):
+            self.restore()
+        self.assertEqual(self.writes(), [])
+
+    def test_read_account_switch_and_restore_mid_preflight_page_changes_fail_without_output_or_write(self):
+        original_request = self.client.request
+
+        def switch_after_detail(route, *args, **kwargs):
+            result = original_request(route, *args, **kwargs)
+            if '/revisions/latest?' in route:
+                self.client.user = 8
+            return result
+
+        with patch.object(self.client, 'request', side_effect=switch_after_detail), self.assertRaisesRegex(CanvasError, 'account changed'):
+            self.read('latest')
+        self.assertEqual(self.writes(), [])
+        self.setUp()
+        original_list = self.client.list
+
+        def edit_after_inventory(route, max_pages):
+            rows = original_list(route, max_pages)
+            self.client.pages[9]['body'] = self.client.revisions[3]['body'] = '<p>Concurrent preflight edit</p>'
+            return rows
+
+        with patch.object(self.client, 'list', side_effect=edit_after_inventory), self.assertRaisesRegex(CanvasError, 'changed during restoration preflight'):
+            self.restore()
+        self.assertEqual(self.writes(), [])
+
+    def test_inventory_current_page_mismatch_and_body_only_ignored_restore_are_not_success(self):
+        original_list = self.client.list
+
+        def different_inventory(route, max_pages):
+            rows = original_list(route, max_pages)
+            rows[0]['title'] = 'Concurrent inventory title'
+            return rows
+
+        with patch.object(self.client, 'list', side_effect=different_inventory), self.assertRaisesRegex(CanvasError, 'changed during inventory'):
+            self.restore()
+        self.assertEqual(self.writes(), [])
+        self.setUp()
+        data = self.restore('2')
+        self.client.ignore_restore = True
+        with self.assertRaisesRegex(CanvasError, 'may have succeeded'):
+            self.execute(data, '2')
+        self.assertEqual(len(self.writes()), 1)
+
+    def test_optional_editor_projection_does_not_promote_contacts_or_require_names(self):
+        self.client.detail_patch = {'edited_by': {'id': 8, 'name': None, 'display_name': [],
+                                                'email': 'synthetic-private-editor@example.edu'}}
+        self.assertEqual(self.read('1', editors=True)['page_revision']['edited_by'], {'id': 8})
+        self.assertNotIn('synthetic-private', str(self.read('1', editors=True)))
+        self.client.detail_patch = {'edited_by': {'id': True, 'email': 'synthetic-private-editor@example.edu'}}
+        self.assertNotIn('edited_by', self.read('1')['page_revision'])
+        with self.assertRaises(CanvasError):
+            self.read('1', editors=True)
+
     def test_unavailable_context_native_denial_and_preflight_inventory_ambiguity_do_not_write(self):
-        for patch in ({'workflow_state': 'completed'}, {'workflow_state': 'deleted'},
+        for values in ({'workflow_state': 'completed'}, {'workflow_state': 'deleted'},
                       {'concluded': True}, {'non_collaborative': True}, {'access_restricted_by_date': True}):
             self.setUp()
-            self.client.context_patch = patch
-            with self.subTest(patch=patch), self.assertRaises(CanvasError):
+            self.client.context_patch = values
+            with self.subTest(values=values), self.assertRaises(CanvasError):
                 self.restore()
             self.assertEqual(self.writes(), [])
         self.setUp()
