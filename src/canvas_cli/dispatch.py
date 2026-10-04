@@ -161,6 +161,9 @@ def execute(client, args):
         return change(client, args.context_id, args.announcement_id, title=getattr(args, 'title', None),
                       message=read_utf8(source, label='Announcement message') if source else None,
                       delete=args.command == 'announcement-delete',
+                      comments=getattr(args, 'comments', None),
+                      acknowledge_comments=getattr(args, 'acknowledge_comment_access_change', False),
+                      acknowledge_schedule_removal=getattr(args, 'acknowledge_closing_schedule_removal', False),
                       acknowledge_broadcast=getattr(args, 'acknowledge_broadcast', False),
                       acknowledge_removal=getattr(args, 'acknowledge_announcement_removal', False), **options)
     if args.command == 'topic-create':

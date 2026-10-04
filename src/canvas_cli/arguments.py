@@ -732,6 +732,10 @@ def parser():
         if name == 'announcement-create':
             announcement.add_argument('--post-at', help='Future whole-second timestamp with UTC offset; course only, not a private draft')
             announcement.add_argument('--comments', action=argparse.BooleanOptionalAction, default=False, help='Allow comments; default requests closed comments without changing creator preferences')
+        if name == 'announcement-edit':
+            announcement.add_argument('--comments', action=argparse.BooleanOptionalAction, default=None, help='Select shared comment access; omission preserves it')
+            announcement.add_argument('--acknowledge-comment-access-change', action='store_true', help='Required when selecting comments, including previews; changes participant reply access')
+            announcement.add_argument('--acknowledge-closing-schedule-removal', action='store_true', help='Required only when opening a closed announcement with a closing date')
         _confirmation(announcement)
     sub.add_parser('topic-languages', help='Read native schema-accepted language preferences, not service-access proof')
     for name in ('topic-view', 'topic-view-set'):

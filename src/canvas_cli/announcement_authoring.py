@@ -23,10 +23,16 @@ WARNING = ('Changes a shared announcement, not a private draft, reply or note. N
            'can notify participants and observers and update activity/participant records. Delivery '
            'and future execution are not verified. Native permissions, HTML processing, course comment '
            'locks and blueprint restrictions remain authoritative. Deletion does not recall notifications '
-           'or prove permanent erasure. No peer replies, grading, attachments, audience/settings changes, '
+           'or prove permanent erasure. No peer replies, grading, attachments, audience changes or settings '
+           'beyond the selected comment lock and acknowledged closing-date clearing, '
            'automatic retry, cleanup or rollback are requested. Preflight is not an atomic lock.')
 UNCERTAIN = ('Could not verify the announcement operation. It may already have succeeded; check Canvas '
              'before repeating. No automatic retry, cleanup, rollback or private response-body logging.')
+COMMENTS_WARNING = ('Changing the shared comment lock affects whether participants may add replies; '
+                    'it does not rewrite existing replies or verify who can read them. '
+                    'Opening a closed announcement can clear its closing date. Only the stored lock and '
+                    'any acknowledged date clearing are verified, not participant reply access, global '
+                    'course/account restrictions, notifications or future jobs. No peer comments are read.')
 
 
 def _local(item, context_type, max_pages, acknowledge_shared):
@@ -134,6 +140,7 @@ def create(client, item, *, title, message, context_type='course', post_at=None,
 
 def change(client, item, identifier, *, context_type='course', title=None, message=None, delete=False,
            acknowledge_shared=False, acknowledge_broadcast=False, acknowledge_removal=False,
+           comments=None, acknowledge_comments=False, acknowledge_schedule_removal=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     _local(item, context_type, max_pages, acknowledge_shared)
@@ -141,29 +148,42 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if (type(delete) is not bool or type(acknowledge_removal) is not bool or delete != acknowledge_removal or
             type(acknowledge_broadcast) is not bool or acknowledge_broadcast != (not delete)):
         raise CanvasError('Editing requires --acknowledge-broadcast; deletion instead needs --acknowledge-announcement-removal')
-    if delete and (title is not None or message is not None):
-        raise CanvasError('Announcement deletion cannot include text edits')
-    changes = None if delete else _changes(title, message)
+    if (comments is not None and type(comments) is not bool or acknowledge_comments is not (comments is not None) or
+            type(acknowledge_schedule_removal) is not bool or comments is None and acknowledge_schedule_removal):
+        raise CanvasError('Select --comments/--no-comments with --acknowledge-comment-access-change; date-removal consent is separate')
+    if delete and (title is not None or message is not None or comments is not None):
+        raise CanvasError('Announcement deletion cannot include text or comment-state edits')
+    changes = None if delete else (_changes(title, message) if title is not None or message is not None or comments is None else {})
     identity = account(client)
     route, context = _scope(client, item, context_type)
     before = _current(client, route, item, identifier, context_type)
     if before['permissions']['delete' if delete else 'update'] is not True:
         raise CanvasError('Canvas does not permit this exact announcement operation')
-    if not delete and all(_matches(before, key, value) for key, value in changes.items()):
-        raise CanvasError('The announcement text already matches; no update needed')
+    locked = before['locked'] if comments is None else not comments
+    clearing = comments is True and before['locked'] is True and before['lock_at'] is not None
+    if acknowledge_schedule_removal is not clearing:
+        raise CanvasError('Opening this closed announcement clears its closing date; use --acknowledge-closing-schedule-removal only for that change')
+    if comments is False and before['locked'] is False and before['can_lock'] is not True:
+        raise CanvasError('Canvas did not report eligibility to close this announcement to comments')
+    if not delete and all(_matches(before, key, value) for key, value in changes.items()) and before['locked'] is locked:
+        raise CanvasError('The selected announcement text/comment state already matches; no update needed')
     inventory = _inventory(client, route, item, context_type, max_pages, announcement=True)
     if (_listed(before) not in inventory or _current(client, route, item, identifier, context_type) != before or
             _scope(client, item, context_type) != (route, context) or
             _inventory(client, route, item, context_type, max_pages, announcement=True) != inventory or account(client) != identity):
         raise CanvasError('Announcement/context/inventory/account changed during preflight')
-    # Native text updates otherwise default locked=false. lock_comment preserves
-    # the current state without sending locked or changing the creator preference.
-    body = None if delete else {**changes, 'is_announcement': True, 'lock_comment': before['locked']}
+    # Native updates default locked=false. Send only the selected/preserved
+    # comment state; the original locked parameter can write creator preferences.
+    body = None if delete else {**changes, 'is_announcement': True, 'lock_comment': locked}
     preview = {**identity, 'context_type': context_type, f'{context_type}_id': int(item), 'context': context,
                'announcement': before, 'inventory_digest': digest(inventory),
                'acknowledge_shared_announcement': True, 'acknowledge_broadcast': acknowledge_broadcast,
+               'acknowledge_comment_access_change': acknowledge_comments,
+               'acknowledge_closing_schedule_removal': acknowledge_schedule_removal,
+               'comment_choice': 'preserve' if comments is None else 'open' if comments else 'closed',
                'acknowledge_announcement_removal': acknowledge_removal, 'method': 'DELETE' if delete else 'PUT',
-               'route': route + '/discussion_topics/' + identifier + '?no_verifiers=true', 'body': body, 'warning': WARNING}
+               'route': route + '/discussion_topics/' + identifier + '?no_verifiers=true', 'body': body,
+               'warning': WARNING + (' ' + COMMENTS_WARNING if comments is not None else '')}
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -187,8 +207,9 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                 raise CanvasError('Deleted announcement remains readable')
         else:
             after = _metadata(response, item, identifier, context_type)
-            if (_current(client, route, item, identifier, context_type) != after or after['locked'] is not before['locked']):
-                raise CanvasError('Announcement readback or preserved comment lock did not agree')
+            if (_current(client, route, item, identifier, context_type) != after or after['locked'] is not locked or
+                    clearing and after['lock_at'] is not None):
+                raise CanvasError('Announcement readback or selected/preserved comment lock/date clearing did not agree')
             remaining = _inventory(client, route, item, context_type, max_pages, announcement=True)
             if _listed(after) not in remaining:
                 raise CanvasError('Edited announcement is absent from its accessible inventory')
@@ -206,11 +227,19 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                         'verified with stable context/account. No permanent-erasure, attachment cleanup or '
                         'notification-recall proof; no retry or rollback.'}
     requested = {'message_digest' if key == 'message' else key for key in changes}
+    if comments is not None:
+        requested.add('locked')
+    if clearing:
+        requested.add('lock_at')
     changed = [key for key in before if before[key] != after[key]]
     return {**shared, 'edited_announcement': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{identifier}'},
-            'acknowledgement_matches_readback': True, 'comment_lock_preserved': True,
+            'acknowledgement_matches_readback': True, 'comment_lock_preserved': after['locked'] is before['locked'],
+            **({'announcement_comment_state': {'comments_locked': after['locked'], 'closing_schedule_cleared': clearing,
+                                              'reported_context_comments_disabled': after['comments_disabled'],
+                                              'participant_reply_access_verified': False}} if comments is not None else {}),
             'stored_text_matches_request': {key: _matches(after, key, value) for key, value in changes.items()},
             'changed_fields': changed, 'unrequested_changed_fields': [key for key in changed if key not in requested],
-            'note': 'One native PUT, independent announcement/inventory readback and preserved comment lock '
+            'note': 'One native PUT, independent announcement/inventory readback and selected/preserved comment lock '
                     'verified with stable context/account. HTML normalization and other observed changes are '
-                    'labeled, not causal proof. No private prompt, peer replies, explicit preference write, retry or rollback.'}
+                    'labeled, not causal proof. No private prompt, peer replies, explicit preference write, retry or rollback.' +
+                    (' ' + COMMENTS_WARNING if comments is not None else '')}

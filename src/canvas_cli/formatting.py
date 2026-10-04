@@ -148,6 +148,11 @@ def _brief(data):
             lines.append('Stored text differs from the request; inspect Canvas and JSON before using it.')
         if key == 'created_announcement':
             lines.append('Stored posting date: ' + str(data['stored_posting_at']) + '; future execution and delivery are unverified.')
+        if 'announcement_comment_state' in data:
+            state = data['announcement_comment_state']
+            lines.append('Stored comments: ' + ('closed' if state['comments_locked'] else 'open') + '; participant reply access is unverified.')
+            if state['closing_schedule_cleared']:
+                lines.append('Closing schedule cleared with explicit acknowledgement.')
         if data.get('unrequested_changed_fields'):
             lines.append('Other observed changes: ' + ', '.join(data['unrequested_changed_fields']))
         return '\n'.join([*lines, data['note']])

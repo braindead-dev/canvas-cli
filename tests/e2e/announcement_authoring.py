@@ -9,7 +9,8 @@ from .appointments import _send
 def _announcement(identifier):
     return {'id': identifier, 'title': 'Synthetic announcement',
             'message': '<p>synthetic-private-original-announcement</p>', 'is_announcement': True,
-            'published': True, 'can_unpublish': False, 'locked': True, 'pinned': False,
+            'published': True, 'can_unpublish': False, 'can_lock': True, 'comments_disabled': False,
+            'locked': True, 'pinned': False,
             'position': identifier - 8, 'require_initial_post': False, 'is_section_specific': False,
             'sections': [], 'discussion_subentry_count': 0, 'assignment_id': None, 'root_topic_id': None,
             'group_category_id': None, 'topic_children': [], 'group_topic_children': [], 'anonymous_state': None,
@@ -34,6 +35,7 @@ def initialize(state, *, enabled=False):
     state.announcement_written = state.announcement_denied = False
     state.announcement_read_denied = state.announcement_inventory_denied = False
     state.announcement_force_lock = state.announcement_ignore_date = state.announcement_ignore_delete = False
+    state.announcement_ignore_comment_lock = state.announcement_keep_closing_date = False
     state.announcement_account_changed = state.announcement_context_changed = state.announcement_sanitize = False
     state.announcement_ack_patch = state.announcement_read_patch = None
     state.announcement_hide_after = False
@@ -142,7 +144,11 @@ def write(state, handler, body):
         row.update({key: body[key] for key in ('title', 'message') if key in body})
         # Canvas's announcement update path defaults to unlocked when omitted.
         # A course-level lock can override a requested open comment state.
-        row['locked'] = state.announcement_force_lock or body.get('lock_comment', False)
+        requested_lock = body.get('lock_comment', False)
+        if row['locked'] and not requested_lock and not state.announcement_keep_closing_date:
+            row['lock_at'] = None
+        if not state.announcement_ignore_comment_lock:
+            row['locked'] = state.announcement_force_lock and '/courses/' in prefix or requested_lock
         if 'delayed_post_at' in body and not state.announcement_ignore_date:
             row['delayed_post_at'] = body['delayed_post_at']
         if state.announcement_sanitize:

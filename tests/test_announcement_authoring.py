@@ -16,6 +16,7 @@ from canvas_cli.client import CanvasError
 
 def announcement(identifier=9):
     return {**topic(identifier), 'is_announcement': True, 'can_unpublish': False,
+            'can_lock': True, 'comments_disabled': False,
             'locked': True, 'type': 'Announcement', 'context_type': 'Course', 'context_id': 123}
 
 
@@ -27,6 +28,7 @@ class AnnouncementClient(TopicClient):
         self.permission_patch = self.creation_change_at = None
         self.permission_reads = 0
         self.force_comment_lock = self.ignore_posting = False
+        self.ignore_comment_lock = self.keep_closing_date = False
 
     def request(self, route, method='GET', body=None):
         url = urlsplit(route)
@@ -48,13 +50,15 @@ class AnnouncementClient(TopicClient):
             identifier = int(url.path.rsplit('/', 1)[1])
             self.deleted_topic = copy.deepcopy(self.topics[identifier])
             response = {'id': identifier, 'workflow_state': 'deleted', 'type': 'Announcement',
-                        'context_type': 'Course', 'context_id': 123, 'message': 'synthetic-private-delete-ack'}
+                        'context_type': 'Group' if '/groups/' in url.path else 'Course',
+                        'context_id': 123, 'message': 'synthetic-private-delete-ack'}
             if not self.ignore:
                 self.topics.pop(identifier)
         else:
             if method == 'POST':
                 identifier = max(self.topics) + 1
                 row = announcement(identifier)
+                row['context_type'] = 'Group' if '/groups/' in url.path else 'Course'
                 row.update(author={'id': self.identity}, attachments=None, pinned=False,
                            position=len(self.topics) + 1, delayed_post_at=None, title=body['title'], message=body['message'])
                 self.topics[identifier] = row
@@ -65,7 +69,11 @@ class AnnouncementClient(TopicClient):
                 for key in ('title', 'message'):
                     if key in body:
                         row[key] = body[key]
-                row['locked'] = True if self.force_comment_lock else body.get('lock_comment', False)
+                requested_lock = body.get('lock_comment', False)
+                if row['locked'] and not requested_lock and not self.keep_closing_date:
+                    row['lock_at'] = None
+                if not self.ignore_comment_lock:
+                    row['locked'] = True if self.force_comment_lock else requested_lock
                 if 'delayed_post_at' in body and not self.ignore_posting:
                     row['delayed_post_at'] = body['delayed_post_at']
                 if self.sanitize:
