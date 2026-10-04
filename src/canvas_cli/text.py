@@ -1,5 +1,7 @@
 """Bounded explicit UTF-8 inputs and inert human-facing terminal text."""
 
+import html
+
 from .client import CanvasError
 
 TERMINAL_ESCAPES = {
@@ -8,6 +10,11 @@ TERMINAL_ESCAPES = {
         0x061c, 0x200e, 0x200f, *range(0x202a, 0x202f), *range(0x2066, 0x206a)
     ) if code not in (9, 10)
 }
+
+
+def html_body(text):
+    """Plain text becomes inert rich text; an empty input stays explicitly empty."""
+    return '<p>' + html.escape(text).replace('\n', '<br>') + '</p>' if text else ''
 
 
 def terminal_safe(value):

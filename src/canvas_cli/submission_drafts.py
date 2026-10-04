@@ -1,25 +1,22 @@
 """Own native submission drafts, never a final submission or assessment attempt."""
 
-import html
 from urllib.parse import urlsplit
 
 from .client import CanvasError
 from .group_content import _number
+from .own_submission import ASSIGNMENT_FIELDS, SUBMISSION_FIELDS, context
 from .snapshot import redact
+from .text import html_body
 from .writes import account, check_flags, digest, review
 
 TYPES = ('online_text_entry', 'online_url', 'online_upload', 'media_recording', 'basic_lti_launch', 'student_annotation')
+text_input = html_body
 _CONTENT = ('body', 'url', 'file_ids', 'media_id', 'external_tool_id', 'lti_launch_url', 'resource_link_lookup_uuid')
-_POLICY = {'submission_types': 'submissionTypes', 'allowed_extensions': 'allowedExtensions', 'published': 'published',
-           'due_at': 'dueAt', 'unlock_at': 'unlockAt', 'lock_at': 'lockAt', 'updated_at': 'updatedAt',
-           'group_category_id': 'groupCategoryId', 'grade_group_students_individually': 'gradeGroupStudentsIndividually',
-           'allowed_attempts': 'allowedAttempts', 'state': 'state'}
 _DRAFT = ('_id submissionAttempt activeSubmissionType body(rewriteUrls: false) url attachments { _id } '
           'mediaObject { _id } externalTool { _id } ltiLaunchUrl resourceLinkLookupUuid')
 _READ = ('query CanvasSubmissionDraft($assignmentId: ID!, $userId: ID!) { '
-         'assignment(id: $assignmentId) { _id courseId ' + ' '.join(_POLICY.values()) + ' } '
-         'submission(assignmentId: $assignmentId, userId: $userId) { _id userId assignmentId '
-         'assignment { _id courseId } attempt state submittedAt submissionDraft { ' + _DRAFT + ' } } }')
+         'assignment(id: $assignmentId) { ' + ASSIGNMENT_FIELDS + ' } '
+         'submission(assignmentId: $assignmentId, userId: $userId) { ' + SUBMISSION_FIELDS + ' submissionDraft { ' + _DRAFT + ' } } }')
 _SAVE = ('mutation CanvasSubmissionDraftSave($input: CreateSubmissionDraftInput!) { '
          'createSubmissionDraft(input: $input) { errors { attribute } '
          'submissionDraft { _id submissionAttempt activeSubmissionType } } }')
@@ -81,37 +78,17 @@ def _inspect(client, course_id, assignment_id):
     _number(assignment_id)
     identity = account(client)
     data = client.graphql(_READ, {'assignmentId': assignment_id, 'userId': str(identity['user_id'])}, 'CanvasSubmissionDraft')
-    if any(key not in data for key in ('assignment', 'submission')):
-        raise CanvasError('Canvas omitted selected own submission or assignment metadata')
-    assignment = data.get('assignment')
-    if not isinstance(assignment, dict) or assignment.get('_id') != assignment_id or assignment.get('courseId') != course_id:
-        raise CanvasError('Canvas returned a different assignment or course')
-    if any(key not in assignment for key in _POLICY.values()):
-        raise CanvasError('Canvas omitted selected assignment draft policy')
-    policy = {key: assignment[native] for key, native in _POLICY.items()}
-    for key in ('submission_types', 'allowed_extensions'):
-        if policy[key] is not None and (not isinstance(policy[key], list) or any(not isinstance(item, str) for item in policy[key])):
-            raise CanvasError('Canvas returned malformed assignment draft policy')
-    for key in ('published', 'grade_group_students_individually'):
-        if policy[key] is not None and type(policy[key]) is not bool:
-            raise CanvasError('Canvas returned malformed assignment draft policy')
+    state = context(data, identity, course_id, assignment_id)
     row = data['submission']
-    submission, draft = None, None
+    draft = None
     if row is not None:
-        if (not isinstance(row, dict) or row.get('userId') != str(identity['user_id']) or row.get('assignmentId') != assignment_id
-                or row.get('assignment') != {'_id': assignment_id, 'courseId': course_id}):
-            raise CanvasError('Canvas returned a different or anonymously hidden submission owner/assignment/course')
-        if (type(row.get('attempt')) is not int or row['attempt'] < 0 or not isinstance(row.get('state'), str)
-                or not row['state'] or 'submittedAt' not in row or 'submissionDraft' not in row):
+        if 'submissionDraft' not in row:
             raise CanvasError('Canvas returned unavailable own submission metadata')
-        submission = {'id': _number(row.get('_id')), 'attempt': row['attempt'], 'state': row['state'],
-                      'submitted_at': _nullable_text(row['submittedAt'])}
         if row['submissionDraft'] is not None:
-            draft = _draft(row['submissionDraft'], submission['attempt'] + 1)
+            draft = _draft(row['submissionDraft'], state['submission']['attempt'] + 1)
     if account(client) != identity:
         raise CanvasError('Signed-in account changed during draft inspection; no mutation was sent')
-    return {**identity, 'course_id': course_id, 'assignment_id': assignment_id,
-            'assignment_policy': policy, 'submission': submission, 'draft': draft}
+    return {**state, 'draft': draft}
 
 
 def _projection(state, include_content=False):
@@ -165,11 +142,6 @@ def _input(kind, values, clear):
     if 'fileIds' in result:
         result['fileIds'] = sorted(result['fileIds'], key=int)
     return result
-
-
-def text_input(text):
-    """Plain text by default; explicit HTML files are a separate parser option."""
-    return '<p>' + html.escape(text).replace('\n', '<br>') + '</p>' if text else ''
 
 
 def _preview(state, document, operation, selected, effect):

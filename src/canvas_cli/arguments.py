@@ -843,6 +843,35 @@ def parser():
             s.add_argument('--resource-link-lookup-uuid', help='Optional native resource-link metadata for the tool draft')
             s.add_argument('--clear-content', action='store_true', help='Explicitly clear selected text/URL/files/media, not other retained type fields')
             _confirmation(s)
+    for name in ('submission-comments', 'comment-draft-create', 'comment-draft-edit', 'comment-draft-publish', 'comment-draft-delete'):
+        s = sub.add_parser(name, help={
+            'submission-comments': 'Read your own authored submission comments, including drafts, not grader feedback',
+            'comment-draft-create': 'Preview creating an own native comment draft with existing file/media IDs',
+            'comment-draft-edit': 'Preview replacing text in an exact own comment draft',
+            'comment-draft-publish': 'Preview publishing an exact own comment draft to native viewers',
+            'comment-draft-delete': 'Preview deleting an exact own comment draft and possible linked group copies'}[name])
+        s.add_argument('course_id', type=identifier)
+        s.add_argument('assignment_id', type=identifier)
+        if name not in ('submission-comments', 'comment-draft-create'):
+            s.add_argument('comment_id', type=identifier)
+        scope = s.add_mutually_exclusive_group()
+        scope.add_argument('--attempt', type=int, help='Current by default; native attempts nil/0/1 share a comment bucket')
+        if name == 'submission-comments':
+            scope.add_argument('--all-attempts', action='store_true', help='Query each attempt separately with the own-author filter')
+            s.add_argument('--include-content', action='store_true', help='Opt in to private rendered own comment HTML/text')
+        else:
+            s.add_argument('--acknowledge-native-effects', action='store_true', help='Required for preview; group copies/read state/notifications/captions and instructor grade-posting callbacks remain native')
+            if name in ('comment-draft-create', 'comment-draft-edit'):
+                body = s.add_mutually_exclusive_group(required=True)
+                body.add_argument('--message-file', type=Path, help='UTF-8 plain text, escaped to HTML; empty text explicitly clears on edit')
+                body.add_argument('--html-file', type=Path, help='Explicit UTF-8 HTML; native sanitization is reported, not raw-storage proof')
+            if name == 'comment-draft-create':
+                s.add_argument('--file-id', action='append', type=identifier, help='Existing permitted attachment ID; no upload')
+                s.add_argument('--media-id', help='Existing native media ID; no recording or upload')
+                s.add_argument('--media-type', choices=('audio', 'video'))
+                s.add_argument('--group-comment', action='store_true', help='Individually graded group assignment only; group-graded comments already copy natively')
+                s.add_argument('--acknowledge-group-effects', action='store_true', help='Required for any group assignment; even drafts can create group-linked records')
+            _confirmation(s)
     schema_command = sub.add_parser('schema', help='Offline machine-readable argument and safety catalog from the actual parser')
     schema_command.add_argument('--search', help='Find command schemas by name, description or safety category')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')

@@ -116,6 +116,8 @@ Already-reported choices are refused by default. Use `--reapply-selected-path` o
 
 To save progress **without turning it in**, use the separate [submission draft workflows](submission-drafts.md). Native draft deletion removes all draft attempts, not just the visible next attempt.
 
+For your own authored comments, use the separate [comment draft workflows](submission-comments.md): paginated own inspection and previewed draft creation/editing/publication/deletion. Native group and notification effects require acknowledgement; published student comments are not editable/deletable through this workflow.
+
 ```sh
 canvas upload-assignment-file 123 456 --file paper.pdf
 canvas submit-file 123 456 789

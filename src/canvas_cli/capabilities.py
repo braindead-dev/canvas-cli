@@ -4,6 +4,7 @@
 def describe():
     return {
         'read': [
+            'submission-comments (own-author native comments and drafts; paginated selected attempt or separately filtered all attempts, metadata/fingerprints by default and rendered-content opt-in; no peer/grader feedback, read markers or assessment initialization)',
             'draft (own next-attempt native submission draft only; metadata/fingerprints by default, rendered-content opt-in; no historical inventory, annotation/criteria initialization, final submission or quiz attempt)',
             'topic-languages (native preferred-language enum catalog, including deprecated values; schema acceptance only, no participant query, service access or translation generation)',
             'courses', 'doctor', 'find', 'me', 'profile', 'favorites', 'groups', 'group', 'course-groups',
@@ -48,6 +49,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'comment-draft-create/comment-draft-edit/comment-draft-publish/comment-draft-delete (exact own existing submission and own authored drafts only; account/policy/current-content/paginated-inventory-bound preview and native effects acknowledgement, existing attachments/media on create, text-only edit; native group creation/publication/deletion/read-state/notification/caption/instructor grade-posting effects acknowledged but not independently verified, one mutation and own readback, no retry/rollback or published student comment edits)',
             'draft-save/draft-delete (own native GraphQL draft storage across six types, explicit current+1 attempt and account/assignment/current-rendered-state-bound preview; native submit rights stay endpoint-authoritative; one mutation and separate identity/attempt/representation readback, never final submission; deletion acknowledges ALL attempts with unknown historical inventory/absence; raw content storage, attachment normalization and submission criteria remain unverified; no retries, cleanup, upload or external launch)',
             'topic-view-set (own native sort/expansion/pinned-entry/language/summary preferences and separately acknowledged pinned-unread indicator; expansion inheritance and language clearing only, no null resets for non-null storage; schema catalog and account/context/state-bound preview, initialization acknowledgement and one GraphQL mutation; independent reported readback, hidden sort/expansion and cleared-language storage unverified; no content-read proof, translation/summary generation, peer reads, retry or rollback)',
             'topic-sections (native course discussion section filter, distinct from modern participant overrides; exact topic update, shared/audience acknowledgements, account/content/sections/inventory-bound preview, one PUT and independent exact-filter readback; old/new visibility remains endpoint-authoritative, no all-student visibility guarantee, roster/reply reads, retries or rollback)',

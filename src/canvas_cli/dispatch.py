@@ -9,6 +9,23 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('submission-comments', 'comment-draft-create', 'comment-draft-edit', 'comment-draft-publish', 'comment-draft-delete'):
+        from . import submission_comments
+        if args.command == 'submission-comments':
+            return submission_comments.read(client, args.course_id, args.assignment_id, attempt=args.attempt,
+                                            all_attempts=args.all_attempts, include_content=args.include_content, max_pages=args.max_pages)
+        options = {'attempt': args.attempt, 'acknowledge': args.acknowledge_native_effects,
+                   'max_pages': args.max_pages, 'yes': args.yes, 'confirm': args.confirm}
+        if args.command in ('comment-draft-create', 'comment-draft-edit'):
+            from .text import html_body
+            content = read_utf8(args.message_file if args.message_file is not None else args.html_file, label='Comment body')
+            options['message'] = html_body(content) if args.message_file is not None else content
+        if args.command == 'comment-draft-create':
+            return submission_comments.create(client, args.course_id, args.assignment_id, **options,
+                                              file_ids=args.file_id, media_id=args.media_id, media_type=args.media_type,
+                                              group_comment=args.group_comment, acknowledge_group=args.acknowledge_group_effects)
+        return submission_comments.change(client, args.course_id, args.assignment_id, args.comment_id,
+                                          args.command.removeprefix('comment-draft-'), **options)
     if args.command in ('draft', 'draft-save', 'draft-delete'):
         from . import submission_drafts
         if args.command == 'draft':

@@ -29,6 +29,7 @@ src/canvas_cli/
   writes.py       identity, confirmation digests and pure preview review
   text.py         bounded explicit UTF-8 file inputs
   wiki_content.py shared native page metadata and private content fingerprints
+  own_submission.py shared exact own GraphQL submission/assignment metadata checks
   download.py     credential-free binary transport
   <domain>.py     resource-specific validation/projection/behavior
 tests/

@@ -36,6 +36,20 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'inventory_status' in data and 'selected_attempts' in data and not data.get('dry_run'):
+        lines = [f"Own comments: course {data['course_id']}, assignment {data['assignment_id']}", data['inventory_status']]
+        for row in data['comments']:
+            lines.append(f"{row['id']} · attempt {row['attempt']} · {'draft' if row['draft'] else 'published'} · "
+                         f"{len(row['file_ids'])} reported attachment(s)")
+        if data.get('own_draft_absence_verified'):
+            lines.append('Own draft absent from the complete selected-attempt inventory; linked group copies are unverified.')
+        elif data.get('mutation_acknowledged'):
+            lines.append('Own comment state read back; no final submission was requested.')
+        if any(data.get(key) is False for key in ('reported_html_matches_request', 'reported_file_ids_match_request',
+                                                 'reported_media_id_matches_request')):
+            lines.append('Returned content/associations differ from the request; inspect Canvas and JSON. Raw storage is unverified.')
+        lines.append('Comment content is private; use JSON to inspect it.')
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'submission_draft' in data and not data.get('dry_run'):
         row = data['submission_draft']
         lines = [f"Own draft: course {data['course_id']}, assignment {data['assignment_id']}"]
