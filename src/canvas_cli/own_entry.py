@@ -19,6 +19,9 @@ _DETAIL = ('query CanvasOwnEntryDetails($entryId: ID!) { legacyNode(type: Discus
            '{ ... on DiscussionEntry { ' + _DETAIL_FIELDS + ' } } }')
 _EDIT = ('mutation CanvasOwnEntryEdit($input: UpdateDiscussionEntryInput!) { updateDiscussionEntry(input: $input) '
          '{ errors { attribute } discussionEntry { ' + _DETAIL_FIELDS + ' } } }')
+_HISTORY = ('query CanvasOwnEntryHistory($entryId: ID!, $includeContent: Boolean!) '
+            '{ legacyNode(type: DiscussionEntry, _id: $entryId) { ... on DiscussionEntry { ' + _SCOPE +
+            ' discussionEntryVersions { _id version createdAt updatedAt message @include(if: $includeContent) } } } }')
 _NOTE = ('Exact own entry only. Ownership/scope metadata is verified before body or attachment metadata is requested. '
          'Anonymous ownership uses the native current_user marker, never a participant-ID to user-ID guess. '
          'No peer inventory, quoted body, participant initialization, read marker, file URL/download, '
@@ -32,6 +35,12 @@ _EDIT_NOTE = ('Updates only your exact entry text through native GraphQL, leavin
               'visible quote readback are verified, not raw storage, file bytes/access or delivery. '
               'Preflight is not an atomic lock. No file upload/download, pin change, peer-body read, quiz attempt, '
               'automatic retry, rollback, deletion or cleanup.')
+_HISTORY_NOTE = ('Own-entry version metadata only unless content is explicitly selected. Canvas exposes this '
+                 'association as an unpaginated list; the local version cap cannot limit server-side loading. '
+                 'Only the reported list is checked; gaps, an empty list or the latest version do not prove a '
+                 'complete archive or exact storage. Native timestamps may be inferred for legacy versions. '
+                 'No editor identities, peer history, restore, read marker, participant initialization, '
+                 'assessment or mutation is requested.')
 
 
 def _scope(row, identity, item, topic_id, entry_id, context_type):
@@ -121,6 +130,40 @@ def read(client, item, topic_id, entry_id, *, context_type='course', include_con
         row['rendered_message'] = redact(message)
     return {'own_entry': row, 'raw_storage_verified': False, 'stored_file_bytes_verified': False,
             'hidden_quote_storage_verified': False, 'grade_credit_verified': False, 'note': _NOTE}
+
+
+def history(client, item, topic_id, entry_id, *, context_type='course', include_content=False, max_versions=100):
+    if type(include_content) is not bool or type(max_versions) is not int or not 1 <= max_versions <= 1000:
+        raise CanvasError('Select content explicitly and a local version cap between 1 and 1000')
+    before = inspect(client, item, topic_id, entry_id, context_type=context_type)
+    node = client.graphql(_HISTORY, {'entryId': entry_id, 'includeContent': include_content},
+                          'CanvasOwnEntryHistory').get('legacyNode')
+    scope = _scope(node, before, item, topic_id, entry_id, context_type)
+    if any(before[key] != value for key, value in scope.items()):
+        raise CanvasError('Own entry changed during history inspection')
+    rows = node.get('discussionEntryVersions')
+    if not isinstance(rows, list) or len(rows) > max_versions:
+        raise CanvasError('Canvas returned unavailable history or exceeded the local version cap')
+    versions, seen = [], set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise CanvasError('Canvas returned malformed own-entry version metadata')
+        identifier = int(_number(row.get('_id')))
+        if (identifier in seen or type(row.get('version')) is not int or row['version'] < 1 or
+                any(key not in row or row[key] is not None and not isinstance(row[key], str)
+                    for key in ('createdAt', 'updatedAt')) or include_content and not isinstance(row.get('message'), str)):
+            raise CanvasError('Canvas returned ambiguous or incomplete own-entry version metadata')
+        seen.add(identifier)
+        result = {'id': identifier, 'version': row['version'], 'created_at': row['createdAt'], 'updated_at': row['updatedAt']}
+        if include_content:
+            result['message'] = redact(row['message'])
+        versions.append(result)
+    if inspect(client, item, topic_id, entry_id, context_type=context_type) != before:
+        raise CanvasError('Own entry, account or context changed during history inspection')
+    selected = {key: before[key] for key in ('origin', 'user_id', 'context_type', f'{context_type}_id', 'context',
+                                             'id', 'topic_id', 'ownership_proof')}
+    return {'own_entry_history': {**selected, 'versions': sorted(versions, key=lambda row: (row['version'], row['id']), reverse=True)},
+            'native_unpaginated': True, 'complete_history_verified': False, 'raw_storage_verified': False, 'note': _HISTORY_NOTE}
 
 
 def edit(client, item, topic_id, entry_id, message, *, context_type='course', yes=False, confirm=None):

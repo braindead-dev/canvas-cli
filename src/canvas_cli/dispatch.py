@@ -736,8 +736,12 @@ def execute(client, args):
     if args.command == 'thread':
         from .thread import read_thread
         return read_thread(client, args.course, args.topic, args.max_pages, args.context)
-    if args.command in ('entry', 'own-entry', 'entry-edit', 'entry-delete'):
+    if args.command in ('entry', 'own-entry', 'own-entry-history', 'entry-edit', 'entry-delete'):
         from .discussion import change_entry, entry
+        if args.command == 'own-entry-history':
+            from .own_entry import history
+            return history(client, args.course, args.topic, args.entry, context_type=args.context,
+                           include_content=args.include_content, max_versions=args.max_versions)
         if args.command == 'own-entry':
             from .own_entry import read
             return read(client, args.course, args.topic, args.entry, context_type=args.context, include_content=args.include_content)

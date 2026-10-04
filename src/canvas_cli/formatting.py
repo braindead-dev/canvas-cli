@@ -36,6 +36,14 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'own_entry_history' in data:
+        entry = data['own_entry_history']
+        lines = [f"Own entry {entry['id']}: {len(entry['versions'])} reported version(s), newest version first"]
+        for row in entry['versions']:
+            lines.append(f"Version {row['version']} ({row['id']}), updated {row['updated_at']}")
+            if 'message' in row:
+                lines.append(row['message'])
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'own_entry' in data:
         entry = data['own_entry']
         attachment = entry['attachment']

@@ -4,6 +4,7 @@
 def describe():
     return {
         'read': [
+            'own-entry-history (ownership-first exact own native version list, course/group and native anonymous marker; metadata by default, historical HTML opt-in; local 1–1000 version cap does not paginate native loading, complete archive/raw storage unverified; no editor identity, peer history, restore or mutation)',
             'own-entry (exact native GraphQL ownership/scope metadata before rendered body/file/quote metadata; own author ID or native anonymous current_user marker, fingerprints by default, content opt-in; no peer bodies, participant initialization, marks, file download or mutation; raw storage/hidden quotes/file bytes/grade credit unverified)',
             'what-if-course (bounded own published-assignment active submission hypotheses, including unsubmitted rows; fixed GraphQL metadata and native reset permission, no grades/comments/assessments; reported pagination is complete but hidden/historical storage remains unknown)',
             'what-if (exact own existing submission saved hypothetical point score via fixed GraphQL metadata; no official grade, answer, comment, read marker, assessment or submission initialization)',

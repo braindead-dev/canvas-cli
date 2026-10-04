@@ -15,6 +15,17 @@ Native ownership, exact context and read permission are checked before requestin
 
 Anonymous ownership uses Canvas's native `current_user` marker. Participant IDs are never guessed to be user IDs. Missing ownership evidence or unavailable modern fields stop the operation before content is requested.
 
+## Inspect edit history
+
+```sh
+canvas own-entry-history 123 456 789 --format brief
+canvas own-entry-history 123 456 789 --context group --include-content --max-versions 200
+```
+
+History is ownership-first, newest version first, and metadata-only by default. Historical HTML is selected only with `--include-content`; editor identities and peers' histories are not requested. The current entry/account/context are rechecked around the query.
+
+Canvas exposes versions as an unpaginated association. `--max-versions` is a local response cap, not server-side pagination. An empty list, numbering gaps or the newest reported version do not prove a complete archive. Legacy timestamps can be inferred by Canvas. No restoration or mutation is performed.
+
 ## Preserve an attachment while editing
 
 ```sh
@@ -38,4 +49,4 @@ Saving may affect native participation, editor history, graded discussion credit
 
 ## Primary sources
 
-Pinned Canvas [native entry update](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/mutations/update_discussion_entry.rb), [entry fields and anonymous ownership](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/types/discussion_entry_type.rb), and [file byte-size metadata](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/types/file_type.rb).
+Pinned Canvas [native entry update](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/mutations/update_discussion_entry.rb), [entry fields, ownership and version access](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/types/discussion_entry_type.rb), [version metadata](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/types/discussion_entry_version_type.rb), [legacy version creation](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/models/discussion_entry.rb#L273), and [file byte-size metadata](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/types/file_type.rb).

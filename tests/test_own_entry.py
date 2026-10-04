@@ -5,7 +5,7 @@ import json
 import unittest
 
 from canvas_cli.client import CanvasError
-from canvas_cli.own_entry import edit, read
+from canvas_cli.own_entry import edit, history, read
 
 
 class OwnEntryClient:
@@ -135,6 +135,111 @@ class OwnEntryTests(unittest.TestCase):
         with self.assertRaises(CanvasError):
             read(self.client, '123', '9', '../301')
         self.assertEqual(self.client.calls, [])
+
+
+class OwnEntryHistoryClient(OwnEntryClient):
+    def __init__(self):
+        super().__init__()
+        self.versions = [{'_id': '501', 'version': 1, 'createdAt': None, 'updatedAt': None,
+                          'message': '<p>synthetic-private-old-version</p>'},
+                         {'_id': '502', 'version': 3, 'createdAt': '2026-10-04T12:00:00Z',
+                          'updatedAt': '2026-10-04T12:00:00Z', 'message': '<p>synthetic-private-new-version</p>'}]
+        self.history_change = self.after_history = None
+
+    def graphql(self, document, variables, operation):
+        if operation != 'CanvasOwnEntryHistory':
+            return super().graphql(document, variables, operation)
+        self.calls.append((operation, document, variables))
+        row = copy.deepcopy(self.row)
+        row['discussionEntryVersions'] = copy.deepcopy(self.versions)
+        if isinstance(row['discussionEntryVersions'], list) and not variables['includeContent']:
+            for version in row['discussionEntryVersions']:
+                if isinstance(version, dict):
+                    version.pop('message', None)
+        if self.history_change:
+            row.update(self.history_change)
+        if self.after_history == 'body':
+            self.row['message'] += 'Changed'
+        elif self.after_history == 'identity':
+            self.identity = 8
+        elif self.after_history == 'context':
+            self.context['name'] = 'Changed'
+        return {'legacyNode': row}
+
+
+class OwnEntryHistoryTests(unittest.TestCase):
+    def setUp(self):
+        self.client = OwnEntryHistoryClient()
+
+    def history(self, **options):
+        return history(self.client, '123', '9', '301', **options)
+
+    def test_default_history_is_metadata_only_owner_first_ordered_and_not_a_complete_archive_claim(self):
+        result = self.history()
+        versions = result['own_entry_history']['versions']
+        self.assertEqual([row['version'] for row in versions], [3, 1])
+        self.assertTrue(result['native_unpaginated'])
+        self.assertFalse(result['complete_history_verified'])
+        self.assertFalse(result['raw_storage_verified'])
+        self.assertNotIn('synthetic-private', json.dumps(result))
+        calls = [call for call in self.client.calls if call[0] != 'GET']
+        self.assertEqual([call[0] for call in calls], ['CanvasOwnEntryOwner', 'CanvasOwnEntryDetails',
+                                                     'CanvasOwnEntryHistory', 'CanvasOwnEntryOwner', 'CanvasOwnEntryDetails'])
+        self.assertEqual(calls[2][2], {'entryId': '301', 'includeContent': False})
+        self.assertIn('message @include(if: $includeContent)', calls[2][1])
+        self.assertNotIn('messageIntro', calls[2][1])
+        self.assertNotIn('participant', calls[2][1].lower())
+        self.assertNotIn('mutation', calls[2][1])
+
+    def test_historical_content_is_explicit_for_group_and_native_anonymous_ownership_and_empty_lists_stay_unknown(self):
+        self.client.row['discussionTopic'].update(contextType='Group', anonymousState='full_anonymity')
+        self.client.row.update(author=None, anonymousAuthor={'id': 'abc', 'shortName': 'current_user'})
+        result = self.history(context_type='group', include_content=True)
+        self.assertIn('synthetic-private-new-version', result['own_entry_history']['versions'][0]['message'])
+        self.assertEqual(result['own_entry_history']['ownership_proof'], 'native_current_user_anonymous_marker')
+        self.assertNotIn('"abc"', json.dumps(result))
+        self.client.versions = []
+        result = self.history(context_type='group')
+        self.assertEqual(result['own_entry_history']['versions'], [])
+        self.assertFalse(result['complete_history_verified'])
+
+    def test_invalid_local_options_or_foreign_owner_stop_before_history_content_query(self):
+        for options in ({'include_content': 1}, {'max_versions': True}, {'max_versions': 0},
+                        {'max_versions': 1001}, {'context_type': 'user'}):
+            with self.subTest(options=options), self.assertRaises(CanvasError):
+                self.history(**options)
+            self.assertEqual(self.client.calls, [])
+        self.client.row['author']['_id'] = '8'
+        with self.assertRaises(CanvasError):
+            self.history(include_content=True)
+        self.assertFalse(any(call[0] == 'CanvasOwnEntryHistory' for call in self.client.calls))
+
+    def test_missing_oversized_duplicate_or_malformed_native_versions_do_not_become_empty_or_complete_history(self):
+        version = copy.deepcopy(self.client.versions[0])
+        cases = [None, {}, [None], [version, version],
+                 [version | {'_id': '0'}], [version | {'version': True}], [version | {'version': 0}],
+                 [version | {'createdAt': []}], [{key: value for key, value in version.items() if key != 'updatedAt'}],
+                 [version | {'message': None}]]
+        for versions in cases:
+            self.client = OwnEntryHistoryClient()
+            self.client.versions = versions
+            with self.subTest(versions=versions), self.assertRaises(CanvasError):
+                self.history(include_content=True)
+        self.client = OwnEntryHistoryClient()
+        with self.assertRaisesRegex(CanvasError, 'cap'):
+            self.history(max_versions=1)
+
+    def test_changed_scope_revision_account_or_context_is_refused_without_mutation(self):
+        for change in ({'_id': '302'}, {'updatedAt': 'Changed'}, {'author': {'_id': '8'}}):
+            self.client = OwnEntryHistoryClient()
+            self.client.history_change = change
+            with self.subTest(change=change), self.assertRaises(CanvasError):
+                self.history()
+        for mode in ('body', 'identity', 'context'):
+            self.client = OwnEntryHistoryClient()
+            self.client.after_history = mode
+            with self.subTest(mode=mode), self.assertRaises(CanvasError):
+                self.history()
 
 
 class OwnEntryEditClient(OwnEntryClient):

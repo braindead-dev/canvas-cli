@@ -13,6 +13,9 @@ DOCUMENTS = {
                             '{ ... on DiscussionEntry { ' + SCOPE + ' } } }'),
     'CanvasOwnEntryDetails': ('query CanvasOwnEntryDetails($entryId: ID!) { legacyNode(type: DiscussionEntry, _id: $entryId) '
                               '{ ... on DiscussionEntry { ' + FIELDS + ' } } }'),
+    'CanvasOwnEntryHistory': ('query CanvasOwnEntryHistory($entryId: ID!, $includeContent: Boolean!) '
+                             '{ legacyNode(type: DiscussionEntry, _id: $entryId) { ... on DiscussionEntry { ' + SCOPE +
+                             ' discussionEntryVersions { _id version createdAt updatedAt message @include(if: $includeContent) } } } }'),
     'CanvasOwnEntryEdit': ('mutation CanvasOwnEntryEdit($input: UpdateDiscussionEntryInput!) { updateDiscussionEntry(input: $input) '
                            '{ errors { attribute } discussionEntry { ' + FIELDS + ' } } }'),
 }
@@ -34,6 +37,12 @@ def initialize(state):
     state.own_entry_written = False
     state.own_entry_mode = None
     state.own_entry_ack_patch = state.own_entry_read_patch = None
+    state.own_entry_versions = [{'_id': '501', 'version': 1, 'createdAt': None, 'updatedAt': None,
+                                 'message': '<p>synthetic-private-old-version</p>'},
+                                {'_id': '502', 'version': 3, 'createdAt': None, 'updatedAt': None,
+                                 'message': '<p>synthetic-private-new-version</p>'}]
+    state.own_entry_history_patch = state.own_entry_after_history = None
+    state.own_entry_history_content_reads = 0
 
 
 def read(state, handler):
@@ -59,7 +68,10 @@ def execute(state, handler, body):
     row = state.own_entry_row
     if name != 'CanvasOwnEntryEdit':
         state.own_entry_queries.append(name)
-        if variables != {'entryId': '301'}:
+        expected = {'entryId': '301'}
+        if name == 'CanvasOwnEntryHistory' and type(variables.get('includeContent')) is bool:
+            expected['includeContent'] = variables['includeContent']
+        if variables != expected or name == 'CanvasOwnEntryHistory' and 'includeContent' not in expected:
             _send(handler, {'errors': [{'message': 'synthetic-private-wrong-entry-id'}]})
             return True
         if state.own_entry_written and state.own_entry_mode == 'denied-readback':
@@ -69,6 +81,25 @@ def execute(state, handler, body):
         if name == 'CanvasOwnEntryOwner':
             for key in ('message', 'quotedEntry', 'attachment'):
                 result.pop(key)
+        elif name == 'CanvasOwnEntryHistory':
+            for key in ('message', 'quotedEntry', 'attachment'):
+                result.pop(key)
+            versions = copy.deepcopy(state.own_entry_versions)
+            if variables['includeContent']:
+                state.own_entry_history_content_reads += 1
+            elif isinstance(versions, list):
+                for version in versions:
+                    if isinstance(version, dict):
+                        version.pop('message', None)
+            result['discussionEntryVersions'] = versions
+            if state.own_entry_history_patch:
+                result.update(state.own_entry_history_patch)
+            if state.own_entry_after_history == 'body':
+                row['message'] += 'Changed'
+            elif state.own_entry_after_history == 'identity':
+                state.own_entry_viewer = 8
+            elif state.own_entry_after_history == 'context':
+                state.own_entry_context['name'] = 'Changed'
         elif state.own_entry_written and state.own_entry_read_patch:
             result.update(state.own_entry_read_patch)
         _send(handler, {'data': {'legacyNode': result}})

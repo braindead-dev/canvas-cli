@@ -130,3 +130,63 @@ class OwnEntryE2E(CanvasFixture):
             result = self.invoke(*self.command())
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(self.calls[start:], [])
+
+    def test_history_metadata_defaults_content_opt_in_group_and_anonymous_owner_are_native_reads_only(self):
+        for group in (False, True):
+            for anonymous in (False, True):
+                self.reset(group=group, anonymous=anonymous)
+                command = ('own-entry-history', '123', '9', '301', '--context', self.kind)
+                result = self.invoke(*command)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                data = json.loads(result.stdout)
+                self.assertEqual([row['version'] for row in data['own_entry_history']['versions']], [3, 1])
+                self.assertFalse(data['complete_history_verified'])
+                self.assertTrue(data['native_unpaginated'])
+                self.assertNotIn('synthetic-private', result.stdout + result.stderr)
+                self.assertEqual(self.own_entry_history_content_reads, 0)
+                self.assertEqual(self.own_entry_queries, ['CanvasOwnEntryOwner', 'CanvasOwnEntryDetails',
+                                                         'CanvasOwnEntryHistory', 'CanvasOwnEntryOwner', 'CanvasOwnEntryDetails'])
+                result = self.invoke(*command, '--include-content', '--format', 'brief')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('synthetic-private-new-version', result.stdout)
+                self.assertEqual(self.own_entry_history_content_reads, 1)
+                self.assertEqual(self.own_entry_mutations, [])
+
+    def test_history_empty_denied_malformed_and_local_cap_do_not_prove_a_complete_archive(self):
+        type(self).own_entry_versions = []
+        result = self.invoke('own-entry-history', '123', '9', '301', '--format', 'brief')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('0 reported version(s)', result.stdout)
+        for mode in ('missing', 'duplicate', 'metadata', 'scope', 'cap'):
+            self.reset()
+            if mode == 'missing':
+                type(self).own_entry_versions = None
+            elif mode == 'duplicate':
+                type(self).own_entry_versions *= 2
+            elif mode == 'metadata':
+                self.own_entry_versions[0]['version'] = False
+            elif mode == 'scope':
+                type(self).own_entry_history_patch = {'_id': '999'}
+            command = ('own-entry-history', '123', '9', '301')
+            result = self.invoke(*command, *(['--max-versions', '1'] if mode == 'cap' else []))
+            self.assertNotEqual(result.returncode, 0, mode)
+            self.assertNotIn('synthetic-private', result.stdout + result.stderr)
+            self.assertEqual(self.own_entry_mutations, [])
+
+    def test_history_foreign_owner_and_changed_body_identity_or_context_refuse_without_a_mutation(self):
+        self.own_entry_row['author']['_id'] = '8'
+        result = self.invoke('own-entry-history', '123', '9', '301', '--include-content')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.own_entry_history_content_reads, 0)
+        self.assertEqual(self.own_entry_queries, ['CanvasOwnEntryOwner'])
+        for mode in ('body', 'identity', 'context'):
+            self.reset()
+            type(self).own_entry_after_history = mode
+            result = self.invoke('own-entry-history', '123', '9', '301')
+            self.assertNotEqual(result.returncode, 0, mode)
+            self.assertEqual(self.own_entry_mutations, [])
+        self.reset()
+        start = len(self.calls)
+        result = self.invoke('own-entry-history', '123', '9', '301', '--max-versions', '1001')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls[start:], [])
