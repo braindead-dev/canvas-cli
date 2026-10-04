@@ -44,6 +44,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'topic-order (complete shared pinned-topic ordering; exact context read/moderation rights, all-pinned acknowledgement and account/inventory-bound preview, one native POST with exact order acknowledgement and independent paginated position readback; no text/pin/assignment changes, no retry/rollback)',
             'topic-configure (shared ungraded reply structure/likes/default views; exact update permission, additional initial-post visibility acknowledgement, account/content/audience/inventory-bound preview and exact option readback; native granular permission stripping is not hidden, no peer reads/retry/rollback)',
             'topic-publish/topic-unpublish/topic-close/topic-open/topic-pin/topic-unpin (ordinary ungraded shared states; native update/eligibility flags, closing-date/order acknowledgements, exact state and separate paginated inventory readback; observed collateral changes labeled, no retry/rollback)',
             'topic-create (shared ungraded discussion; dynamic native creation and moderation permissions, explicit publication preview, new-ID/own-author/exact-readback/inventory proof, no retry/cleanup)',

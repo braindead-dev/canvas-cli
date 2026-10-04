@@ -698,6 +698,12 @@ def parser():
     configuration.add_argument('--acknowledge-reply-visibility-change', action='store_true',
                                help='Required when setting require-initial-post; other participants can gain/lose reply visibility')
     _confirmation(configuration)
+    ordering = sub.add_parser('topic-order', help='Preview the complete shared pinned-topic order with native context moderation rights')
+    ordering.add_argument('context_id', type=identifier)
+    ordering.add_argument('topic_ids', nargs='+', type=identifier, metavar='TOPIC_ID')
+    ordering.add_argument('--context', choices=('course', 'group'), default='course')
+    ordering.add_argument('--acknowledge-all-pinned-topics', action='store_true')
+    _confirmation(ordering)
     for name in ('publish', 'unpublish', 'close', 'open', 'pin', 'unpin'):
         state = sub.add_parser('topic-' + name, help='Preview one native shared discussion state change with independent readback')
         state.set_defaults(topic_action=name)

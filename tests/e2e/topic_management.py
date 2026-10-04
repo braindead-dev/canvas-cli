@@ -43,6 +43,9 @@ def initialize(state, *, enabled=False):
     state.topic_state_hide_after = state.topic_state_inventory_denied = False
     state.topic_config_enabled = state.topic_granular_options_enabled = False
     state.topic_edit_options = state.topic_edit_views = True
+    state.topic_order_enabled = state.topic_order_ignore = state.topic_order_read_denied = False
+    state.topic_order_ack = None
+    state.topic_read_forum = True
 
 
 def _route(state, handler):
@@ -68,8 +71,14 @@ def read(state, handler):
             row['permissions'] = {'create_discussion_topic': state.topic_create_permission, 'create_announcement': False}
         _send(handler, row)
     elif url.path == prefix + '/permissions':
-        _send(handler, {'moderate_forum': state.topic_moderator})
+        rights = {'moderate_forum': state.topic_moderator}
+        if 'read_forum' in parse_qs(url.query).get('permissions[]', []):
+            rights['read_forum'] = state.topic_read_forum
+        _send(handler, rights)
     elif url.path == prefix + '/discussion_topics':
+        if state.topic_order_enabled and state.topic_written and state.topic_order_read_denied:
+            _send(handler, {'private': 'synthetic-private-order-read-denial'}, 403)
+            return True
         parameters = parse_qs(url.query)
         if parameters.get('only_announcements') != ['false']:
             _send(handler, {'private': 'synthetic-private-unfiltered-inventory'}, 400)
@@ -109,6 +118,27 @@ def write(state, handler, body):
     if parsed is None:
         return False
     url, prefix = parsed
+    if prefix is not None and handler.command == 'POST' and url.path == prefix + '/discussion_topics/reorder':
+        if not state.topic_order_enabled or state.topic_denied or not state.topic_moderator or not state.topic_read_forum:
+            _send(handler, {'private': 'synthetic-private-native-order-denial'}, 403)
+            return True
+        order = body.get('order')
+        pinned = [row for row in state.managed_topics.values() if row['pinned']]
+        if (url.query or set(body) != {'order'} or not isinstance(order, list) or not order or
+                any(type(identifier) is not int for identifier in order) or len(order) != len(set(order)) or
+                set(order) != {row['id'] for row in pinned}):
+            _send(handler, {'private': 'synthetic-private-native-invalid-order'}, 400)
+            return True
+        state.topic_written = True
+        if not state.topic_order_ignore:
+            for position, identifier in enumerate(order, 1):
+                state.managed_topics[identifier]['position'] = position
+        result = {'reorder': True, 'order': [str(row['id']) for row in sorted(pinned, key=lambda row: row['position'])],
+                  'private': 'synthetic-private-native-order-response'}
+        if state.topic_order_ack is not None:
+            result = state.topic_order_ack
+        _send(handler, result)
+        return True
     if prefix is not None and handler.command == 'POST' and url.path == prefix + '/discussion_topics':
         if (state.topic_denied or state.topic_create_permission is not True or
                 body.get('published') is False and not state.topic_moderator):

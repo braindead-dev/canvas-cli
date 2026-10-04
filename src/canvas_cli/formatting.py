@@ -36,6 +36,10 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'pinned_topic_order' in data:
+        return (f"{data['context_type'].title()} {data[data['context_type'] + '_id']} pinned order verified\n" +
+                ' → '.join(str(identifier) for identifier in data['pinned_topic_order']) +
+                '\n' + data['html_url'] + '\n' + data['note'])
     if isinstance(data, dict) and 'created_topic' in data:
         row = data['created_topic']
         lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} created",

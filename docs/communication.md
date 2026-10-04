@@ -101,6 +101,17 @@ Published is not a promise of immediate availability: existing opening dates, co
 
 Pin/unpin requires ordering acknowledgement because moving to the bottom of a native ordering scope can shift other topics. Account, exact prompt/audience/eligibility, scope and complete accessible inventory bind confirmation. One PUT must independently read back the requested state, any acknowledged closing-date removal and a matching inventory entry. Ignored states or unverified outcomes fail without retry/cleanup. Other observed fields and added/removed/changed inventory IDs are labeled, not attributed exclusively to the write; hidden ordering, notifications and future effects are not proven.
 
+### Order all pinned topics
+
+```sh
+canvas topic-order 123 789 456 --acknowledge-all-pinned-topics
+canvas topic-order 123 789 456 --context group --acknowledge-all-pinned-topics
+```
+
+Supply every accessible pinned topic exactly once in the desired order. Unpinned, omitted, duplicate or foreign IDs are refused. This changes the shared pinned list, not personal preferences; graded/section-specific topics may participate without editing their prompts or assignments. Permission on one authored topic does not authorize context ordering: the native temporary-topic update policy requires context `read_forum` and `moderate_forum`.
+
+Account, context, rights and the complete accessible inventory bind the preview. One native POST must acknowledge the exact full order as native ID strings, then independently read back unambiguous positions in that order. Unexpected IDs, ambiguous positions, partial inventories, ignored orders and unverified outcomes fail without retry/rollback. Accessible inventory is not proof that hidden topics do not exist; other observed changes are not exclusively attributed to this write. No pin toggling, peer-post inspection, prompt/assignment edits or notification guarantee.
+
 ### Configure replies, likes and default views
 
 ```sh
@@ -148,6 +159,6 @@ Dismiss hides one own notification; dismiss-all with all acknowledgement hides e
 
 [Conversations](https://developerdocs.instructure.com/services/canvas/resources/conversations), [Recipients](https://developerdocs.instructure.com/services/canvas/resources/search), [Discussions](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics), [Peer reviews](https://developerdocs.instructure.com/services/canvas/resources/peer_reviews), [Announcements](https://developerdocs.instructure.com/services/canvas/resources/announcements), [Activity](https://developerdocs.instructure.com/services/canvas/resources/users).
 
-Prompt-management semantics also follow Instructure's [controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_controller.rb), [API serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/discussion_topics.rb), [API reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_api_controller.rb) and [topic model](https://github.com/instructure/canvas-lms/blob/master/app/models/discussion_topic.rb).
+Prompt-management semantics also follow Instructure's [controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_controller.rb), [API serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/discussion_topics.rb), [API reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_api_controller.rb), [topic model](https://github.com/instructure/canvas-lms/blob/master/app/models/discussion_topic.rb) and [native list ordering](https://github.com/instructure/canvas-lms/blob/master/gems/acts_as_list/lib/active_record/acts/list.rb).
 
 Creation authorization follows the dynamic permissions in the native [course serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/course_json.rb) and [group serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/group.rb), not a role-name guess.

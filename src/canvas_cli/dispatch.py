@@ -9,6 +9,11 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'topic-order':
+        from .topic_ordering import reorder
+        return reorder(client, args.context_id, args.topic_ids, context_type=args.context,
+                       acknowledge=args.acknowledge_all_pinned_topics,
+                       max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-configure':
         from .topic_management import change
         from .topic_options import FIELDS

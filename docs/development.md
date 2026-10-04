@@ -45,7 +45,7 @@ tests/
     page_scheduling.py  native publication callbacks reusing the RCE fixture
     module_items.py  own progression events, pagination and Horizon read-side effects
     module_paths.py  native mastery choices, switching effects and asynchronous readback
-    topic_management.py  native prompt authoring/state/configuration/deletion, ordering and permission filtering
+    topic_management.py  native prompt authoring/state/configuration/deletion, full pinned ordering and permissions
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 
