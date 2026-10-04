@@ -54,6 +54,7 @@ tests/
     topic_sections.py  native course section associations and old/new visibility checks
     announcement_authoring.py  native broadcast/date/comment-lock/section audiences and soft-delete semantics
     entry_attachments.py  native entry-before-file save, own-entry pagination and partial storage failures
+    own_entry.py    ownership-first GraphQL reads, file/visible-quote retention and uncertain edits
     topic_view.py    native GraphQL own preferences, initialization and effective-value resolution
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```

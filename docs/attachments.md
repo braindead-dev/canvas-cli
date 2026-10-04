@@ -21,6 +21,8 @@ One POST must return your exact author ID and selected parent, then agree with a
 
 Canvas saves the entry and native participation effects **before** storing/linking the file. Native storage uses the current user, with submissions-folder placement for graded topics and possible duplicate renaming. A later failure can leave a posted entry without its attachment or an orphan file. Inspect Canvas before repeating; no retry, post deletion, orphan cleanup or rollback occurs.
 
+To retain an existing entry attachment during a text edit, use the separate [modern own-entry edit](own-entry.md) with `--preserve-attachment`. It does not upload a replacement or promise stored-byte integrity.
+
 ## Add or replace
 
 These commands change a readable, ungraded, non-anonymous shared discussion or announcement prompt, not your entry attachment.

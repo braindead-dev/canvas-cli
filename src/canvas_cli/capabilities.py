@@ -4,6 +4,7 @@
 def describe():
     return {
         'read': [
+            'own-entry (exact native GraphQL ownership/scope metadata before rendered body/file/quote metadata; own author ID or native anonymous current_user marker, fingerprints by default, content opt-in; no peer bodies, participant initialization, marks, file download or mutation; raw storage/hidden quotes/file bytes/grade credit unverified)',
             'what-if-course (bounded own published-assignment active submission hypotheses, including unsubmitted rows; fixed GraphQL metadata and native reset permission, no grades/comments/assessments; reported pagination is complete but hidden/historical storage remains unknown)',
             'what-if (exact own existing submission saved hypothetical point score via fixed GraphQL metadata; no official grade, answer, comment, read marker, assessment or submission initialization)',
             'feedback-comments (paginated published-comment effective-read indicators on the exact own submission, current/separately filtered all attempts; includes visible comments by all authors without identities/bodies, drafts/provisional grading/read-status include/assessment excluded; aggregate read can mask individual viewed-row storage)',
@@ -95,7 +96,7 @@ def describe():
             'task-create/task-edit/task-delete (personal planner notes; account-bound preview and matching digest required)',
             'planner-override-create/planner-override-edit/planner-override-delete (planner completion/dismissal; account-bound preview, explicit module-progress acknowledgement for course content)',
             'post (preview and matching digest required; optional native multipart attachment with separate upload consent, frozen bytes, exact own author/parent and independent attachment ID/size readback; entry can save before file storage, native attach rights endpoint-authoritative, no byte/grade/storage/delivery proof, retry or orphan cleanup)',
-            'entry-edit/entry-delete (own entry only; account-bound preview, matching digest and attachment-loss acknowledgement)',
+            'entry-edit/entry-delete (own entry only; account-bound preview, matching digest and REST attachment-loss acknowledgement; entry-edit --preserve-attachment uses native GraphQL read/update rights and independent rendered-text/file/visible-quote readback, raw storage/hidden quotes/bytes/grade credit unverified, no retry/rollback)',
             'entry-rate (own like only; visible target, enabled ratings, account-bound preview and matching digest required)',
             'topic-subscribe/topic-unsubscribe/topic-mark-read/topic-mark-unread/entry-mark-read/entry-mark-unread (only own subscription/read markers; account-bound preview and matching digest required)',
             'inbox-reply/inbox-compose (preview and matching digest required)',

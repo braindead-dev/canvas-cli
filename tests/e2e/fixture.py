@@ -22,6 +22,7 @@ from . import (
     feedback_comments,
     module_items,
     module_paths,
+    own_entry,
     page_authoring,
     page_deletion,
     page_duplication,
@@ -69,6 +70,7 @@ class CanvasFixture(unittest.TestCase):
         topic_management.initialize(cls)
         topic_attachments.initialize(cls)
         entry_attachments.initialize(cls)
+        own_entry.initialize(cls)
         topic_view.initialize(cls)
         submission_drafts.initialize(cls)
         submission_comments.initialize(cls)
@@ -218,6 +220,8 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 if entry_attachments.read(cls, self):
+                    return
+                if own_entry.read(cls, self):
                     return
                 if announcement_authoring.read(cls, self):
                     return
@@ -741,6 +745,8 @@ class CanvasFixture(unittest.TestCase):
                         self.send_response(404); self.end_headers()
                     return
                 body = json.loads(raw) if raw else {}
+                if own_entry.execute(cls, self, body):
+                    return
                 if announcement_authoring.write(cls, self, body):
                     return
                 if what_if_course.execute(cls, self, body):

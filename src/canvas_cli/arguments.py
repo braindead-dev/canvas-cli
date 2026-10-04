@@ -703,8 +703,9 @@ def parser():
             s.add_argument('--max-attachment-bytes', type=int, default=MAX_BYTES, help='Optional lower file limit; at most 25 MiB')
             s.add_argument('--acknowledge-attachment-upload', action='store_true', help='Required only for a selected attachment, including previews')
             _confirmation(s)
-    for name in ('entry', 'entry-edit', 'entry-delete'):
+    for name in ('entry', 'own-entry', 'entry-edit', 'entry-delete'):
         s = sub.add_parser(name, help='Read one visible discussion entry' if name == 'entry' else
+                           'Inspect your own modern entry without requesting peer bodies' if name == 'own-entry' else
                            'Preview editing or deleting one of your own discussion entries')
         s.add_argument('course', type=identifier, metavar='CONTEXT_ID')
         s.add_argument('topic', type=identifier)
@@ -712,9 +713,14 @@ def parser():
         s.add_argument('--context', choices=('course', 'group'), default='course')
         if name == 'entry-edit':
             s.add_argument('--message-file', required=True, type=Path)
-            s.add_argument('--remove-attachment', action='store_true',
-                           help='Acknowledge that Canvas text edits remove the existing attachment')
-        if name != 'entry':
+            attachment_mode = s.add_mutually_exclusive_group()
+            attachment_mode.add_argument('--remove-attachment', action='store_true',
+                                         help='Acknowledge that REST text edits remove the existing attachment')
+            attachment_mode.add_argument('--preserve-attachment', action='store_true',
+                                         help='Use native GraphQL to retain the file and visible quote association')
+        if name == 'own-entry':
+            s.add_argument('--include-content', action='store_true', help='Include your native rendered text; default is a fingerprint')
+        if name not in ('entry', 'own-entry'):
             _confirmation(s)
     creation = sub.add_parser('topic-create', help='Preview one shared ungraded topic using native creation/draft permissions')
     creation.add_argument('context_id', type=identifier)

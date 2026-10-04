@@ -736,12 +736,19 @@ def execute(client, args):
     if args.command == 'thread':
         from .thread import read_thread
         return read_thread(client, args.course, args.topic, args.max_pages, args.context)
-    if args.command in ('entry', 'entry-edit', 'entry-delete'):
+    if args.command in ('entry', 'own-entry', 'entry-edit', 'entry-delete'):
         from .discussion import change_entry, entry
+        if args.command == 'own-entry':
+            from .own_entry import read
+            return read(client, args.course, args.topic, args.entry, context_type=args.context, include_content=args.include_content)
+        if args.command == 'entry-edit' and args.preserve_attachment:
+            from .own_entry import edit
+            return edit(client, args.course, args.topic, args.entry, read_utf8(args.message_file, label='Entry'),
+                        context_type=args.context, yes=args.yes, confirm=args.confirm)
         if args.command == 'entry':
             return entry(client, args.course, args.topic, args.entry, args.max_pages, args.context)
         return change_entry(client, args.course, args.topic, args.entry,
-                            args.message_file.read_text(encoding='utf-8') if args.command == 'entry-edit' else None,
+                            read_utf8(args.message_file, label='Entry') if args.command == 'entry-edit' else None,
                             delete=args.command == 'entry-delete',
                             remove_attachment=getattr(args, 'remove_attachment', False),
                             max_pages=args.max_pages, context_type=args.context, yes=args.yes, confirm=args.confirm)

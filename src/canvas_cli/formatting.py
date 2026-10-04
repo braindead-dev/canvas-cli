@@ -36,6 +36,18 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'own_entry' in data:
+        entry = data['own_entry']
+        attachment = entry['attachment']
+        lines = [f"Own entry {entry['id']} in {entry['context_type']} {entry[entry['context_type'] + '_id']}",
+                 'Ownership: ' + entry['ownership_proof'],
+                 'Attachment: ' + (str(attachment['id']) + f" ({attachment['size_bytes']} bytes)" if attachment else 'none reported'),
+                 'Visible quote: ' + (str(entry['quoted_entry_id']) if entry['quoted_entry_id'] is not None else 'none reported')]
+        if data.get('rendered_text_verified'):
+            lines.append('Rendered text and reported file/quote association verified; raw storage and grade credit unverified.')
+        if 'rendered_message' in entry:
+            lines.append(entry['rendered_message'])
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'attached_post' in data:
         entry = data['attached_post']
         return '\n'.join([f"Own entry {entry['id']}: attachment {entry['attachment']['id']} ({entry['attachment']['size']} bytes)",

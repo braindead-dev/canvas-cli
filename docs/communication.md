@@ -44,7 +44,7 @@ Posts escape UTF-8 text to HTML and bind current topic/account/content. Replies 
 
 Entry-edit/delete verify own authorship and current entry/context/account. They never delete the topic/assignment. Changed content/attachment/owner requires fresh confirmation; graded-post changes can affect credit.
 
-Text editing can remove an attachment; remove-attachment explicitly acknowledges loss. Use the native editor to preserve it. Delete requires exact empty HTTP 204.
+REST text editing can remove an attachment; `--remove-attachment` explicitly acknowledges loss. For ownership-first inspection and attachment-preserving text edits, use the [modern own-entry workflow](own-entry.md). Its `--preserve-attachment` flag is mutually exclusive with removal. Delete requires exact empty HTTP 204.
 
 Topic-ratings shows own cached likes/represented entry IDs, not bodies/other people. Disabled ratings skip cached reads. Cache is eventually consistent; an absent vote is known only for represented entries.
 
