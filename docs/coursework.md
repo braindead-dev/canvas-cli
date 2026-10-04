@@ -36,6 +36,8 @@ canvas grades 123
 
 Assignment groups expose native weights/rules; visible rubrics expose criteria. Grades select only the signed-in user and reject foreign user/course enrollments. Canvas controls visibility. Raw resource responses can contain private data.
 
+The single `assignment` REST read can record assignment/module access and asset analytics, even though the CLI does not submit work or start a quiz. Its help/schema safety label reflects those native effects. [Draft inspection](submission-drafts.md#inspect) uses GraphQL policy metadata instead of that endpoint.
+
 ## Own submissions and feedback
 
 ```sh
@@ -126,11 +128,15 @@ These start as previews; follow [confirmation](safety.md#confirmation). Upload s
 
 Previews check exact assignment, allowed type, publication/lock, account, destination, and content/file metadata. URL input is one absolute HTTP(S) URL read from a file. Plain text-entry/discussion input is escaped to HTML.
 
+Existing submission/comment/file-staging previews use the single-assignment REST read; that preflight can record assignment/module access before any final write is confirmed. A preview does not turn in work, but is not a promise of zero native read-side effects.
+
 Comments are not submissions. Group/graded work may have a shared audience; review destination, content, and course rules. Canvas enforces final membership/acceptance. After uncertainty, check Canvas before repeating.
 
 ## Sources
 
 [Assignments](https://developerdocs.instructure.com/services/canvas/resources/assignments), [Submissions](https://developerdocs.instructure.com/services/canvas/resources/submissions), [Modules](https://developerdocs.instructure.com/services/canvas/resources/modules), [New Quizzes](https://developerdocs.instructure.com/services/canvas/resources/new_quizzes).
+
+The assignment read-effect distinction follows the native [single-assignment handler](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/controllers/assignments_api_controller.rb#L1193).
 
 [Native module events and Horizon reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/context_module_items_api_controller.rb), [Sequence association and ten-occurrence limit](https://github.com/instructure/canvas-lms/blob/master/app/helpers/application_helper.rb).
 

@@ -9,6 +9,13 @@ from canvas_cli.navigation import command_help, command_schema
 
 
 class NavigationTests(unittest.TestCase):
+    def test_single_assignment_read_is_classified_for_native_module_access_effects(self):
+        safety = 'Canvas queries (server-side effects possible)'
+        self.assertEqual(command_help(parser(), 'assignment')['safety'], safety)
+        data = command_schema(parser(), 'assignment')['commands'][0]
+        self.assertEqual(data['safety'], safety)
+        self.assertEqual(command_help(parser(), 'draft')['safety'], 'Read-only')
+
     def test_all_canvas_writes_share_the_same_confirmation_flag_contract(self):
         root = parser()
         data = command_schema(root)

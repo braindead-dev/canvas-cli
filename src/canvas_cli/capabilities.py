@@ -19,7 +19,7 @@ def describe():
             'appointment-team-reservations',
             'planner-overrides', 'planner-override', 'overview', 'deadlines', 'work', 'agenda', 'missing',
             'exports', 'export-status',
-            'news', 'linked-files', 'assignments', 'assignment',
+            'news', 'linked-files', 'assignments',
             'assignment-groups', 'assignment-group', 'submission', 'submissions', 'feedback', 'grades', 'peer-reviews',
             'syllabus', 'tabs', 'front-page', 'modules', 'module-items', 'outline', 'pages', 'page',
             'files', 'my-files', 'file-info', 'folders', 'my-folders', 'folder', 'folder-files', 'folder-folders',
@@ -31,6 +31,7 @@ def describe():
             'snapshot-search (offline)',
         ],
         'read_with_native_side_effects': [
+            'assignment (single-assignment REST GET can record assignment/module read access and asset analytics; use draft for own draft/policy inspection without that endpoint; no final submission or quiz attempt)',
             'topic-view (own effective display/shared defaults/locks; opt-in language/summary preferences and own pinned-unread indicator, not service access or reply read status; native GraphQL and participant-initialization acknowledgement, no peer replies; query can create own participant/default subscription/unread counters and planner cache)',
             'module-paths (own eligible mastery choices and assignment-ID projection; native module/conditional evaluation can have downstream effects, no path chosen or content/assessment navigation)',
             'module-sequence (native previous/next metadata, at most ten occurrences; no content navigation or mastery choice; conditional-release evaluation may have native effects)',
