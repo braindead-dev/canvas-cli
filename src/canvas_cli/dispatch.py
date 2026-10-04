@@ -9,6 +9,14 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('submission-attention', 'submission-mark-read', 'submission-mark-unread'):
+        from . import submission_attention
+        if args.command == 'submission-attention':
+            return submission_attention.read(client, args.course_id, args.assignment_id, include_preferences=args.include_feedback_markers)
+        return submission_attention.change(client, args.course_id, args.assignment_id,
+                                           'unread' if args.command == 'submission-mark-unread' else 'read',
+                                           surface=getattr(args, 'surface', 'overall'), acknowledge=args.acknowledge_feedback_indicators,
+                                           yes=args.yes, confirm=args.confirm)
     if args.command in ('submission-comments', 'comment-draft-create', 'comment-draft-edit', 'comment-draft-publish', 'comment-draft-delete'):
         from . import submission_comments
         if args.command == 'submission-comments':

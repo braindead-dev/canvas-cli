@@ -872,6 +872,21 @@ def parser():
                 s.add_argument('--group-comment', action='store_true', help='Individually graded group assignment only; group-graded comments already copy natively')
                 s.add_argument('--acknowledge-group-effects', action='store_true', help='Required for any group assignment; even drafts can create group-linked records')
             _confirmation(s)
+    for name in ('submission-attention', 'submission-mark-read', 'submission-mark-unread'):
+        s = sub.add_parser(name, help={
+            'submission-attention': 'Inspect own aggregate feedback attention and optional annotation/rubric preference markers',
+            'submission-mark-read': 'Preview acknowledging a selected own feedback indicator, not completing work',
+            'submission-mark-unread': 'Preview the native overall own unread indicator, not changing coursework'}[name])
+        s.add_argument('course_id', type=identifier)
+        s.add_argument('assignment_id', type=identifier)
+        if name == 'submission-attention':
+            s.add_argument('--include-feedback-markers', action='store_true', help='Read own annotation and rubric-feedback preference booleans, not content')
+        else:
+            if name == 'submission-mark-read':
+                from .submission_attention import SURFACES
+                s.add_argument('--surface', choices=SURFACES, default='overall', help='Native overall/item/preference markers have distinct effects and readback limits')
+            s.add_argument('--acknowledge-feedback-indicators', action='store_true', help='Required for preview; acknowledges native indicators/counters, not proof of content viewing or work completion')
+            _confirmation(s)
     schema_command = sub.add_parser('schema', help='Offline machine-readable argument and safety catalog from the actual parser')
     schema_command.add_argument('--search', help='Find command schemas by name, description or safety category')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')

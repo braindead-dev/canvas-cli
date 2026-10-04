@@ -36,6 +36,17 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'attention_status' in data and not data.get('dry_run'):
+        lines = [f"Own feedback indicators: course {data['course_id']}, assignment {data['assignment_id']}",
+                 data['attention_status'], 'Aggregate: ' + str(data['aggregate_read_state'])]
+        lines.extend(key + ': ' + ('read' if value else 'unread') for key, value in data['preference_read_markers'].items())
+        if data.get('mutation_acknowledged'):
+            lines.append(f"Native {data['surface']} request acknowledged; no coursework was completed.")
+            if data['aggregate_matches_requested_state'] is False:
+                lines.append('The aggregate differs from the requested state; other native unread items can remain.')
+            if not data['selected_preference_readback_verified']:
+                lines.append('Individual participation-item storage is not independently verified.')
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'inventory_status' in data and 'selected_attempts' in data and not data.get('dry_run'):
         lines = [f"Own comments: course {data['course_id']}, assignment {data['assignment_id']}", data['inventory_status']]
         for row in data['comments']:
