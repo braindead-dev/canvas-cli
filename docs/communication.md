@@ -127,6 +127,19 @@ This sets selected opening/closing dates, not assignment due dates or private re
 
 Availability acknowledgement is required even for preview: native date changes can publish a draft, delay opening, reopen replies or close them immediately. Already-matching instants are no-ops, not publication controls. Account, context/time zone, prompt/audience and complete accessible inventory bind confirmation. One PUT must independently read back every selected instant or explicit clearing; equivalent offsets are accepted, changed instants and partial/ignored writes are not. Observed publication/closed-state changes are labeled, not predicted or attributed exclusively to this write. Future jobs, actual student availability through pacing/modules/overrides and notifications remain unverified. No peer-post reads, retries or rollback.
 
+### Set the shared student to-do date
+
+```sh
+canvas topic-todo 123 456 --todo-at 2027-10-01T09:00:00-07:00 --acknowledge-shared-topic --acknowledge-student-todo-change
+canvas topic-todo 123 456 --context group --clear-todo --acknowledge-shared-topic --acknowledge-student-todo-change
+```
+
+This changes an ungraded discussion's shared student to-do date, not a private planner task, graded due date or opening/closing date. Both acknowledgements are required even for preview. Course and group contexts are supported. Setting a non-null date requires the exact native context `manage_course_content_add` permission as well as topic-update permission. Clearing requires topic update but does not impose the additional add permission that Canvas skips for null values. Ownership, enrollment labels and moderation alone are not substituted for these checks.
+
+Use a whole-second RFC 3339 instant with `Z` or an explicit offset; clearing is explicit and an already-matching date is a no-op. Past and midnight instants are allowed; opening/closing-date ordering and course-midnight rewriting are not invented for to-do dates. Missing native date metadata is unknown, not assumed unset.
+
+Account, exact prompt/audience, context, required permission and complete accessible inventory bind confirmation. One PUT must independently read back the selected instant or clearing and a matching inventory entry. Equivalent offsets are accepted; ignored/shifted dates, stale previews and uncertain outcomes fail without retry, cleanup or rollback. Other observed changes are labeled, not exclusive causal proof. Stored-date verification does not prove student planner/feed visibility, completion, notifications, future jobs or availability. No peer-post, grading, submission or read-marker action occurs. Graded, anonymous, announcement and root/child/group-set topics need separate workflows.
+
 ### Order all pinned topics
 
 ```sh

@@ -9,6 +9,12 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'topic-todo':
+        from .topic_management import change
+        return change(client, args.context_id, args.topic_id, context_type=args.context,
+                      todo={'todo_date': None if args.clear_todo else args.todo_at},
+                      acknowledge_shared=args.acknowledge_shared_topic, acknowledge_todo=args.acknowledge_student_todo_change,
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-duplicate':
         from .topic_duplication import duplicate
         return duplicate(client, args.context_id, args.topic_id, context_type=args.context,

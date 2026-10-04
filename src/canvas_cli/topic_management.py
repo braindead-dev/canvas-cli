@@ -1,6 +1,6 @@
 """Exact native ungraded-topic text/state/deletion, not assignment administration."""
 
-from . import topic_dates
+from . import topic_dates, topic_todo
 from .client import CanvasError
 from .discussion import _message
 from .events import timestamp
@@ -60,7 +60,7 @@ def _topic(row, item, topic_id, context_type):
         raise CanvasError('Linked assignments, root/child topics and group-set discussions need separate management workflows')
     if (not isinstance(row.get('title'), str) or not row['title'] or 'message' not in row or
             row['message'] is not None and not isinstance(row['message'], str) or
-            any(key not in row for key in topic_dates.FIELDS) or
+            any(key not in row for key in (*topic_dates.FIELDS, 'todo_date')) or
             any(type(row.get(key)) is not bool for key in ('published', 'locked', 'pinned', 'require_initial_post', 'is_section_specific')) or
             type(row.get('discussion_subentry_count')) is not int or row['discussion_subentry_count'] < 0):
         raise CanvasError('Canvas returned incomplete discussion-topic metadata')
@@ -170,7 +170,7 @@ def _inventory_delta(before, after):
 def _matches(row, key, value):
     if key == 'message':
         return row['message_digest'] == digest(value)
-    if key in topic_dates.FIELDS:
+    if key in (*topic_dates.FIELDS, 'todo_date'):
         return topic_dates.matches(row, key, value)
     return row[key] == value
 
@@ -178,7 +178,7 @@ def _matches(row, key, value):
 def change(client, item, topic_id, *, context_type='course', title=None, message=None, delete=False,
            action=None, acknowledge_shared=False, acknowledge_removal=False, acknowledge_ordering=False,
            acknowledge_schedule_removal=False, options=None, acknowledge_reply_visibility=False,
-           schedule=None, acknowledge_availability=False,
+           schedule=None, acknowledge_availability=False, todo=None, acknowledge_todo=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     if context_type not in ('course', 'group'):
@@ -193,7 +193,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if (type(acknowledge_ordering) is not bool or type(acknowledge_schedule_removal) is not bool or
             action is not None and (not isinstance(action, str) or action not in ACTIONS)):
         raise CanvasError('Select a known topic state action and explicit boolean acknowledgements')
-    if sum((delete, action is not None, options is not None, schedule is not None,
+    if sum((delete, action is not None, options is not None, schedule is not None, todo is not None,
             title is not None or message is not None)) > 1:
         raise CanvasError('Topic deletion and state controls cannot include other operations or content edits')
     if ((action in ('pin', 'unpin')) != acknowledge_ordering or
@@ -205,18 +205,23 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
         raise CanvasError('Scheduling requires --acknowledge-availability-change, including previews; not for other operations')
     if schedule is not None:
         schedule = topic_dates.validate(schedule, context_type)
+    if type(acknowledge_todo) is not bool or acknowledge_todo != (todo is not None):
+        raise CanvasError('To-do dates require --acknowledge-student-todo-change, including previews; not for other operations')
+    if todo is not None:
+        todo = topic_todo.validate(todo)
     if (type(acknowledge_reply_visibility) is not bool or
             acknowledge_reply_visibility != (options is not None and 'require_initial_post' in options)):
         raise CanvasError('Changing require_initial_post requires --acknowledge-reply-visibility-change, including previews; not for other operations')
-    changes = (schedule if schedule is not None else options if options is not None else
+    changes = (todo if todo is not None else schedule if schedule is not None else options if options is not None else
                dict([ACTIONS[action]]) if action is not None else None if delete else _changes(title, message))
-    controlled = action is not None or options is not None or schedule is not None
+    controlled = action is not None or options is not None or schedule is not None or todo is not None
     identity = account(client)
     route, context = _scope(client, item, context_type)
     before = _read(client, route, item, topic_id, context_type)
     permission = 'delete' if delete else 'update'
     if before['permissions'][permission] is not True:
         raise CanvasError('Canvas does not permit this exact discussion-topic ' + permission)
+    todo_rights = topic_todo.authority(client, route, todo) if todo is not None else None
     if action == 'unpublish' and before['can_unpublish'] is not True:
         raise CanvasError('Canvas did not report native eligibility to move this exact topic to draft')
     if action == 'close' and before['can_lock'] is not True:
@@ -229,6 +234,8 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if schedule is not None:
         topic_dates.validate_current(schedule, before, context)
     if not delete and all(_matches(before, key, value) for key, value in changes.items()):
+        if todo is not None:
+            raise CanvasError('The shared topic to-do date already matches; no update needed')
         if schedule is not None:
             raise CanvasError('The selected topic dates already match; no schedule update needed')
         raise CanvasError('The selected topic settings already match; no update needed' if options is not None else
@@ -241,6 +248,8 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if controlled and (_scope(client, item, context_type) != (route, context) or
                        _inventory(client, route, item, context_type, max_pages) != inventory or account(client) != identity):
         raise CanvasError('Discussion context/inventory changed during state preflight')
+    if todo is not None:
+        topic_todo.authority(client, route, todo)
     preview = {**identity, 'context_type': context_type, f'{context_type}_id': int(item), 'context': context,
                'topic': before, 'inventory_digest': digest(inventory), 'acknowledge_shared_topic': True,
                'acknowledge_topic_removal': acknowledge_removal, 'method': 'DELETE' if delete else 'PUT',
@@ -254,6 +263,9 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
                        warning=WARNING + ' ' + OPTIONS_WARNING)
     if schedule is not None:
         preview.update(acknowledge_availability_change=True, warning=WARNING + ' ' + topic_dates.WARNING)
+    if todo is not None:
+        preview.update(acknowledge_student_todo_change=True, additional_context_permission_required=todo['todo_date'] is not None,
+                       todo_permissions=todo_rights, warning=WARNING + ' ' + topic_todo.WARNING)
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -287,6 +299,8 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             raise CanvasError('Canvas did not store every selected native discussion option')
         if schedule is not None and not all(_matches(after, key, value) for key, value in schedule.items()):
             raise CanvasError('Canvas did not store every selected discussion date as the exact instant or explicit clearing')
+        if todo is not None and not _matches(after, 'todo_date', todo['todo_date']):
+            raise CanvasError('Canvas did not store the shared to-do date as the exact instant or explicit clearing')
         if action is not None:
             field, value = ACTIONS[action]
             if after[field] is not value or clears_schedule and after['lock_at'] is not None:
@@ -334,4 +348,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
                                            'observed_states': {key: {'before': before[key], 'after': after[key]}
                                                                for key in ('published', 'locked')},
                                            'future_execution_verified': False}
+    if todo is not None:
+        result['student_todo_date'] = {'requested': todo['todo_date'], 'stored': after['todo_date'], 'verified': True,
+                                      'shared_change_acknowledged': True, 'planner_effects_verified': False}
     return result

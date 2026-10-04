@@ -22,7 +22,7 @@ def initialize(state, *, enabled=False):
               'published': True, 'locked': False, 'pinned': True, 'position': 1, 'require_initial_post': False,
               'is_section_specific': False, 'sections': [], 'discussion_subentry_count': 0,
               'created_at': '2026-10-01T12:00:00Z', 'posted_at': '2026-10-01T12:00:00Z', 'last_reply_at': None,
-              'delayed_post_at': None, 'lock_at': None,
+              'delayed_post_at': None, 'lock_at': None, 'todo_date': None,
               'author': {'id': 7, 'email': 'synthetic-private-author@example.edu'},
               'permissions': {'update': True, 'delete': True, 'reply': True},
               'attachments': [{'id': 881, 'filename': 'synthetic.txt', 'display_name': 'Synthetic', 'size': 20,
@@ -52,6 +52,10 @@ def initialize(state, *, enabled=False):
     state.topic_read_forum = True
     state.topic_schedule_enabled = state.topic_schedule_midnight_rewrite = False
     state.topic_schedule_time_zone_after = None
+    state.topic_todo_enabled = False
+    state.topic_content_add = True
+    state.topic_content_add_report = None
+    state.topic_todo_offset_storage = state.topic_todo_shift = False
     topic_duplication.initialize(state)
 
 
@@ -85,6 +89,9 @@ def read(state, handler):
             rights['read_forum'] = state.topic_read_forum
         if 'read_as_admin' in parse_qs(url.query).get('permissions[]', []):
             rights['read_as_admin'] = state.topic_context_admin
+        if 'manage_course_content_add' in parse_qs(url.query).get('permissions[]', []):
+            rights = ({'manage_course_content_add': state.topic_content_add} if state.topic_content_add_report is None
+                      else state.topic_content_add_report)
         _send(handler, rights)
     elif url.path == prefix + '/discussion_topics':
         if state.topic_order_enabled and state.topic_written and state.topic_order_read_denied:
@@ -193,6 +200,27 @@ def write(state, handler, body):
         _send(handler, {'private': 'synthetic-private-native-topic-permission-denial'}, 403)
         return True
     if set(body) - {'title', 'message'} or parse_qs(url.query) != {'no_verifiers': ['true']}:
+        if (state.topic_todo_enabled and handler.command == 'PUT' and set(body) == {'todo_date'} and
+                parse_qs(url.query) == {'no_verifiers': ['true']}):
+            # Native permission asymmetry is independent of the CLI's preflight checks.
+            if body['todo_date'] is not None and (state.topic_content_add is not True or row.get('assignment_id') is not None):
+                _send(handler, {'private': 'synthetic-private-native-todo-denial'}, 403)
+                return True
+            state.topic_written = True
+            if not state.topic_ignore and 'todo_date' not in state.topic_ignored_fields:
+                row.update(body)
+                if state.topic_todo_offset_storage and row['todo_date']:
+                    row['todo_date'] = row['todo_date'].replace('Z', '+00:00')
+                if state.topic_todo_shift:
+                    row['todo_date'] = '2040-10-02T19:00:01Z'
+                if state.topic_state_lose_edit:
+                    row['permissions']['update'] = False
+                state.topic_notifications.append(identifier)
+            response = copy.deepcopy(row)
+            if state.topic_ack_patch is not None:
+                response = {**response, **state.topic_ack_patch} if isinstance(state.topic_ack_patch, dict) else state.topic_ack_patch
+            _send(handler, response)
+            return True
         if (state.topic_schedule_enabled and handler.command == 'PUT' and body and
                 set(body) <= {'delayed_post_at', 'lock_at'} and parse_qs(url.query) == {'no_verifiers': ['true']}):
             # Native date callbacks are modeled independently, not by importing CLI validators.

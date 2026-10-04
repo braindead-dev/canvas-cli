@@ -17,16 +17,17 @@ WARNING = ('Changing or clearing course discussion dates can publish a draft, de
 def validate(values, context_type):
     if context_type != 'course' or not isinstance(values, dict) or not values or set(values) - set(FIELDS):
         raise CanvasError('Select opening/closing dates or explicit clearing for an ordinary course discussion')
-    selected = {}
-    for key, value in values.items():
-        parsed = timestamp(value) if value is not None else None
-        if parsed is not None and parsed.microsecond:
-            raise CanvasError('Discussion scheduling requires whole-second instants; do not guess subsecond storage')
-        try:
-            selected[key] = parsed.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z') if parsed else None
-        except OverflowError:
-            raise CanvasError('Discussion instant is outside the supported UTC date range') from None
-    return selected
+    return {key: instant(value) for key, value in values.items()}
+
+
+def instant(value):
+    parsed = timestamp(value) if value is not None else None
+    if parsed is not None and parsed.microsecond:
+        raise CanvasError('Discussion dates require whole-second instants; do not guess subsecond storage')
+    try:
+        return parsed.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z') if parsed else None
+    except OverflowError:
+        raise CanvasError('Discussion instant is outside the supported UTC date range') from None
 
 
 def matches(row, key, value):
