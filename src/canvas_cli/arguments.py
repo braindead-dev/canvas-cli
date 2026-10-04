@@ -716,6 +716,23 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
+    for name in ('announcement-create', 'announcement-edit', 'announcement-delete'):
+        announcement = sub.add_parser(name, help='Preview native shared announcement authoring; not a discussion draft or reply')
+        announcement.add_argument('context_id', type=identifier)
+        announcement.add_argument('--context', choices=('course', 'group'), default='course')
+        announcement.add_argument('--acknowledge-shared-announcement', action='store_true', help='Required including previews')
+        if name != 'announcement-create':
+            announcement.add_argument('announcement_id', type=identifier)
+        if name == 'announcement-delete':
+            announcement.add_argument('--acknowledge-announcement-removal', action='store_true', help='Required for soft deletion; notifications are not recalled')
+        else:
+            announcement.add_argument('--title', required=name == 'announcement-create')
+            announcement.add_argument('--message-file', type=Path, required=name == 'announcement-create', help='UTF-8 plain text escaped to HTML')
+            announcement.add_argument('--acknowledge-broadcast', action='store_true', help='Required for possible participant/observer notifications, including previews')
+        if name == 'announcement-create':
+            announcement.add_argument('--post-at', help='Future whole-second timestamp with UTC offset; course only, not a private draft')
+            announcement.add_argument('--comments', action=argparse.BooleanOptionalAction, default=False, help='Allow comments; default requests closed comments without changing creator preferences')
+        _confirmation(announcement)
     sub.add_parser('topic-languages', help='Read native schema-accepted language preferences, not service-access proof')
     for name in ('topic-view', 'topic-view-set'):
         view = sub.add_parser(name, help='Read own effective discussion view; native queries can initialize your participant record' if name == 'topic-view' else

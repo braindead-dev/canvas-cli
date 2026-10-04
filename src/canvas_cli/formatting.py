@@ -137,6 +137,20 @@ def _brief(data):
         return (f"{data['context_type'].title()} {data[data['context_type'] + '_id']} pinned order verified\n" +
                 ' → '.join(str(identifier) for identifier in data['pinned_topic_order']) +
                 '\n' + data['html_url'] + '\n' + data['note'])
+    if isinstance(data, dict) and any(key in data for key in ('created_announcement', 'edited_announcement', 'deleted_announcement')):
+        key = next(key for key in ('created_announcement', 'edited_announcement', 'deleted_announcement') if key in data)
+        row = data[key]
+        action = key.split('_', 1)[0]
+        lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} announcement {row['id']} {action}", row['title']]
+        if 'html_url' in row:
+            lines.append(row['html_url'])
+        if 'stored_text_matches_request' in data and not all(data['stored_text_matches_request'].values()):
+            lines.append('Stored text differs from the request; inspect Canvas and JSON before using it.')
+        if key == 'created_announcement':
+            lines.append('Stored posting date: ' + str(data['stored_posting_at']) + '; future execution and delivery are unverified.')
+        if data.get('unrequested_changed_fields'):
+            lines.append('Other observed changes: ' + ', '.join(data['unrequested_changed_fields']))
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'created_topic' in data:
         row = data['created_topic']
         lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} created",

@@ -48,13 +48,14 @@ def _parent(row, item, context_type):
         raise CanvasError('Canvas returned a topic outside the requested context')
 
 
-def _topic(row, item, topic_id, context_type, *, require_audience=False):
+def _topic(row, item, topic_id, context_type, *, require_audience=False, announcement=False):
     if _id(row) != int(topic_id):
         raise CanvasError('Canvas returned a different discussion topic')
     _parent(row, item, context_type)
     if (row.get('workflow_state') == 'deleted' or row.get('hidden_for_user') or
-            row.get('anonymous_state') is not None or row.get('is_announcement') is not False):
-        raise CanvasError('Topic management requires a readable non-anonymous discussion, not an announcement')
+            row.get('anonymous_state') is not None or row.get('is_announcement') is not announcement):
+        raise CanvasError('Announcement management requires a readable non-anonymous announcement' if announcement else
+                          'Topic management requires a readable non-anonymous discussion, not an announcement')
     if (any(key not in row or row[key] is not None for key in ('assignment_id', 'root_topic_id', 'group_category_id')) or
             row.get('assignment') is not None or any(row.get(key) != [] for key in ('topic_children', 'group_topic_children'))):
         raise CanvasError('Linked assignments, root/child topics and group-set discussions need separate management workflows')
@@ -127,17 +128,17 @@ def _scope(client, item, context_type):
     return route, {key: row.get(key) for key in ('id', 'name', 'workflow_state', 'concluded', 'non_collaborative', 'time_zone')}
 
 
-def _read(client, route, item, topic_id, context_type, *, require_audience=False):
+def _read(client, route, item, topic_id, context_type, *, require_audience=False, announcement=False):
     row, _ = client.request(route + '/discussion_topics/' + topic_id + '?include%5B%5D=sections&no_verifiers=true')
-    return _topic(row, item, topic_id, context_type, require_audience=require_audience)
+    return _topic(row, item, topic_id, context_type, require_audience=require_audience, announcement=announcement)
 
 
-def _inventory(client, route, item, context_type, max_pages):
+def _inventory(client, route, item, context_type, max_pages, *, announcement=False):
     output = []
-    for row in client.list(route + '/discussion_topics?per_page=100&only_announcements=false', max_pages):
+    for row in client.list(route + '/discussion_topics?per_page=100&only_announcements=' + str(announcement).lower(), max_pages):
         _id(row)
         _parent(row, item, context_type)
-        if row.get('is_announcement') is not False or row.get('workflow_state') == 'deleted':
+        if row.get('is_announcement') is not announcement or row.get('workflow_state') == 'deleted':
             raise CanvasError('Canvas returned a foreign/deleted topic in the discussion inventory')
         output.append({key: row.get(key) for key in ('id', 'title', 'published', 'locked', 'pinned', 'position')})
     if len({row['id'] for row in output}) != len(output):

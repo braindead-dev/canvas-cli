@@ -97,7 +97,7 @@ Previews bind account, exact topic/content, reported audience, permissions and t
 
 Deletion requires additional removal acknowledgement. One native soft DELETE must be acknowledged as deleted, disappear from the paginated active-topic inventory and return exact-ID 404/410. Access denial alone is not deletion proof; no permanent-erasure claim or CLI restore. Uncertain outcomes never retry, roll back or clean up automatically.
 
-Graded topics, announcements, anonymous topics and root/child/group-set associations remain separate, unsupported management workflows. Initial-post protections still govern peer replies; these commands do not inspect them. Preflight is not an atomic lock and concurrent edits can be overwritten.
+Announcements use the separate [announcement workflow](announcements.md), not these prompt commands. Graded/anonymous topics and root/child/group-set associations remain unsupported here. Initial-post protections still govern peer replies; these commands do not inspect them. Preflight is not an atomic lock and concurrent edits can be overwritten.
 
 ### Publication, closing and pinning
 
@@ -195,6 +195,8 @@ Comments can repeat or belong to someone other than the assessor. Anonymous/miss
 No allocation, completion, grading, attempt, or read-state write occurs.
 
 ## Activity and announcements
+
+For native shared announcement creation, text editing and soft deletion, see [shared announcements](announcements.md). These are distinct from feed reads and discussion drafts.
 
 ```sh
 canvas news --days 30 --format brief

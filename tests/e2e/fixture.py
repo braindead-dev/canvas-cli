@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import (
+    announcement_authoring,
     appointments,
     channels,
     feedback_comments,
@@ -52,6 +53,7 @@ class CanvasFixture(unittest.TestCase):
                         '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'],
                        check=True, capture_output=True)
         cls.calls = []
+        announcement_authoring.initialize(cls)
         appointments.initialize(cls)
         module_items.initialize(cls)
         module_paths.initialize(cls)
@@ -211,6 +213,8 @@ class CanvasFixture(unittest.TestCase):
                     return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if announcement_authoring.read(cls, self):
+                    return
                 if snapshot_revalidation.read(cls, self):
                     return
                 if what_if_course.read(cls, self):
@@ -727,6 +731,8 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if announcement_authoring.write(cls, self, body):
+                    return
                 if what_if_course.execute(cls, self, body):
                     return
                 if what_if.execute(cls, self, body):
