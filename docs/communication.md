@@ -38,6 +38,8 @@ Thread follows entry and separate reply pagination when embedded ten-reply lists
 
 Posts escape UTF-8 text to HTML and bind current topic/account/content. Replies also verify the exact visible non-deleted entry.
 
+[Prompt attachments](attachments.md) support native course/group single-file upload and destructive replacement with separate consent. These change the shared prompt, not your reply attachment.
+
 ### Own edits and likes
 
 Entry-edit/delete verify own authorship and current entry/context/account. They never delete the topic/assignment. Changed content/attachment/owner requires fresh confirmation; graded-post changes can affect credit.

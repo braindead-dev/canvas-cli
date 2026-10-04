@@ -6,6 +6,7 @@ import mimetypes
 import os
 import stat
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -28,16 +29,47 @@ def file_info(path, max_bytes):
         if max_bytes < 1 or details.st_size < 1 or details.st_size > max_bytes:
             raise CanvasError('Upload file must be nonempty and within --max-bytes')
         digest = hashlib.sha256()
+        total = 0
         with source.open('rb') as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                total += len(chunk)
+                if total > max_bytes:
+                    raise CanvasError('Upload file grew past --max-bytes')
                 digest.update(chunk)
-        if source.stat().st_size != details.st_size:
+        if total != details.st_size or source.stat().st_size != details.st_size:
             raise CanvasError('Upload file changed during inspection')
     except OSError:
         raise CanvasError('Cannot read upload file') from None
     mime = mimetypes.guess_type(source.name)[0] or 'application/octet-stream'
     return {'source': str(source.resolve()), 'name': source.name,
             'size': details.st_size, 'content_type': mime, 'sha256': digest.hexdigest()}
+
+
+@contextmanager
+def staged_file(info, max_bytes):
+    """Freeze exactly the inspected bytes before any native or storage write."""
+    try:
+        source = Path(info['source'])
+        if source.is_symlink():
+            raise CanvasError('Refusing a symlinked upload source')
+        with source.open('rb') as stream, tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode='w+b') as staged:
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode) or opened.st_size != info['size']:
+                raise CanvasError('Upload file changed after preview')
+            current = hashlib.sha256()
+            total = 0
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                current.update(chunk)
+                staged.write(chunk)
+                total += len(chunk)
+                if total > max_bytes:
+                    raise CanvasError('Upload file grew past --max-bytes')
+            if total != info['size'] or current.hexdigest() != info['sha256']:
+                raise CanvasError('Upload file changed after preview')
+            staged.seek(0)
+            yield staged
+    except OSError:
+        raise CanvasError('Upload file became unreadable; verify in Canvas before retrying') from None
 
 
 def _destination(client, identity, context_type, context_id, folder_id):
@@ -173,22 +205,7 @@ def upload(client, source, max_bytes=25 * 1024 * 1024, course_id=None,
     if 'folder' in destination:
         initial['parent_folder_id'] = destination['folder']['id']
     try:
-        with Path(info['source']).open('rb') as stream, tempfile.SpooledTemporaryFile(
-                max_size=8 * 1024 * 1024, mode='w+b') as staged:
-            opened = os.fstat(stream.fileno())
-            if not stat.S_ISREG(opened.st_mode) or opened.st_size != info['size']:
-                raise CanvasError('Upload file changed after preview')
-            current = hashlib.sha256()
-            total = 0
-            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-                current.update(chunk)
-                staged.write(chunk)
-                total += len(chunk)
-                if total > max_bytes:
-                    raise CanvasError('Upload file grew past --max-bytes')
-            if total != info['size'] or current.hexdigest() != info['sha256']:
-                raise CanvasError('Upload file changed after preview')
-            staged.seek(0)
+        with staged_file(info, max_bytes) as staged:
             response, _ = client.request(preview['init_route'], 'POST', initial)
             if not isinstance(response, dict) or not response.get('upload_url'):
                 raise CanvasError('Canvas did not provide a direct upload URL; verify in Canvas before retrying')

@@ -31,6 +31,7 @@ from . import (
     submission_comments,
     submission_drafts,
     team_appointments,
+    topic_attachments,
     topic_management,
     topic_view,
     what_if,
@@ -65,6 +66,7 @@ class CanvasFixture(unittest.TestCase):
         page_scheduling.initialize(cls)
         snapshot_revalidation.initialize(cls)
         topic_management.initialize(cls)
+        topic_attachments.initialize(cls)
         topic_view.initialize(cls)
         submission_drafts.initialize(cls)
         submission_comments.initialize(cls)
@@ -730,6 +732,10 @@ class CanvasFixture(unittest.TestCase):
                     self.end_headers(); return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if self.headers.get('Content-Type', '').startswith('multipart/form-data;'):
+                    if not topic_attachments.write(cls, self, raw):
+                        self.send_response(404); self.end_headers()
+                    return
                 body = json.loads(raw) if raw else {}
                 if announcement_authoring.write(cls, self, body):
                     return

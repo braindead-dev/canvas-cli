@@ -720,6 +720,20 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
+    from .multipart import MAX_BYTES
+    for kind in ('topic', 'announcement'):
+        attachment = sub.add_parser(kind + '-attachment-set', help='Preview native prompt attachment upload or destructive replacement')
+        attachment.add_argument('context_id', type=identifier)
+        attachment.add_argument(kind + '_id', type=identifier)
+        attachment.add_argument('file')
+        attachment.add_argument('--context', choices=('course', 'group'), default='course')
+        attachment.add_argument('--max-bytes', type=int, default=MAX_BYTES)
+        attachment.add_argument('--acknowledge-shared-' + kind, action='store_true', help='Required including previews')
+        attachment.add_argument('--acknowledge-attachment-upload', action='store_true', help='Required including previews; shared native file effects')
+        attachment.add_argument('--acknowledge-attachment-replacement', action='store_true', help='Required only when replacing the old attachment and its file record')
+        if kind == 'announcement':
+            attachment.add_argument('--acknowledge-broadcast', action='store_true', help='Required including previews for possible native notifications')
+        _confirmation(attachment)
     from .topic_podcast import MODES
     for kind in ('topic', 'announcement'):
         podcast = sub.add_parser(kind + '-podcast', help='Preview shared native podcast settings without disclosing or fetching feed URLs')

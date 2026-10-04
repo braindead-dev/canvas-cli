@@ -4,6 +4,8 @@
 
 These commands change a course/group announcement, not your reply or a private note. Native announcements cannot be drafts. They may notify participants and observers and update activity/participant records. Use only a context you are authorized to manage.
 
+[Attachment upload/replacement](attachments.md) is a separate native multipart operation with exact attach rights and destructive replacement consent.
+
 ## Create
 
 ```sh
@@ -111,7 +113,7 @@ This parameter follows the pinned native [request handling](https://github.com/i
 
 ## Boundaries
 
-Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Shared feed modes use the separate [podcast workflow](podcasts.md). Attachment upload/replacement and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
+Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Shared feed modes use the separate [podcast workflow](podcasts.md); native upload/replacement uses the [attachment workflow](attachments.md). Bulk operations remain open. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
 
 Validation covers unit tests and subprocess/local HTTPS fixtures with synthetic records. No real announcement mutation has been live-tested. Delivery, future jobs, hidden inventory effects and remote preference storage remain unverified.
 

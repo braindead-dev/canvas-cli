@@ -9,6 +9,15 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('topic-attachment-set', 'announcement-attachment-set'):
+        from .topic_attachments import set_attachment
+        kind = args.command.split('-')[0]
+        return set_attachment(client, args.context_id, getattr(args, kind + '_id'), args.file, kind=kind,
+                context_type=args.context, max_bytes=args.max_bytes, max_pages=args.max_pages,
+                acknowledge_shared=getattr(args, 'acknowledge_shared_' + kind),
+                acknowledge_upload=args.acknowledge_attachment_upload,
+                acknowledge_replacement=args.acknowledge_attachment_replacement,
+                acknowledge_broadcast=getattr(args, 'acknowledge_broadcast', False), yes=args.yes, confirm=args.confirm)
     if args.command in ('topic-podcast', 'announcement-podcast'):
         from . import announcement_authoring, topic_management
         options = {'context_type': args.context, 'podcast': args.mode,

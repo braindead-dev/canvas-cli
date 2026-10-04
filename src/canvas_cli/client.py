@@ -60,6 +60,15 @@ class Client:
         url = self._request_url(route, method, expect_no_content)
         return self._send(url, method, body, expect_no_content=expect_no_content)
 
+    def multipart(self, route, method, fields, name, content_type, content):
+        """Native attachment commands use the same guarded, non-redirecting API transport."""
+        from .multipart import encode
+        url = self._request_url(route, method, False)
+        if method not in ('POST', 'PUT'):
+            raise CanvasError('Attachment forms require an explicit POST or PUT')
+        payload, media_type = encode(fields, name, content_type, content)
+        return self._send_payload(url, method, payload, media_type)
+
     def conditional_get(self, route, etag=None):
         """Revalidate one JSON resource; callers must bind their saved representation."""
         url = self._request_url(route, 'GET', False)
@@ -115,9 +124,14 @@ class Client:
             payload = json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8') if body is not None else None
         except (TypeError, ValueError, UnicodeError):
             raise CanvasError('Request body must be valid JSON; no request was sent or private content logged.') from None
+        return self._send_payload(url, method, payload, 'application/json', expect_no_content=expect_no_content,
+                                  expected_status=expected_status, conditional=conditional, etag=etag)
+
+    def _send_payload(self, url, method, payload, content_type, *, expect_no_content=False, expected_status=None,
+                      conditional=False, etag=None):
         req = Request(url, method=method, headers={
             'Authorization': f'Bearer {self.token}', 'Accept': 'application/json',
-            'Content-Type': 'application/json', 'User-Agent': 'canvas-cli/0.1.0'},
+            'Content-Type': content_type, 'User-Agent': 'canvas-cli/0.1.0'},
             data=payload)
         if conditional:
             req.add_header('Cache-Control', 'no-cache')

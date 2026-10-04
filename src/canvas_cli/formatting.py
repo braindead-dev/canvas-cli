@@ -36,6 +36,11 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'attachment_transfer' in data:
+        attached = data['attachment_transfer']
+        row = data['attached_topic']
+        return '\n'.join([f"{data['kind'].title()} {row['id']}: attachment {attached['new_attachment_id']} ({attached['bytes']} bytes)",
+                          row['html_url'], 'New attachment ID and size verified; stored bytes and old-file deletion are unverified.', data['note']])
     if isinstance(data, dict) and 'completion_script' in data:
         return data['completion_script'].rstrip()
     if isinstance(data, dict) and 'completion_candidates' in data:
