@@ -36,6 +36,18 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'what_if_course_inventory' in data:
+        if data.get('dry_run'):
+            return json.dumps(data, indent=2)
+        lines = [f"Own course hypotheses: {data['course_id']}", data['what_if_course_inventory']]
+        lines.extend(f"Assignment {row['assignment_id']}: {row['student_entered_score']} hypothetical points"
+                     for row in data['submissions'].values())
+        if data.get('mutation_acknowledged'):
+            lines.append('Reported hypotheses are clear; hidden-row clearing remains unverified.')
+            if data['totals_included']:
+                for total in data['native_recalculated_totals']:
+                    lines.extend(kind + ': ' + str(values) for kind, values in total.items())
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'what_if_status' in data and not data.get('dry_run'):
         lines = [f"What-if: course {data['course_id']}, assignment {data['assignment_id']}",
                  data['what_if_status'], 'Saved hypothetical points: ' + str(data['student_entered_score'])]

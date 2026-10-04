@@ -912,6 +912,14 @@ def parser():
             s.add_argument('--include-forecasts', action='store_true', help='Opt in to native hypothetical current/final total values, never raw grade-response dumps')
             s.add_argument('--acknowledge-forecast-change', action='store_true', help='Required for preview; changes a saved hypothesis and invokes costly native recalculation, not official grading')
             _confirmation(s)
+    for name in ('what-if-course', 'what-if-reset'):
+        s = sub.add_parser(name, help='Inspect reported own hypotheses on published assignments; hidden rows remain unknown' if name == 'what-if-course'
+                           else 'Preview resetting ALL own course hypotheses, including hidden rows and their timestamps')
+        s.add_argument('course_id', type=identifier)
+        if name == 'what-if-reset':
+            s.add_argument('--include-totals', action='store_true', help='Opt in to native recalculated current/final numeric totals, not raw grade responses')
+            s.add_argument('--acknowledge-all-what-if', action='store_true', help='Required for preview; clears hidden/historical hypotheses and updates all own submission timestamps')
+            _confirmation(s)
     schema_command = sub.add_parser('schema', help='Offline machine-readable argument and safety catalog from the actual parser')
     schema_command.add_argument('--search', help='Find command schemas by name, description or safety category')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')

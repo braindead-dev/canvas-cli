@@ -9,6 +9,12 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('what-if-course', 'what-if-reset'):
+        from . import what_if_course
+        if args.command == 'what-if-course':
+            return what_if_course.read(client, args.course_id, max_pages=args.max_pages)
+        return what_if_course.reset(client, args.course_id, acknowledge_all=args.acknowledge_all_what_if,
+                                    include_totals=args.include_totals, max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command in ('what-if', 'what-if-set', 'what-if-clear'):
         from . import what_if
         if args.command == 'what-if':
