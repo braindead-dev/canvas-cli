@@ -45,6 +45,10 @@ class CompletionTests(unittest.TestCase):
         self.assertEqual(self.complete('files', '123', '--max-pages', '--format=b'), [])
         self.assertEqual(self.complete('files', '123', '--yes=true'), [])
         self.assertEqual(self.complete('courses', '--active=true', ''), [])
+        self.assertEqual(self.complete('topic-pod'), ['topic-podcast'])
+        self.assertEqual(self.complete('announcement-pod'), ['announcement-podcast'])
+        self.assertEqual(self.complete('topic-podcast', '123', '456', '--mode', 'm'), ['moderator-posts'])
+        self.assertEqual(self.complete('announcement-podcast', '123', '456', '--acknowledge-pod'), ['--acknowledge-podcast-feed-change'])
 
     def test_bash_split_equals_keeps_only_rhs_candidates_and_later_command_navigation(self):
         self.assertEqual(self.complete('files', '123', '--context', '=', 'g'), ['group'])

@@ -1,6 +1,6 @@
 """Exact native ungraded-topic text/state/deletion, not assignment administration."""
 
-from . import topic_dates, topic_sections, topic_todo
+from . import topic_dates, topic_podcast, topic_sections, topic_todo
 from .client import CanvasError
 from .discussion import _message
 from .events import timestamp
@@ -48,7 +48,8 @@ def _parent(row, item, context_type):
         raise CanvasError('Canvas returned a topic outside the requested context')
 
 
-def _topic(row, item, topic_id, context_type, *, require_audience=False, announcement=False, require_attach=False):
+def _topic(row, item, topic_id, context_type, *, require_audience=False, announcement=False, require_attach=False,
+           require_podcast=False):
     if _id(row) != int(topic_id):
         raise CanvasError('Canvas returned a different discussion topic')
     _parent(row, item, context_type)
@@ -120,7 +121,8 @@ def _topic(row, item, topic_id, context_type, *, require_audience=False, announc
     return {**{key: row.get(key) for key in FIELDS}, 'author_id': author_id,
             'message_digest': digest(row['message'] or ''), 'attachments': sorted(attached, key=lambda row: row['id']),
             'section_ids': sorted(section_ids), 'audience_digest': digest(row.get('ungraded_discussion_overrides')),
-            'permissions': {key: permissions[key] for key in permission_keys}}
+            'permissions': {key: permissions[key] for key in permission_keys},
+            **(topic_podcast.metadata(row, topic_id) if require_podcast else {})}
 
 
 def _scope(client, item, context_type):
@@ -133,10 +135,11 @@ def _scope(client, item, context_type):
     return route, {key: row.get(key) for key in ('id', 'name', 'workflow_state', 'concluded', 'non_collaborative', 'time_zone')}
 
 
-def _read(client, route, item, topic_id, context_type, *, require_audience=False, announcement=False, require_attach=False):
+def _read(client, route, item, topic_id, context_type, *, require_audience=False, announcement=False, require_attach=False,
+          require_podcast=False):
     row, _ = client.request(route + '/discussion_topics/' + topic_id + '?include%5B%5D=sections&no_verifiers=true')
     return _topic(row, item, topic_id, context_type, require_audience=require_audience, announcement=announcement,
-                  require_attach=require_attach)
+                  require_attach=require_attach, require_podcast=require_podcast)
 
 
 def _inventory(client, route, item, context_type, max_pages, *, announcement=False):
@@ -193,7 +196,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
            action=None, acknowledge_shared=False, acknowledge_removal=False, acknowledge_ordering=False,
            acknowledge_schedule_removal=False, options=None, acknowledge_reply_visibility=False,
            schedule=None, acknowledge_availability=False, todo=None, acknowledge_todo=False,
-           sections=None, acknowledge_audience=False,
+           sections=None, acknowledge_audience=False, podcast=None, acknowledge_podcast=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     if context_type not in ('course', 'group'):
@@ -208,7 +211,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if (type(acknowledge_ordering) is not bool or type(acknowledge_schedule_removal) is not bool or
             action is not None and (not isinstance(action, str) or action not in ACTIONS)):
         raise CanvasError('Select a known topic state action and explicit boolean acknowledgements')
-    if sum((delete, action is not None, options is not None, schedule is not None, todo is not None, sections is not None,
+    if sum((delete, action is not None, options is not None, schedule is not None, todo is not None, sections is not None, podcast is not None,
             title is not None or message is not None)) > 1:
         raise CanvasError('Topic deletion and state controls cannot include other operations or content edits')
     if ((action in ('pin', 'unpin')) != acknowledge_ordering or
@@ -228,19 +231,23 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
         raise CanvasError('Section filtering requires --acknowledge-audience-change, including previews; not for other operations')
     if sections is not None:
         sections = topic_sections.validate(sections, context_type)
+    if type(acknowledge_podcast) is not bool or acknowledge_podcast != (podcast is not None):
+        raise CanvasError('Podcast settings need --acknowledge-podcast-feed-change, including previews; not for other operations')
+    podcast_values = topic_podcast.validate(podcast, context_type) if podcast is not None else None
     if (type(acknowledge_reply_visibility) is not bool or
             acknowledge_reply_visibility != (options is not None and 'require_initial_post' in options)):
         raise CanvasError('Changing require_initial_post requires --acknowledge-reply-visibility-change, including previews; not for other operations')
-    changes = (sections if sections is not None else todo if todo is not None else schedule if schedule is not None else options if options is not None else
+    changes = (podcast_values if podcast is not None else sections if sections is not None else todo if todo is not None else schedule if schedule is not None else options if options is not None else
                dict([ACTIONS[action]]) if action is not None else None if delete else _changes(title, message))
-    controlled = action is not None or options is not None or schedule is not None or todo is not None or sections is not None
+    controlled = action is not None or options is not None or schedule is not None or todo is not None or sections is not None or podcast is not None
     identity = account(client)
     route, context = _scope(client, item, context_type)
-    before = _read(client, route, item, topic_id, context_type, require_audience=sections is not None)
+    before = _read(client, route, item, topic_id, context_type, require_audience=sections is not None, require_podcast=podcast is not None)
     permission = 'delete' if delete else 'update'
     if before['permissions'][permission] is not True:
         raise CanvasError('Canvas does not permit this exact discussion-topic ' + permission)
     todo_rights = topic_todo.authority(client, route, todo) if todo is not None else None
+    podcast_rights = topic_podcast.authority(client, route) if podcast is not None else None
     section_inventory = topic_sections.inventory(client, route, item, max_pages) if sections is not None else None
     if sections is not None:
         topic_sections.check_selection(sections, section_inventory)
@@ -268,7 +275,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     inventory = _inventory(client, route, item, context_type, max_pages)
     listed = {key: before[key] for key in ('id', 'title', 'published', 'locked', 'pinned', 'position')}
     if (listed not in inventory or
-            _read(client, route, item, topic_id, context_type, require_audience=sections is not None) != before or
+            _read(client, route, item, topic_id, context_type, require_audience=sections is not None, require_podcast=podcast is not None) != before or
             account(client) != identity):
         raise CanvasError('Discussion/account changed during preflight; review a fresh preview')
     if controlled and (_scope(client, item, context_type) != (route, context) or
@@ -276,6 +283,8 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
         raise CanvasError('Discussion context/inventory changed during state preflight')
     if todo is not None:
         topic_todo.authority(client, route, todo)
+    if podcast is not None:
+        topic_podcast.authority(client, route)
     if sections is not None and topic_sections.inventory(client, route, item, max_pages) != section_inventory:
         raise CanvasError('Active course sections changed during preflight; review a fresh preview')
     preview = {**identity, 'context_type': context_type, f'{context_type}_id': int(item), 'context': context,
@@ -297,7 +306,10 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if sections is not None:
         preview.update(acknowledge_audience_change=True, section_inventory_digest=digest(section_inventory),
                        active_section_ids=[row['id'] for row in section_inventory], warning=WARNING + ' ' + topic_sections.WARNING)
-    response = confirmed(client, preview, yes, confirm)
+    if podcast is not None:
+        preview.update(acknowledge_podcast_feed_change=True, podcast_mode=podcast, podcast_permissions=podcast_rights,
+                       warning=WARNING + ' ' + topic_podcast.WARNING)
+    response = confirmed(client, preview, yes, confirm, uncertain_message=UNCERTAIN if podcast is not None else None)
     if not yes:
         return response
     try:
@@ -307,7 +319,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             _parent(response, item, context_type)
             after = None
         else:
-            after = _topic(response, item, topic_id, context_type, require_audience=sections is not None)
+            after = _topic(response, item, topic_id, context_type, require_audience=sections is not None, require_podcast=podcast is not None)
         next_route, next_context = _scope(client, item, context_type)
         if next_context != context or account(client) != identity:
             raise CanvasError('Discussion context/account changed during verification')
@@ -323,7 +335,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
                 missing_status = error.status
             else:
                 raise CanvasError('The deleted discussion is still readable')
-        elif (_read(client, next_route, item, topic_id, context_type, require_audience=sections is not None) != after or
+        elif (_read(client, next_route, item, topic_id, context_type, require_audience=sections is not None, require_podcast=podcast is not None) != after or
               not controlled and after['permissions']['update'] is not True):
             raise CanvasError('Stored topic acknowledgement and readback do not agree')
         if options is not None and any(after[key] != value for key, value in options.items()):
@@ -332,6 +344,11 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             raise CanvasError('Canvas did not store every selected discussion date as the exact instant or explicit clearing')
         if todo is not None and not _matches(after, 'todo_date', todo['todo_date']):
             raise CanvasError('Canvas did not store the shared to-do date as the exact instant or explicit clearing')
+        if podcast is not None:
+            if (any(after[key] is not value for key, value in podcast_values.items()) or
+                    after['locked'] is not before['locked'] or after['permissions']['update'] is not True):
+                raise CanvasError('Canvas did not store the selected podcast flags or preserve the comment lock/update right')
+            topic_podcast.authority(client, next_route)
         if sections is not None:
             if not topic_sections.matches(after, sections):
                 raise CanvasError('Canvas did not store the exact topic section filter and selected IDs')
@@ -395,4 +412,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
                                          'verified': True, 'audience_change_acknowledged': True,
                                          'observed_override_metadata_changed': before['audience_digest'] != after['audience_digest'],
                                          'effective_participant_visibility_verified': False}
+    if podcast is not None:
+        result.update(podcast_settings=topic_podcast.result(podcast, podcast_values, after, context_type),
+                      note=result['note'] + ' ' + topic_podcast.WARNING)
     return result

@@ -41,12 +41,17 @@ def review(preview, yes=False, confirm=None):
         raise CanvasError('Preview changed (account, destination or content); review a fresh preview')
 
 
-def confirmed(client, preview, yes=False, confirm=None):
+def confirmed(client, preview, yes=False, confirm=None, *, uncertain_message=None):
     """The caller must re-read identity and destination to construct this fresh preview."""
     result = review(preview, yes, confirm)
     if result is not None:
         return result
-    if preview.get('expected_response') == 'no_content':
-        return client.request(preview['route'], preview['method'], preview.get('body'),
-                              expect_no_content=True)[0]
-    return client.request(preview['route'], preview['method'], preview.get('body'))[0]
+    try:
+        if preview.get('expected_response') == 'no_content':
+            return client.request(preview['route'], preview['method'], preview.get('body'),
+                                  expect_no_content=True)[0]
+        return client.request(preview['route'], preview['method'], preview.get('body'))[0]
+    except CanvasError:
+        if uncertain_message is not None:
+            raise CanvasError(uncertain_message) from None
+        raise

@@ -9,6 +9,16 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('topic-podcast', 'announcement-podcast'):
+        from . import announcement_authoring, topic_management
+        options = {'context_type': args.context, 'podcast': args.mode,
+                   'acknowledge_podcast': args.acknowledge_podcast_feed_change,
+                   'max_pages': args.max_pages, 'yes': args.yes, 'confirm': args.confirm}
+        if args.command == 'announcement-podcast':
+            return announcement_authoring.change(client, args.context_id, args.announcement_id,
+                    acknowledge_shared=args.acknowledge_shared_announcement, acknowledge_broadcast=args.acknowledge_broadcast, **options)
+        return topic_management.change(client, args.context_id, args.topic_id,
+                    acknowledge_shared=args.acknowledge_shared_topic, **options)
     if args.command in ('what-if-course', 'what-if-reset'):
         from . import what_if_course
         if args.command == 'what-if-course':

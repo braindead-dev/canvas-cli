@@ -178,9 +178,11 @@ These settings affect the shared topic, not your personal reading preferences. O
 
 Changing the initial-post requirement needs separate visibility acknowledgement because existing replies can become visible or hidden to other participants. Only the prompt/settings are inspected, never peers' replies. Exact native update permission governs access; ownership and role-name guesses do not substitute for it. Institution-enabled granular permissions or blueprint restrictions can reject or discard options. Their absence is not guessed, and an ignored/partially applied selection fails verification rather than being reported as success.
 
-The existing account/content/audience/inventory-bound pipeline performs one PUT and independently verifies every selected stored value plus the inventory entry. Unrequested metadata/inventory changes remain observations, not exclusive causal proof. No entry rewriting/deletion, read-marker change, automatic retry, cleanup or rollback. Podcasts and modern participant/assignment override configuration remain open.
+The existing account/content/audience/inventory-bound pipeline performs one PUT and independently verifies every selected stored value plus the inventory entry. Unrequested metadata/inventory changes remain observations, not exclusive causal proof. No entry rewriting/deletion, read-marker change, automatic retry, cleanup or rollback. Modern participant/assignment override configuration remains open.
 
 Personal sort/expansion/pinned-entry preferences are separate from shared configuration. See [personal discussion views](discussion-view.md) for native GraphQL controls, query initialization and effective-versus-stored verification.
+
+Shared course/group media-feed modes use [podcast settings](podcasts.md), with exact native rights, explicit effect consent and credential-free readback. They are not personal subscriptions or full discussion exports.
 
 ## Peer reviews
 

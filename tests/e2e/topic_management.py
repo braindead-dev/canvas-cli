@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
-from . import topic_duplication, topic_sections
+from . import podcasts, topic_duplication, topic_sections
 from .appointments import _send
 
 
@@ -56,6 +56,8 @@ def initialize(state, *, enabled=False):
     state.topic_content_add = True
     state.topic_content_add_report = None
     state.topic_todo_offset_storage = state.topic_todo_shift = False
+    state.topic_podcast_enabled = state.topic_podcast_drop_moderation = state.topic_podcast_error = False
+    state.topic_podcast_permission_report = state.topic_podcast_permission_after = None
     topic_duplication.initialize(state)
     topic_sections.initialize(state)
 
@@ -95,6 +97,11 @@ def read(state, handler):
         if 'manage_course_content_add' in parse_qs(url.query).get('permissions[]', []):
             rights = ({'manage_course_content_add': state.topic_content_add} if state.topic_content_add_report is None
                       else state.topic_content_add_report)
+        if state.topic_podcast_enabled:
+            if state.topic_podcast_permission_report is not None:
+                rights = state.topic_podcast_permission_report
+            if state.topic_written and state.topic_podcast_permission_after is not None:
+                rights = state.topic_podcast_permission_after
         _send(handler, rights)
     elif url.path == prefix + '/discussion_topics':
         if state.topic_order_enabled and state.topic_written and state.topic_order_read_denied:
@@ -204,6 +211,26 @@ def write(state, handler, body):
         return True
     if set(body) - {'title', 'message'} or parse_qs(url.query) != {'no_verifiers': ['true']}:
         if topic_sections.write(state, handler, body, url, prefix, row):
+            return True
+        if (state.topic_podcast_enabled and handler.command == 'PUT' and body and
+                set(body) <= {'podcast_enabled', 'podcast_has_student_posts'} and
+                parse_qs(url.query) == {'no_verifiers': ['true']}):
+            state.topic_written = True
+            if state.topic_podcast_drop_moderation:
+                state.topic_moderator = False
+            if not state.topic_ignore:
+                podcasts.apply(row, body, group='/groups/' in prefix, moderator=state.topic_moderator,
+                               edit_options=not state.topic_granular_options_enabled or state.topic_edit_options)
+            if state.topic_state_lose_edit:
+                row['permissions']['update'] = False
+            state.topic_notifications.append(identifier)
+            if state.topic_podcast_error:
+                _send(handler, {'private': 'synthetic-private-error-after-feed-setting'}, 500)
+                return True
+            response = copy.deepcopy(row)
+            if state.topic_ack_patch is not None:
+                response = response | state.topic_ack_patch if isinstance(state.topic_ack_patch, dict) else state.topic_ack_patch
+            _send(handler, response)
             return True
         if (state.topic_todo_enabled and handler.command == 'PUT' and set(body) == {'todo_date'} and
                 parse_qs(url.query) == {'no_verifiers': ['true']}):

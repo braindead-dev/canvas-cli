@@ -167,6 +167,8 @@ def _brief(data):
             removal = data['announcement_attachment_removal']
             lines.append(f"Attachment {removal['removed_attachment_id']}: announcement attachment-list clearing verified.")
             lines.append('Underlying file deletion, related-record effects, storage erasure and other references are not verified.')
+        if 'podcast_settings' in data:
+            lines.append('Stored podcast mode verified: ' + data['podcast_settings']['mode'] + '; feed access and access-code revocation are unverified.')
         if data.get('unrequested_changed_fields'):
             lines.append('Other observed changes: ' + ', '.join(data['unrequested_changed_fields']))
         return '\n'.join([*lines, data['note']])
@@ -180,7 +182,7 @@ def _brief(data):
     if isinstance(data, dict) and 'edited_topic' in data:
         row = data['edited_topic']
         verb = 'updated' if any(key in data for key in ('topic_state', 'configured_topic_settings', 'scheduled_topic_dates',
-                                                      'student_todo_date', 'topic_section_filter')) else 'edited'
+                                                      'student_todo_date', 'topic_section_filter', 'podcast_settings')) else 'edited'
         lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} {verb}",
                  row['title'], row['html_url']]
         if 'topic_state' in data:
@@ -198,6 +200,8 @@ def _brief(data):
         if 'student_todo_date' in data:
             lines.append('Shared student to-do date: ' + (data['student_todo_date']['stored'] or 'cleared'))
             lines.append('Stored date verified; planner effects and completion are not verified.')
+        if 'podcast_settings' in data:
+            lines.append('Stored podcast mode verified: ' + data['podcast_settings']['mode'] + '; feed access and access-code revocation are unverified.')
         if 'topic_section_filter' in data:
             selection = data['topic_section_filter']
             lines.append('Section filter: ' + (', '.join(str(value) for value in selection['section_ids'])

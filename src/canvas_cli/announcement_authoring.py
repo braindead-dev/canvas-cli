@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from . import topic_dates, topic_sections
+from . import topic_dates, topic_podcast, topic_sections
 from .client import CanvasError
 from .events import timestamp
 from .group_content import _id, _number, base
@@ -17,7 +17,7 @@ from .topic_management import (
     _scope,
     _topic,
 )
-from .writes import account, check_flags, confirmed, digest, review
+from .writes import account, check_flags, confirmed, digest
 
 WARNING = ('Changes a shared announcement, not a private draft, reply or note. Native announcements '
            'are always published; future posting is scheduling, not draft privacy. Creation/updates '
@@ -25,7 +25,7 @@ WARNING = ('Changes a shared announcement, not a private draft, reply or note. N
            'and future execution are not verified. Native permissions, HTML processing, course comment '
            'locks and blueprint restrictions remain authoritative. Deletion does not recall notifications '
            'or prove permanent erasure. No peer replies, grading, attachment transfer or settings '
-           'beyond selected comment/date/section operations, explicitly acknowledged attachment removal or closing-date clearing, '
+           'beyond selected comment/date/section/podcast operations, explicitly acknowledged attachment removal or closing-date clearing, '
            'automatic retry, cleanup or rollback are requested. Preflight is not an atomic lock.')
 UNCERTAIN = ('Could not verify the announcement operation. It may already have succeeded; check Canvas '
              'before repeating. No automatic retry, cleanup, rollback or private response-body logging.')
@@ -76,14 +76,14 @@ def _published(parsed):
     return {**parsed, 'is_announcement': True}
 
 
-def _metadata(row, item, identifier, context_type, *, require_audience=False, require_attach=False):
+def _metadata(row, item, identifier, context_type, *, require_audience=False, require_attach=False, require_podcast=False):
     return _published(_topic(row, item, identifier, context_type, announcement=True, require_audience=require_audience,
-                             require_attach=require_attach))
+                             require_attach=require_attach, require_podcast=require_podcast))
 
 
-def _current(client, route, item, identifier, context_type, *, require_audience=False, require_attach=False):
+def _current(client, route, item, identifier, context_type, *, require_audience=False, require_attach=False, require_podcast=False):
     return _published(_read(client, route, item, identifier, context_type, announcement=True, require_audience=require_audience,
-                            require_attach=require_attach))
+                            require_attach=require_attach, require_podcast=require_podcast))
 
 
 def _listed(row):
@@ -99,19 +99,6 @@ def _creation_rights(client, item, context_type):
     if not isinstance(rights, dict) or rights.get('create_announcement') is not True:
         raise CanvasError('Canvas did not grant dynamic native announcement creation in this context')
     return route, context
-
-
-def _confirm(client, preview, yes, confirm, uncertain_on_error):
-    if uncertain_on_error:
-        # Reject stale confirmation before catching transport errors: native section
-        # associations/files may change even when the endpoint ultimately returns an error.
-        review(preview, yes, confirm)
-    try:
-        return confirmed(client, preview, yes, confirm)
-    except CanvasError:
-        if uncertain_on_error and yes:
-            raise CanvasError(UNCERTAIN) from None
-        raise
 
 
 def _section_result(after, sections):
@@ -159,7 +146,7 @@ def create(client, item, *, title, message, context_type='course', post_at=None,
     if sections is not None:
         preview.update(acknowledge_audience_change=True, section_inventory_digest=digest(section_inventory),
                        active_section_ids=[row['id'] for row in section_inventory], warning=WARNING + ' ' + topic_sections.WARNING)
-    response = _confirm(client, preview, yes, confirm, sections is not None)
+    response = confirmed(client, preview, yes, confirm, uncertain_message=UNCERTAIN if sections is not None else None)
     if not yes:
         return response
     try:
@@ -202,7 +189,7 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
            comments=None, acknowledge_comments=False, acknowledge_schedule_removal=False,
            schedule=None, acknowledge_availability=False,
            sections=None, acknowledge_audience=False,
-           remove_attachment=False, acknowledge_attachment_removal=False,
+           remove_attachment=False, acknowledge_attachment_removal=False, podcast=None, acknowledge_podcast=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     _local(item, context_type, max_pages, acknowledge_shared)
@@ -233,10 +220,18 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if remove_attachment and (delete or title is not None or message is not None or comments is not None or
                               schedule is not None or sections is not None):
         raise CanvasError('Remove an announcement attachment separately from text, comments, dates, audience and announcement deletion')
+    if type(acknowledge_podcast) is not bool or acknowledge_podcast != (podcast is not None):
+        raise CanvasError('Podcast settings need --acknowledge-podcast-feed-change, including previews; not for other operations')
+    if podcast is not None and (delete or title is not None or message is not None or comments is not None or
+                                schedule is not None or sections is not None or remove_attachment):
+        raise CanvasError('Select announcement podcast settings separately from other operations')
+    podcast_values = topic_podcast.validate(podcast, context_type) if podcast is not None else None
     if delete:
         changes = None
     elif remove_attachment:
         changes = {'remove_attachment': True}
+    elif podcast is not None:
+        changes = podcast_values
     elif sections is not None:
         changes = sections
     elif schedule is not None:
@@ -248,11 +243,12 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     identity = account(client)
     route, context = _scope(client, item, context_type)
     before = _current(client, route, item, identifier, context_type, require_audience=sections is not None,
-                      require_attach=remove_attachment)
+                      require_attach=remove_attachment, require_podcast=podcast is not None)
     if before['permissions']['delete' if delete else 'update'] is not True:
         raise CanvasError('Canvas does not permit this exact announcement operation')
     if remove_attachment and (before['permissions']['attach'] is not True or len(before['attachments']) != 1):
         raise CanvasError('Removal requires exact native attach permission and one existing announcement attachment')
+    podcast_rights = topic_podcast.authority(client, route) if podcast is not None else None
     section_inventory = topic_sections.inventory(client, route, item, max_pages) if sections is not None else None
     if sections is not None:
         topic_sections.check_selection(sections, section_inventory)
@@ -269,12 +265,14 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     inventory = _inventory(client, route, item, context_type, max_pages, announcement=True)
     if (_listed(before) not in inventory or
             _current(client, route, item, identifier, context_type, require_audience=sections is not None,
-                     require_attach=remove_attachment) != before or
+                     require_attach=remove_attachment, require_podcast=podcast is not None) != before or
             _scope(client, item, context_type) != (route, context) or
             _inventory(client, route, item, context_type, max_pages, announcement=True) != inventory or account(client) != identity):
         raise CanvasError('Announcement/context/inventory/account changed during preflight')
     if sections is not None and topic_sections.inventory(client, route, item, max_pages) != section_inventory:
         raise CanvasError('Active course sections changed during preflight; review a fresh preview')
+    if podcast is not None:
+        topic_podcast.authority(client, route)
     # Native updates default locked=false. Send only the selected/preserved
     # comment state; the original locked parameter can write creator preferences.
     body = None if delete else {**changes, 'is_announcement': True, 'lock_comment': locked}
@@ -296,7 +294,11 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if remove_attachment:
         preview.update(acknowledge_attachment_removal=True, removed_attachment_id=before['attachments'][0]['id'],
                        warning=WARNING + ' ' + ATTACHMENT_WARNING)
-    response = _confirm(client, preview, yes, confirm, sections is not None or remove_attachment)
+    if podcast is not None:
+        preview.update(acknowledge_podcast_feed_change=True, podcast_mode=podcast, podcast_permissions=podcast_rights,
+                       warning=WARNING + ' ' + topic_podcast.WARNING)
+    response = confirmed(client, preview, yes, confirm,
+                         uncertain_message=UNCERTAIN if sections is not None or remove_attachment or podcast is not None else None)
     if not yes:
         return response
     try:
@@ -319,14 +321,19 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                 raise CanvasError('Deleted announcement remains readable')
         else:
             after = _metadata(response, item, identifier, context_type, require_audience=sections is not None,
-                              require_attach=remove_attachment)
+                              require_attach=remove_attachment, require_podcast=podcast is not None)
             if (_current(client, route, item, identifier, context_type, require_audience=sections is not None,
-                         require_attach=remove_attachment) != after or
+                         require_attach=remove_attachment, require_podcast=podcast is not None) != after or
                     schedule is None and after['locked'] is not locked or
                     clearing and after['lock_at'] is not None):
                 raise CanvasError('Announcement readback or selected/preserved comment lock/date clearing did not agree')
             if remove_attachment and after['attachments'] != []:
                 raise CanvasError('Canvas did not clear the announcement attachment list')
+            if podcast is not None:
+                if (any(after[key] is not value for key, value in podcast_values.items()) or
+                        after['permissions']['update'] is not True):
+                    raise CanvasError('Canvas did not store the selected podcast flags and retain the native update right')
+                topic_podcast.authority(client, route)
             if schedule is not None and not all(matches(after, key, value) for key, value in schedule.items()):
                 raise CanvasError('Canvas did not store every selected announcement date as an exact instant or explicit clearing')
             if sections is not None and (not topic_sections.matches(after, sections) or
@@ -384,4 +391,7 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                       'attachment_list_cleared': True, 'verified': True, 'file_record_deletion_verified': False,
                       'related_record_effects_verified': False, 'storage_erasure_verified': False, 'other_references_verified': False},
                       note=result['note'] + ' ' + ATTACHMENT_WARNING)
+    if podcast is not None:
+        result.update(podcast_settings=topic_podcast.result(podcast, podcast_values, after, context_type),
+                      note=result['note'] + ' ' + topic_podcast.WARNING)
     return result

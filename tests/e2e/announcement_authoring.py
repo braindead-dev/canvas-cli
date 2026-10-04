@@ -4,6 +4,7 @@ import copy
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode, urlsplit
 
+from . import podcasts
 from .appointments import _send
 
 
@@ -60,7 +61,8 @@ def _announcement(identifier):
             'permissions': {'update': True, 'delete': True, 'reply': False},
             'attachments': [{'id': 51, 'filename': 'synthetic.txt', 'display_name': 'Synthetic', 'size': 20,
                              'url': 'https://storage.example.edu/?token=synthetic-private-attachment'}],
-            'ungraded_discussion_overrides': None, 'private': 'synthetic-private-opaque-metadata'}
+            'ungraded_discussion_overrides': None, 'private': 'synthetic-private-opaque-metadata',
+            'podcast_url': None, 'podcast_has_student_posts': False}
 
 
 def initialize(state, *, enabled=False):
@@ -96,6 +98,10 @@ def initialize(state, *, enabled=False):
     state.announcement_ignore_attachment_removal = state.announcement_attachment_removal_error = False
     state.announcement_drop_attach_on_write = False
     state.announcement_destroyed_attachments = []
+    state.announcement_moderator = True
+    state.announcement_moderation_report = state.announcement_moderation_after = None
+    state.announcement_podcast_drop_moderation = state.announcement_podcast_error = False
+    state.announcement_podcast_granular_denied = False
 
 
 def _route(state, handler):
@@ -131,6 +137,12 @@ def read(state, handler):
             row['permissions'] = {'create_announcement': state.announcement_creation,
                                   'create_discussion_topic': True}
         _send(handler, row)
+    elif url.path == prefix + '/permissions':
+        rights = ({'moderate_forum': state.announcement_moderator} if state.announcement_moderation_report is None
+                  else state.announcement_moderation_report)
+        if state.announcement_written and state.announcement_moderation_after is not None:
+            rights = state.announcement_moderation_after
+        _send(handler, rights)
     elif url.path == prefix + '/sections' and '/courses/' in prefix:
         if state.announcement_sections_denied or state.announcement_written and state.announcement_sections_denied_after:
             _send(handler, {'private': 'synthetic-private-section-list-denial'}, 403)
@@ -183,7 +195,8 @@ def write(state, handler, body):
     deleting = handler.command == 'DELETE'
     identifier = state.announcement_next_id if creating else int(url.path.rsplit('/', 1)[1])
     row = _announcement(identifier) if creating else state.announcements.get(identifier)
-    allowed = {'title', 'message', 'is_announcement', 'lock_comment', 'remove_attachment'} | ({'delayed_post_at', 'lock_at', 'specific_sections'} if '/courses/' in prefix else set())
+    allowed = {'title', 'message', 'is_announcement', 'lock_comment', 'remove_attachment', 'podcast_enabled'} | (
+              {'delayed_post_at', 'lock_at', 'specific_sections', 'podcast_has_student_posts'} if '/courses/' in prefix else set())
     if (handler.command not in ('POST', 'PUT', 'DELETE') or query != {'no_verifiers': ['true']} or
             deleting and body or not deleting and (set(body) - allowed or body.get('is_announcement') is not True)):
         _send(handler, {'private': 'synthetic-private-invalid-announcement-write'}, 400)
@@ -235,6 +248,13 @@ def write(state, handler, body):
             row['message'] = row['message'].replace('<br>', '<br />')
         if state.announcement_drop_attach_on_write:
             row['permissions']['attach'] = False
+        if state.announcement_podcast_drop_moderation:
+            state.announcement_moderator = False
+        podcasts.apply(row, body, group='/groups/' in prefix, moderator=state.announcement_moderator,
+                       edit_options=not state.announcement_podcast_granular_denied)
+        if state.announcement_podcast_error:
+            _send(handler, {'private': 'synthetic-private-error-after-feed-setting'}, 500)
+            return True
         if 'remove_attachment' in body and row['permissions'].get('attach') is True and not state.announcement_ignore_attachment_removal:
             state.announcement_destroyed_attachments.extend(attachment['id'] for attachment in row['attachments'] or [])
             row['attachments'] = []

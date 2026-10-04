@@ -111,7 +111,7 @@ This parameter follows the pinned native [request handling](https://github.com/i
 
 ## Boundaries
 
-Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Attachment upload/replacement, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
+Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Shared feed modes use the separate [podcast workflow](podcasts.md). Attachment upload/replacement and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
 
 Validation covers unit tests and subprocess/local HTTPS fixtures with synthetic records. No real announcement mutation has been live-tested. Delivery, future jobs, hidden inventory effects and remote preference storage remain unverified.
 

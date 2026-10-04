@@ -720,6 +720,19 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
+    from .topic_podcast import MODES
+    for kind in ('topic', 'announcement'):
+        podcast = sub.add_parser(kind + '-podcast', help='Preview shared native podcast settings without disclosing or fetching feed URLs')
+        podcast.add_argument('context_id', type=identifier)
+        podcast.add_argument(kind + '_id', type=identifier)
+        podcast.add_argument('--context', choices=('course', 'group'), default='course')
+        podcast.add_argument('--mode', choices=MODES, required=True,
+                             help='Courses: disabled/moderator-posts/all-posts. Groups: disabled/enabled')
+        podcast.add_argument('--acknowledge-shared-' + kind, action='store_true', help='Required including previews')
+        podcast.add_argument('--acknowledge-podcast-feed-change', action='store_true', help='Required including previews; affects shared media feeds')
+        if kind == 'announcement':
+            podcast.add_argument('--acknowledge-broadcast', action='store_true', help='Required including previews for possible native notifications')
+        _confirmation(podcast)
     for name in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule', 'announcement-sections',
                  'announcement-attachment-remove'):
         announcement = sub.add_parser(name, help='Preview native shared announcement authoring; not a discussion draft or reply')

@@ -6,6 +6,7 @@ Start with [setup](getting-started.md), then choose a guide by task.
 - [Content and files](content.md): pages, files, downloads/uploads, local snapshots, exports.
 - [Communication](communication.md): Inbox, discussions, peer reviews, activity.
 - [Shared announcements](announcements.md): native create/edit/soft-delete, broadcast consent and comment-state preservation.
+- [Podcast settings](podcasts.md): shared course/group media-feed modes without exposing access codes.
 - [Personal discussion views](discussion-view.md): own sort/expansion/pinned-entry preferences and native query effects.
 - [Account and access](account.md): profile, preferences, rosters, groups, invitations.
 - [Planning](planning.md): tasks, calendar events, checkboxes.
