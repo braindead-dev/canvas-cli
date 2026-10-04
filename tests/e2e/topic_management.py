@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
-from . import topic_duplication
+from . import topic_duplication, topic_sections
 from .appointments import _send
 
 
@@ -57,6 +57,7 @@ def initialize(state, *, enabled=False):
     state.topic_content_add_report = None
     state.topic_todo_offset_storage = state.topic_todo_shift = False
     topic_duplication.initialize(state)
+    topic_sections.initialize(state)
 
 
 def _route(state, handler):
@@ -76,6 +77,8 @@ def read(state, handler):
         _send(handler, {'id': 8 if state.topic_written and state.topic_account_changed else state.topic_viewer})
     elif prefix is None:
         return False
+    elif topic_sections.read(state, handler, url, prefix):
+        return True
     elif url.path == prefix:
         row = {'id': int(prefix.rsplit('/', 1)[1]), **state.topic_context}
         if state.topic_written and state.topic_schedule_time_zone_after:
@@ -200,6 +203,8 @@ def write(state, handler, body):
         _send(handler, {'private': 'synthetic-private-native-topic-permission-denial'}, 403)
         return True
     if set(body) - {'title', 'message'} or parse_qs(url.query) != {'no_verifiers': ['true']}:
+        if topic_sections.write(state, handler, body, url, prefix, row):
+            return True
         if (state.topic_todo_enabled and handler.command == 'PUT' and set(body) == {'todo_date'} and
                 parse_qs(url.query) == {'no_verifiers': ['true']}):
             # Native permission asymmetry is independent of the CLI's preflight checks.

@@ -9,6 +9,12 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'topic-sections':
+        from .topic_management import change
+        return change(client, args.course_id, args.topic_id,
+                      sections={'specific_sections': 'all' if args.all_sections else [int(value) for value in args.section_id]},
+                      acknowledge_shared=args.acknowledge_shared_topic, acknowledge_audience=args.acknowledge_audience_change,
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-todo':
         from .topic_management import change
         return change(client, args.context_id, args.topic_id, context_type=args.context,

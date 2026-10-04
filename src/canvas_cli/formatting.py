@@ -60,7 +60,8 @@ def _brief(data):
         return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'edited_topic' in data:
         row = data['edited_topic']
-        verb = 'updated' if any(key in data for key in ('topic_state', 'configured_topic_settings', 'scheduled_topic_dates', 'student_todo_date')) else 'edited'
+        verb = 'updated' if any(key in data for key in ('topic_state', 'configured_topic_settings', 'scheduled_topic_dates',
+                                                      'student_todo_date', 'topic_section_filter')) else 'edited'
         lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} {verb}",
                  row['title'], row['html_url']]
         if 'topic_state' in data:
@@ -78,6 +79,11 @@ def _brief(data):
         if 'student_todo_date' in data:
             lines.append('Shared student to-do date: ' + (data['student_todo_date']['stored'] or 'cleared'))
             lines.append('Stored date verified; planner effects and completion are not verified.')
+        if 'topic_section_filter' in data:
+            selection = data['topic_section_filter']
+            lines.append('Section filter: ' + (', '.join(str(value) for value in selection['section_ids'])
+                                              if selection['is_section_specific'] else 'all sections'))
+            lines.append('Stored filter verified; effective participant visibility is not verified.')
         if 'observed_inventory_changes' in data:
             inventory = data['observed_inventory_changes']
             lines.append(f"Observed inventory changes: {len(inventory['added_ids'])} added, "

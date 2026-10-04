@@ -140,6 +140,21 @@ Use a whole-second RFC 3339 instant with `Z` or an explicit offset; clearing is 
 
 Account, exact prompt/audience, context, required permission and complete accessible inventory bind confirmation. One PUT must independently read back the selected instant or clearing and a matching inventory entry. Equivalent offsets are accepted; ignored/shifted dates, stale previews and uncertain outcomes fail without retry, cleanup or rollback. Other observed changes are labeled, not exclusive causal proof. Stored-date verification does not prove student planner/feed visibility, completion, notifications, future jobs or availability. No peer-post, grading, submission or read-marker action occurs. Graded, anonymous, announcement and root/child/group-set topics need separate workflows.
 
+### Filter a course topic by section
+
+```sh
+canvas topic-sections 123 456 --section-id 789 --section-id 790 --acknowledge-shared-topic --acknowledge-audience-change
+canvas topic-sections 123 456 --all-sections --acknowledge-shared-topic --acknowledge-audience-change
+```
+
+This replaces the native course section filter on an ordinary ungraded topic. Repeat `--section-id` for each selected active course section; `--all-sections` disables this filter. Both acknowledgements are required even for preview because access to the prompt and existing replies can widen or narrow. Group contexts do not have course section filters. Graded, anonymous, announcement and root/child/group-set topics remain separate workflows.
+
+Section filtering is **not modern participant-override configuration**. Existing participant overrides are not sent or replaced, and Canvas can report derived legacy section visibilities alongside those overrides. All sections does not prove that everyone can see the topic: participant overrides, dates, modules and other native restrictions still apply. Exact topic update permission is required; the native endpoint also checks visibility of old and new sections. The section inventory is not proof of editing authority, and the different modern `manage_assign_to` permission is not substituted for this API's native checks.
+
+The complete paginated active course section list, exact prompt/audience, account, context and topic inventory bind confirmation. Section names/SIS records, roster identities, prior prompt text and peer replies are not emitted or enumerated. One PUT must acknowledge and independently read back the exact filter state and selected IDs, with a stable section catalog. Ignored/partial writes, stale previews and unreadable outcomes fail without retry, cleanup or rollback. An HTTP error is not proof that section associations stayed unchanged; check Canvas before repeating. Other metadata changes, including derived override metadata, are labeled observations rather than exclusive causal proof. Effective per-student visibility, module progression invalidation, notifications and activity effects are not verified.
+
+The workflow follows the [documented discussion API](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics), [course sections API](https://developerdocs.instructure.com/services/canvas/resources/sections) and [native section validation](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/controllers/discussion_topics_controller.rb). Tests are synthetic; no live section-filter write has been performed.
+
 ### Order all pinned topics
 
 ```sh
@@ -163,7 +178,7 @@ These settings affect the shared topic, not your personal reading preferences. O
 
 Changing the initial-post requirement needs separate visibility acknowledgement because existing replies can become visible or hidden to other participants. Only the prompt/settings are inspected, never peers' replies. Exact native update permission governs access; ownership and role-name guesses do not substitute for it. Institution-enabled granular permissions or blueprint restrictions can reject or discard options. Their absence is not guessed, and an ignored/partially applied selection fails verification rather than being reported as success.
 
-The existing account/content/audience/inventory-bound pipeline performs one PUT and independently verifies every selected stored value plus the inventory entry. Unrequested metadata/inventory changes remain observations, not exclusive causal proof. No entry rewriting/deletion, read-marker change, automatic retry, cleanup or rollback. Advanced dates, podcasts and audience/assignment configuration remain open.
+The existing account/content/audience/inventory-bound pipeline performs one PUT and independently verifies every selected stored value plus the inventory entry. Unrequested metadata/inventory changes remain observations, not exclusive causal proof. No entry rewriting/deletion, read-marker change, automatic retry, cleanup or rollback. Podcasts and modern participant/assignment override configuration remain open.
 
 ## Peer reviews
 

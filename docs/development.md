@@ -47,6 +47,7 @@ tests/
     module_paths.py  native mastery choices, switching effects and asynchronous readback
     topic_management.py  native prompt authoring/states/dates/settings/deletion, pinned ordering and permissions
     topic_duplication.py  native prompt copies, eligibility and serialize-before-insert position evidence
+    topic_sections.py  native course section associations and old/new visibility checks
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 

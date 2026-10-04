@@ -1,6 +1,6 @@
 """Exact native ungraded-topic text/state/deletion, not assignment administration."""
 
-from . import topic_dates, topic_todo
+from . import topic_dates, topic_sections, topic_todo
 from .client import CanvasError
 from .discussion import _message
 from .events import timestamp
@@ -48,7 +48,7 @@ def _parent(row, item, context_type):
         raise CanvasError('Canvas returned a topic outside the requested context')
 
 
-def _topic(row, item, topic_id, context_type):
+def _topic(row, item, topic_id, context_type, *, require_audience=False):
     if _id(row) != int(topic_id):
         raise CanvasError('Canvas returned a different discussion topic')
     _parent(row, item, context_type)
@@ -90,10 +90,15 @@ def _topic(row, item, topic_id, context_type):
     if len({row['id'] for row in attached}) != len(attached):
         raise CanvasError('Canvas returned duplicate discussion-topic attachments')
     sections = row.get('sections', [])
+    if require_audience and not isinstance(row.get('ungraded_discussion_overrides'), list):
+        raise CanvasError('Canvas did not report the current ungraded participant override metadata')
     if (not isinstance(sections, list) or row['is_section_specific'] and not sections or
             context_type == 'group' and row['is_section_specific']):
         raise CanvasError('Canvas did not report the section-specific topic audience')
     section_ids = [_id(section) for section in sections]
+    if require_audience:
+        for section in sections:
+            _parent(section, item, context_type)
     if len(set(section_ids)) != len(section_ids):
         raise CanvasError('Canvas returned duplicate topic audience sections')
     for key in ('created_at', 'posted_at', 'last_reply_at', 'delayed_post_at', 'lock_at', 'todo_date'):
@@ -122,9 +127,9 @@ def _scope(client, item, context_type):
     return route, {key: row.get(key) for key in ('id', 'name', 'workflow_state', 'concluded', 'non_collaborative', 'time_zone')}
 
 
-def _read(client, route, item, topic_id, context_type):
+def _read(client, route, item, topic_id, context_type, *, require_audience=False):
     row, _ = client.request(route + '/discussion_topics/' + topic_id + '?include%5B%5D=sections&no_verifiers=true')
-    return _topic(row, item, topic_id, context_type)
+    return _topic(row, item, topic_id, context_type, require_audience=require_audience)
 
 
 def _inventory(client, route, item, context_type, max_pages):
@@ -168,6 +173,8 @@ def _inventory_delta(before, after):
 
 
 def _matches(row, key, value):
+    if key == 'specific_sections':
+        return topic_sections.matches(row, {key: value})
     if key == 'message':
         return row['message_digest'] == digest(value)
     if key in (*topic_dates.FIELDS, 'todo_date'):
@@ -179,6 +186,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
            action=None, acknowledge_shared=False, acknowledge_removal=False, acknowledge_ordering=False,
            acknowledge_schedule_removal=False, options=None, acknowledge_reply_visibility=False,
            schedule=None, acknowledge_availability=False, todo=None, acknowledge_todo=False,
+           sections=None, acknowledge_audience=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     if context_type not in ('course', 'group'):
@@ -193,7 +201,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if (type(acknowledge_ordering) is not bool or type(acknowledge_schedule_removal) is not bool or
             action is not None and (not isinstance(action, str) or action not in ACTIONS)):
         raise CanvasError('Select a known topic state action and explicit boolean acknowledgements')
-    if sum((delete, action is not None, options is not None, schedule is not None, todo is not None,
+    if sum((delete, action is not None, options is not None, schedule is not None, todo is not None, sections is not None,
             title is not None or message is not None)) > 1:
         raise CanvasError('Topic deletion and state controls cannot include other operations or content edits')
     if ((action in ('pin', 'unpin')) != acknowledge_ordering or
@@ -209,19 +217,26 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
         raise CanvasError('To-do dates require --acknowledge-student-todo-change, including previews; not for other operations')
     if todo is not None:
         todo = topic_todo.validate(todo)
+    if type(acknowledge_audience) is not bool or acknowledge_audience != (sections is not None):
+        raise CanvasError('Section filtering requires --acknowledge-audience-change, including previews; not for other operations')
+    if sections is not None:
+        sections = topic_sections.validate(sections, context_type)
     if (type(acknowledge_reply_visibility) is not bool or
             acknowledge_reply_visibility != (options is not None and 'require_initial_post' in options)):
         raise CanvasError('Changing require_initial_post requires --acknowledge-reply-visibility-change, including previews; not for other operations')
-    changes = (todo if todo is not None else schedule if schedule is not None else options if options is not None else
+    changes = (sections if sections is not None else todo if todo is not None else schedule if schedule is not None else options if options is not None else
                dict([ACTIONS[action]]) if action is not None else None if delete else _changes(title, message))
-    controlled = action is not None or options is not None or schedule is not None or todo is not None
+    controlled = action is not None or options is not None or schedule is not None or todo is not None or sections is not None
     identity = account(client)
     route, context = _scope(client, item, context_type)
-    before = _read(client, route, item, topic_id, context_type)
+    before = _read(client, route, item, topic_id, context_type, require_audience=sections is not None)
     permission = 'delete' if delete else 'update'
     if before['permissions'][permission] is not True:
         raise CanvasError('Canvas does not permit this exact discussion-topic ' + permission)
     todo_rights = topic_todo.authority(client, route, todo) if todo is not None else None
+    section_inventory = topic_sections.inventory(client, route, item, max_pages) if sections is not None else None
+    if sections is not None:
+        topic_sections.check_selection(sections, section_inventory)
     if action == 'unpublish' and before['can_unpublish'] is not True:
         raise CanvasError('Canvas did not report native eligibility to move this exact topic to draft')
     if action == 'close' and before['can_lock'] is not True:
@@ -234,6 +249,8 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if schedule is not None:
         topic_dates.validate_current(schedule, before, context)
     if not delete and all(_matches(before, key, value) for key, value in changes.items()):
+        if sections is not None:
+            raise CanvasError('The topic section filter already matches; no update needed')
         if todo is not None:
             raise CanvasError('The shared topic to-do date already matches; no update needed')
         if schedule is not None:
@@ -243,13 +260,17 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
                           'The selected topic text already matches; no edit needed')
     inventory = _inventory(client, route, item, context_type, max_pages)
     listed = {key: before[key] for key in ('id', 'title', 'published', 'locked', 'pinned', 'position')}
-    if listed not in inventory or _read(client, route, item, topic_id, context_type) != before or account(client) != identity:
+    if (listed not in inventory or
+            _read(client, route, item, topic_id, context_type, require_audience=sections is not None) != before or
+            account(client) != identity):
         raise CanvasError('Discussion/account changed during preflight; review a fresh preview')
     if controlled and (_scope(client, item, context_type) != (route, context) or
                        _inventory(client, route, item, context_type, max_pages) != inventory or account(client) != identity):
         raise CanvasError('Discussion context/inventory changed during state preflight')
     if todo is not None:
         topic_todo.authority(client, route, todo)
+    if sections is not None and topic_sections.inventory(client, route, item, max_pages) != section_inventory:
+        raise CanvasError('Active course sections changed during preflight; review a fresh preview')
     preview = {**identity, 'context_type': context_type, f'{context_type}_id': int(item), 'context': context,
                'topic': before, 'inventory_digest': digest(inventory), 'acknowledge_shared_topic': True,
                'acknowledge_topic_removal': acknowledge_removal, 'method': 'DELETE' if delete else 'PUT',
@@ -266,6 +287,9 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if todo is not None:
         preview.update(acknowledge_student_todo_change=True, additional_context_permission_required=todo['todo_date'] is not None,
                        todo_permissions=todo_rights, warning=WARNING + ' ' + topic_todo.WARNING)
+    if sections is not None:
+        preview.update(acknowledge_audience_change=True, section_inventory_digest=digest(section_inventory),
+                       active_section_ids=[row['id'] for row in section_inventory], warning=WARNING + ' ' + topic_sections.WARNING)
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -276,7 +300,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             _parent(response, item, context_type)
             after = None
         else:
-            after = _topic(response, item, topic_id, context_type)
+            after = _topic(response, item, topic_id, context_type, require_audience=sections is not None)
         next_route, next_context = _scope(client, item, context_type)
         if next_context != context or account(client) != identity:
             raise CanvasError('Discussion context/account changed during verification')
@@ -292,7 +316,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
                 missing_status = error.status
             else:
                 raise CanvasError('The deleted discussion is still readable')
-        elif (_read(client, next_route, item, topic_id, context_type) != after or
+        elif (_read(client, next_route, item, topic_id, context_type, require_audience=sections is not None) != after or
               not controlled and after['permissions']['update'] is not True):
             raise CanvasError('Stored topic acknowledgement and readback do not agree')
         if options is not None and any(after[key] != value for key, value in options.items()):
@@ -301,6 +325,11 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             raise CanvasError('Canvas did not store every selected discussion date as the exact instant or explicit clearing')
         if todo is not None and not _matches(after, 'todo_date', todo['todo_date']):
             raise CanvasError('Canvas did not store the shared to-do date as the exact instant or explicit clearing')
+        if sections is not None:
+            if not topic_sections.matches(after, sections):
+                raise CanvasError('Canvas did not store the exact topic section filter and selected IDs')
+            if topic_sections.inventory(client, next_route, item, max_pages) != section_inventory:
+                raise CanvasError('Active course sections changed during verification')
         if action is not None:
             field, value = ACTIONS[action]
             if after[field] is not value or clears_schedule and after['lock_at'] is not None:
@@ -322,6 +351,8 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     matched = {key: _matches(after, key, value) for key, value in changes.items()}
     changed = [key for key in before if before[key] != after[key]]
     requested = {'message_digest' if key == 'message' else key for key in changes}
+    if sections is not None:
+        requested = {'is_section_specific', 'section_ids'}
     result = {'edited_topic': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{topic_id}'},
             'context_type': context_type, f'{context_type}_id': int(item), 'acknowledgement_matches_readback': True,
             'stored_text_matches_request': matched, 'changed_fields': changed,
@@ -351,4 +382,10 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if todo is not None:
         result['student_todo_date'] = {'requested': todo['todo_date'], 'stored': after['todo_date'], 'verified': True,
                                       'shared_change_acknowledged': True, 'planner_effects_verified': False}
+    if sections is not None:
+        result['topic_section_filter'] = {'specific_sections': sections['specific_sections'],
+                                         'is_section_specific': after['is_section_specific'], 'section_ids': after['section_ids'],
+                                         'verified': True, 'audience_change_acknowledged': True,
+                                         'observed_override_metadata_changed': before['audience_digest'] != after['audience_digest'],
+                                         'effective_participant_visibility_verified': False}
     return result
