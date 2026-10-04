@@ -68,6 +68,21 @@ Title is required; omitted body stays native-empty. Supplied UTF-8 plain text is
 
 Only ordinary ungraded non-anonymous course/group topics are supported. No attachments, assignment/group-set links, section overrides or advanced scheduling/options are requested. Canvas defaults/HTML processing remain native; notifications and ordering effects are not proven. An uncertain result never triggers retry, deletion or rollback. Duplicate titles are allowed and do not prove an existing topic was created.
 
+### Duplicate a discussion prompt
+
+```sh
+canvas topic-duplicate 123 456 --acknowledge-shared-topic --acknowledge-copy-effects
+canvas topic-duplicate 123 456 --context group --acknowledge-shared-topic --acknowledge-copy-effects
+```
+
+This invokes native copying, not a complete backup. The prompt, selected options/dates and section associations are copied; replies, attachment associations and participant overrides are not. Embedded file links can still refer to original files. Losing participant overrides can widen the audience. Moderators normally get a draft; other permitted creators are auto-published. Copied dates can affect availability, and a pinned copy shifts other topics. Both acknowledgements are required even for preview.
+
+Dynamic creation permission is required. Course copying additionally requires native instructor eligibility by enrollment date or context `read_as_admin`; moderation alone is insufficient. The preview reports the exact admin flag without guessing instructor eligibility from roles. The endpoint remains authoritative. An explicit `initial_post_required` subscription hold is refused; the reply-visibility flag alone cannot determine the native gate, which also considers observer-associated users. No peer entries are inspected or restrictions bypassed.
+
+Account, exact source, reported audience, context/rights and the complete accessible inventory bind confirmation. One POST must yield a new ID, own author, independent topic/source readback and an inventory entry. Pinned responses are serialized before insertion, so their top-level position is not treated as the stored position: the native position map and fresh accessible positions must agree. Unknown map IDs are counted, not exposed or asserted verified. Copied-field differences and attachment counts are labeled, not silently repaired.
+
+Ordinary ungraded, non-anonymous course/group topics only. Announcements, graded topics and root/child/group-set associations need separate workflows. Readback is not immutable lineage, a perfect-copy guarantee, an atomic lock or proof of hidden ordering, future jobs, notifications or linked-file access. Inspect the new audience before use. An uncertain result never triggers retry, deletion, cleanup or rollback.
+
 ### Manage a discussion prompt
 
 ```sh

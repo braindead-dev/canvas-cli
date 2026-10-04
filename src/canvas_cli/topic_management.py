@@ -10,7 +10,7 @@ from .writes import account, check_flags, confirmed, digest
 
 FIELDS = ('id', 'title', 'published', 'locked', 'pinned', 'position', 'created_at', 'posted_at',
           'last_reply_at', 'delayed_post_at', 'lock_at', 'todo_date', 'discussion_type',
-          'discussion_subentry_count', 'require_initial_post', 'is_section_specific',
+          'discussion_subentry_count', 'require_initial_post', 'is_section_specific', 'user_can_see_posts', 'subscription_hold',
           'allow_rating', 'only_graders_can_rate', 'sort_order', 'sort_order_locked', 'expanded', 'expanded_locked',
           'can_unpublish', 'can_lock', 'comments_disabled')
 ACTIONS = {'publish': ('published', True), 'unpublish': ('published', False),
@@ -103,8 +103,8 @@ def _topic(row, item, topic_id, context_type):
         raise CanvasError('Canvas returned malformed topic ordering')
     if (any(row.get(key) is not None and type(row[key]) is not bool for key in
             ('allow_rating', 'only_graders_can_rate', 'sort_order_locked', 'expanded', 'expanded_locked',
-             'can_unpublish', 'can_lock', 'comments_disabled')) or
-            any(row.get(key) is not None and not isinstance(row[key], str) for key in ('discussion_type', 'sort_order'))):
+             'can_unpublish', 'can_lock', 'comments_disabled', 'user_can_see_posts')) or
+            any(row.get(key) is not None and not isinstance(row[key], str) for key in ('discussion_type', 'sort_order', 'subscription_hold'))):
         raise CanvasError('Canvas returned malformed topic options')
     return {**{key: row.get(key) for key in FIELDS}, 'author_id': author_id,
             'message_digest': digest(row['message'] or ''), 'attachments': sorted(attached, key=lambda row: row['id']),

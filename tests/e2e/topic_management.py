@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
+from . import topic_duplication
 from .appointments import _send
 
 
@@ -51,6 +52,7 @@ def initialize(state, *, enabled=False):
     state.topic_read_forum = True
     state.topic_schedule_enabled = state.topic_schedule_midnight_rewrite = False
     state.topic_schedule_time_zone_after = None
+    topic_duplication.initialize(state)
 
 
 def _route(state, handler):
@@ -81,6 +83,8 @@ def read(state, handler):
         rights = {'moderate_forum': state.topic_moderator}
         if 'read_forum' in parse_qs(url.query).get('permissions[]', []):
             rights['read_forum'] = state.topic_read_forum
+        if 'read_as_admin' in parse_qs(url.query).get('permissions[]', []):
+            rights['read_as_admin'] = state.topic_context_admin
         _send(handler, rights)
     elif url.path == prefix + '/discussion_topics':
         if state.topic_order_enabled and state.topic_written and state.topic_order_read_denied:
@@ -92,6 +96,10 @@ def read(state, handler):
             return True
         page = int(parameters.get('page', ['1'])[0])
         rows = list(state.managed_topics.values())
+        if state.topic_written and state.topic_duplicate_inventory_patch:
+            rows = [row | state.topic_duplicate_inventory_patch.get(row['id'], {}) for row in rows]
+        if state.topic_duplicate_hidden_id is not None:
+            rows = [row for row in rows if row['id'] != state.topic_duplicate_hidden_id]
         if state.topic_written and state.topic_state_enabled:
             if state.topic_state_inventory_denied:
                 _send(handler, {'private': 'synthetic-private-inventory-denial'}, 403)
@@ -106,7 +114,7 @@ def read(state, handler):
             _send(handler, {'private': 'synthetic-private-unscoped-topic-read'}, 400)
             return True
         identifier = int(url.path.rsplit('/', 1)[1])
-        if state.topic_written and state.topic_readback_denied:
+        if state.topic_written and state.topic_readback_denied or identifier == state.topic_duplicate_hidden_id:
             _send(handler, {'private': 'synthetic-private-readback-denial'}, 403)
         elif identifier not in state.managed_topics:
             _send(handler, {'private': 'synthetic-private-missing-topic'}, state.topic_missing_status)
@@ -125,6 +133,8 @@ def write(state, handler, body):
     if parsed is None:
         return False
     url, prefix = parsed
+    if topic_duplication.write(state, handler, body, url, prefix):
+        return True
     if prefix is not None and handler.command == 'POST' and url.path == prefix + '/discussion_topics/reorder':
         if not state.topic_order_enabled or state.topic_denied or not state.topic_moderator or not state.topic_read_forum:
             _send(handler, {'private': 'synthetic-private-native-order-denial'}, 403)

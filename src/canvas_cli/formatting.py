@@ -36,6 +36,17 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'copied_topic' in data:
+        row = data['copied_topic']
+        lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {data['source_topic_id']} → {row['id']} copied",
+                 row['title'], 'Published' if row['published'] else 'Draft', row['html_url']]
+        different = [key for key, value in data['stored_fields_match_source'].items() if not value]
+        if different:
+            lines.append('Copy differs from source: ' + ', '.join(different))
+        lines.append(f"Attachment associations: {data['source_attachment_count']} in source, {data['copy_attachment_count']} in copy.")
+        if data['pinned_ordering']:
+            lines.append('Accessible pinned positions verified; hidden ordering is not verified.')
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'pinned_topic_order' in data:
         return (f"{data['context_type'].title()} {data[data['context_type'] + '_id']} pinned order verified\n" +
                 ' → '.join(str(identifier) for identifier in data['pinned_topic_order']) +

@@ -46,6 +46,7 @@ tests/
     module_items.py  own progression events, pagination and Horizon read-side effects
     module_paths.py  native mastery choices, switching effects and asynchronous readback
     topic_management.py  native prompt authoring/states/dates/settings/deletion, pinned ordering and permissions
+    topic_duplication.py  native prompt copies, eligibility and serialize-before-insert position evidence
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 

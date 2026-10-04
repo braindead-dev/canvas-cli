@@ -9,6 +9,11 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'topic-duplicate':
+        from .topic_duplication import duplicate
+        return duplicate(client, args.context_id, args.topic_id, context_type=args.context,
+                         acknowledge_shared=args.acknowledge_shared_topic, acknowledge_copy=args.acknowledge_copy_effects,
+                         max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-schedule':
         from .topic_management import change
         selected = {}
