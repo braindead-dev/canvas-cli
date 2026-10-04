@@ -578,6 +578,18 @@ def _brief(data):
         return '\n'.join(lines)
     if isinstance(data, dict) and 'priority_basis' in data and 'items' in data:
         lines = [f"Agenda ({data['time_zone']}; next {data['window_days']} days)"]
+        cached = data.get('agenda_source') == 'snapshot'
+        if cached:
+            lines[0] = 'Offline cached-date ' + lines[0]
+            for snapshot in data['snapshots']:
+                age = ('future-dated capture; age unverified' if snapshot['future_dated_capture']
+                       else f"{int(snapshot['age_seconds'])} seconds old")
+                lines.append(f"Course {snapshot['course_id']} captured {snapshot['captured_at']}; {age}")
+                if snapshot['excluded_saved_visibility_rows']:
+                    lines.append(f"  {snapshot['excluded_saved_visibility_rows']} saved hidden/unpublished/locked row(s) withheld.")
+            lines.append('Submission status and current access are unknown. Refresh Canvas before relying on this view.')
+            if not data['all_snapshots_report_viewer_identity']:
+                lines.append('At least one legacy snapshot has no reported viewer identity; account association is unverified.')
         for item in data['items']:
             note = f"{item['urgency']}, {item['status']}"
             if item['availability'] not in ('not_specified', 'within_window'):
@@ -587,7 +599,8 @@ def _brief(data):
             if item.get('html_url'):
                 lines.append(f"  {item['html_url']}")
         if not data['items']:
-            lines.append('No unfinished dated assignments in this window.')
+            lines.append('No cached dated assignments in this window; this is not a current completion claim.' if cached
+                         else 'No unfinished dated assignments in this window.')
         if data['undated_count']:
             line = f"{data['undated_count']} undated visible item(s) are not deadlines."
             if data['undated'] is None:

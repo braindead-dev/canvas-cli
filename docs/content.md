@@ -147,6 +147,7 @@ canvas snapshot 123 --output /private/path/course.json
 canvas sync 123 --include-linked-files
 canvas snapshot-diff /private/path/older.json /private/path/newer.json --format brief
 canvas snapshot-search /private/path/course.json --query 'research paper'
+canvas snapshot-agenda /private/path/course.json /private/path/other-course.json --days 21 --format brief
 canvas snapshot-markdown /private/path/course.json --output /private/path/course.md
 ```
 
@@ -171,6 +172,14 @@ Brief diff and sync share a field-name index: additions/removals, changed fields
 Search returns short plain-text snippets, ranking title matches first. No hits are not proof of absent content, especially with incomplete/older coverage. Results can be private.
 
 Markdown is a readable projection, not a lossless backup. HTML becomes plain text, not active HTML or external images. Coverage warnings and safe same-origin assignment links remain. Output follows private/no-overwrite/no-Git rules; review before sharing.
+
+### Offline cached-date agenda
+
+`snapshot-agenda` reads explicitly selected files without credentials, network calls or writes. It shares the live agenda's timezone/DST, urgency and undated-item logic. Select one snapshot per course; different origins, conflicting reported viewers, duplicate identities and malformed metadata fail instead of silently merging history. Legacy files without viewer identity are labeled unverified.
+
+Capture timestamps and reported assignment coverage remain visible. Future-dated captures have unverified age. Valid dates are normalized to UTC; unparseable/timezone-free timestamp text becomes `unknown_invalid_date`, not a guessed instant or raw text export. Hidden/unpublished/locked saved rows are withheld. Assignment links are constructed from the reported HTTPS origin and numeric IDs, never copied from signed/external links.
+
+Every cached submission status is `unknown`, including files containing old submitted/graded records. No body, answers, grades, feedback or raw error reasons are printed. Opening/closing labels use saved bounds, not live permission. Empty output is not proof of completion; refresh Canvas for current dates, access and requirements. Metadata can still be private.
 
 ## Upload files
 

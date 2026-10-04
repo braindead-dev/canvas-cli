@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .client import CanvasError
 
 
-def _instant(value):
+def parse_instant(value):
     """Parse a reported aware date; absent or invalid dates remain unknown."""
     if not isinstance(value, str):
         return None
@@ -18,7 +18,7 @@ def _instant(value):
 
 def _availability(assignment, now):
     """Describe reported date bounds, not native access or submission permission."""
-    opening, closing = (_instant(assignment.get(field)) for field in ('unlock_at', 'lock_at'))
+    opening, closing = (parse_instant(assignment.get(field)) for field in ('unlock_at', 'lock_at'))
     if any(assignment.get(field) is not None and instant is None
            for field, instant in (('unlock_at', opening), ('lock_at', closing))):
         return 'unknown_invalid_dates'
@@ -57,7 +57,7 @@ def deadlines(client, max_pages, days=14, course_id=None, courses=None):
             continue
         for assignment in assignments:
             raw_due = assignment.get('due_at')
-            due = _instant(raw_due)
+            due = parse_instant(raw_due)
             if due is None:
                 continue
             if due < now or (cutoff is not None and due > cutoff):
@@ -98,7 +98,7 @@ def work(client, max_pages, course_id=None, days=None, status=None):
             continue
         for assignment in assignments:
             raw_due = assignment.get('due_at')
-            due = _instant(raw_due)
+            due = parse_instant(raw_due)
             if cutoff is not None and (due is None or not now <= due <= cutoff):
                 continue
             submission = assignment.get('submission')
@@ -129,25 +129,31 @@ def work(client, max_pages, course_id=None, days=None, status=None):
             'window_days': days, 'status_filter': status, 'generated_at': now.isoformat()}
 
 
-def agenda(client, max_pages, days=14, course_id=None, time_zone='local',
-           include_undated=False, now=None, course_ids=None):
-    """Show unfinished visible assignments, with honest local times and coverage.
-
-    Urgency is only a time bucket, not an estimate of grade impact or workload.
-    Undated items are counted but not presented as deadlines unless requested.
-    """
-    now = now or datetime.now(timezone.utc)
-    if now.tzinfo is None:
+def _agenda_clock(days, time_zone, now):
+    now = datetime.now(timezone.utc) if now is None else now
+    if not isinstance(now, datetime) or now.tzinfo is None:
         raise CanvasError('Agenda clock must include a time zone')
-    now = now.astimezone(timezone.utc)
-    if days < 1:
+    if type(days) is not int or days < 1:
         raise CanvasError('--days must be positive')
+    if not isinstance(time_zone, str):
+        raise CanvasError('Unknown IANA time zone; use e.g. America/Los_Angeles')
     try:
         zone = None if time_zone == 'local' else ZoneInfo(time_zone)
     except (ZoneInfoNotFoundError, ValueError):
         raise CanvasError('Unknown IANA time zone; use e.g. America/Los_Angeles') from None
-    local_now = now.astimezone(zone) if zone else now.astimezone()
-    cutoff = now + timedelta(days=days)
+    try:
+        now = now.astimezone(timezone.utc)
+        local_now = now.astimezone(zone) if zone else now.astimezone()
+        cutoff = now + timedelta(days=days)
+    except (ValueError, OverflowError):
+        raise CanvasError('Agenda clock or window is outside the representable date range') from None
+    return now, zone, local_now, cutoff
+
+
+def agenda(client, max_pages, days=14, course_id=None, time_zone='local',
+           include_undated=False, now=None, course_ids=None):
+    """Fetch own unfinished visible work; invalid options fail before Canvas reads."""
+    now = _agenda_clock(days, time_zone, now)[0]
     selected = list(dict.fromkeys(course_ids or ([course_id] if course_id else [])))
     course_names = {}
     if selected:
@@ -161,13 +167,26 @@ def agenda(client, max_pages, days=14, course_id=None, time_zone='local',
                if selected else [work(client, max_pages)])
     assignments = [item for source in sources for item in source['assignments']]
     unavailable = [item for source in sources for item in source['unavailable_courses']]
+    return project_agenda(assignments, unavailable, days, time_zone,
+                          include_undated, now, course_names)
+
+
+def project_agenda(assignments, unavailable, days=14, time_zone='local',
+                   include_undated=False, now=None, course_names=None):
+    """Pure date projection shared by live work and explicitly selected snapshots.
+
+    Urgency is time only, not grade impact or workload. Callers supply the status
+    evidence; cached rows must not be represented as current submission state.
+    """
+    now, zone, local_now, cutoff = _agenda_clock(days, time_zone, now)
+    course_names = course_names or {}
     items, undated = [], []
     finished = {'submitted', 'graded', 'pending_review', 'excused'}
     for assignment in assignments:
         if assignment['status'] in finished:
             continue
         raw_due = assignment.get('due_at')
-        due = _instant(raw_due)
+        due = parse_instant(raw_due)
         base = {key: assignment.get(key) for key in
                 ('course_id', 'course_name', 'assignment_id', 'name', 'html_url',
                  'due_at', 'unlock_at', 'lock_at', 'status')}

@@ -35,6 +35,11 @@ def run(args):
         from .snapshot_diff import read
         from .snapshot_search import search
         return search(read(args.snapshot), args.query, args.limit)
+    if args.command == 'snapshot-agenda':
+        from .snapshot_agenda import agenda
+        from .snapshot_diff import read
+        return agenda([read(path) for path in args.snapshots], args.days,
+                      args.timezone, args.include_undated)
     if args.command == 'snapshot-markdown':
         from .markdown import render, save
         from .snapshot_diff import read

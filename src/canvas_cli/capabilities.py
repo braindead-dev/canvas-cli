@@ -33,7 +33,7 @@ def describe():
             'replies', 'quizzes (metadata only)', 'quiz (metadata only)',
             'new-quizzes (metadata only)', 'new-quiz (metadata only)',
             'rubrics', 'rubric', 'snapshot-diff (offline)',
-            'snapshot-search (offline)',
+            'snapshot-search (offline)', 'snapshot-agenda (offline cached dates only; current status/access unknown)',
         ],
         'read_with_native_side_effects': [
             'assignment (single-assignment REST GET can record assignment/module read access and asset analytics; use draft for own draft/policy inspection without that endpoint; no final submission or quiz attempt)',
