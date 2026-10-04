@@ -16,7 +16,8 @@ def execute(client, args):
         from . import topic_view
         if args.command == 'topic-view':
             return topic_view.read(client, args.context_id, args.topic_id, context_type=args.context,
-                                   acknowledge=args.acknowledge_participant_initialization, include_assist=args.include_assist_preferences)
+                                   acknowledge=args.acknowledge_participant_initialization, include_assist=args.include_assist_preferences,
+                                   include_marker=args.include_pinned_marker)
         values = {}
         if args.sort_order is not None:
             values['sort_order'] = args.sort_order
@@ -28,8 +29,11 @@ def execute(client, args):
             values['preferred_language'] = None if args.clear_preferred_language else args.preferred_language
         if args.summary_enabled is not None:
             values['summary_enabled'] = args.summary_enabled
+        if args.pinned_unread is not None:
+            values['has_unread_pinned_entry'] = args.pinned_unread
         return topic_view.change(client, args.context_id, args.topic_id, values, context_type=args.context,
                                  acknowledge=args.acknowledge_participant_initialization,
+                                 acknowledge_marker=args.acknowledge_pinned_marker_change,
                                  yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-sections':
         from .topic_management import change

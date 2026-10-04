@@ -43,7 +43,7 @@ def _participant(state):
         state.view_initialized = True
         state.view_own = {'sortOrder': 'inherit', 'expanded': None, 'showPinnedEntries': True,
                           'read': False, 'subscribed': state.view_author == state.view_viewer,
-                          'unreadCount': 2, 'hasUnreadPinnedEntry': True, 'summaryEnabled': False,
+                          'unreadCount': 2, 'hasUnreadPinnedEntry': False, 'summaryEnabled': False,
                           'preferredLanguage': None, 'plannerCacheCleared': True}
     return state.view_own
 
@@ -105,7 +105,7 @@ def execute(state, handler, body):
         row = {key: copy.deepcopy(value) for key, value in state.view_topic.items() if key != 'private'}
         if 'participant {' in document:
             row['participant'] = _effective(state)
-            for key in ('preferredLanguage', 'summaryEnabled'):
+            for key in ('preferredLanguage', 'summaryEnabled', 'hasUnreadPinnedEntry'):
                 if key in document:
                     value = state.view_own[key]
                     if key == 'preferredLanguage' and value not in {item['name'] for item in state.view_language_type['enumValues']}:
@@ -122,17 +122,18 @@ def execute(state, handler, body):
         return True
     selected = variables.get('input')
     if (not isinstance(selected, dict) or selected.get('discussionTopicId') != '931' or
-            set(selected) - {'discussionTopicId', 'sortOrder', 'expanded', 'showPinnedEntries', 'preferredLanguage', 'summaryEnabled'} or
+            set(selected) - {'discussionTopicId', 'sortOrder', 'expanded', 'showPinnedEntries', 'preferredLanguage',
+                             'summaryEnabled', 'hasUnreadPinnedEntry'} or
             'participant {' in document):
         _send(handler, {'errors': [{'message': 'synthetic-private-unsupported-mutation'}]})
         return True
     state.view_mutations.append(copy.deepcopy(selected))
     # Native storage constraints, unlike the nullable GraphQL input declaration.
-    if any(key in selected and selected[key] is None for key in ('sortOrder', 'showPinnedEntries', 'summaryEnabled')):
+    if any(key in selected and selected[key] is None for key in ('sortOrder', 'showPinnedEntries', 'summaryEnabled', 'hasUnreadPinnedEntry')):
         _send(handler, {'errors': [{'message': 'synthetic-private-native-not-null-violation'}]})
         return True
     if ('sortOrder' in selected and selected['sortOrder'] not in ('asc', 'desc') or
-            any(key in selected and type(selected[key]) is not bool for key in ('showPinnedEntries', 'summaryEnabled')) or
+            any(key in selected and type(selected[key]) is not bool for key in ('showPinnedEntries', 'summaryEnabled', 'hasUnreadPinnedEntry')) or
             'expanded' in selected and selected['expanded'] is not None and type(selected['expanded']) is not bool or
             'preferredLanguage' in selected and selected['preferredLanguage'] is not None and
             selected['preferredLanguage'] not in {item['name'] for item in state.view_language_type['enumValues']}):

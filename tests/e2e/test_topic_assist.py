@@ -181,6 +181,7 @@ class TopicAssistE2E(CanvasFixture):
                     'updateDiscussionTopicParticipant(input: $input) { errors { attribute } '
                     'discussionTopic { _id contextId contextType } } }')
         for key, value in (('sortOrder', None), ('showPinnedEntries', None), ('summaryEnabled', None),
+                           ('hasUnreadPinnedEntry', None), ('hasUnreadPinnedEntry', 1),
                            ('sortOrder', 'inherit'), ('summaryEnabled', 1), ('expanded', 'true'),
                            ('preferredLanguage', 'UNKNOWN')):
             payload = {'query': document, 'operationName': 'CanvasTopicViewSet',

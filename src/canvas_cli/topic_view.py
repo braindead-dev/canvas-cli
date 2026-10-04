@@ -7,9 +7,11 @@ from .contexts import discussion_base
 from .writes import account, check_flags, review
 
 FIELDS = {'sort_order': 'sortOrder', 'expanded': 'expanded', 'show_pinned_entries': 'showPinnedEntries',
-          'preferred_language': 'preferredLanguage', 'summary_enabled': 'summaryEnabled'}
+          'preferred_language': 'preferredLanguage', 'summary_enabled': 'summaryEnabled',
+          'has_unread_pinned_entry': 'hasUnreadPinnedEntry'}
 BASE_FIELDS = ('sort_order', 'expanded', 'show_pinned_entries')
 ASSIST_FIELDS = ('preferred_language', 'summary_enabled')
+MARKER_FIELDS = ('has_unread_pinned_entry',)
 EFFECTIVE_FIELDS = ('sort_order', 'expanded')
 _ENUM_NAME = re.compile(r'[_A-Za-z][_0-9A-Za-z]*')
 _METADATA = '_id contextId contextType sortOrder sortOrderLocked expanded expandedLocked permissions { read }'
@@ -20,7 +22,8 @@ _READ = 'query CanvasTopicView($topicId: ID!) { legacyNode(type: Discussion, _id
 _SET = ('mutation CanvasTopicViewSet($input: UpdateDiscussionTopicParticipantInput!) { '
         'updateDiscussionTopicParticipant(input: $input) { errors { attribute } discussionTopic { %s } } }') % _SCOPE
 _NOTE = ('Native preference queries can initialize your own participant record, default subscription/unread counters '
-         'and planner cache. The CLI does not request reply content, assessments or explicit read/subscription changes. '
+         'and planner cache. The CLI does not request reply content, assessments, entry/topic read-state or subscription changes. '
+         'The optional pinned-unread flag is your own indicator only, not proof any reply was read or seen. '
          'Sort/expansion readback is effective display only: locks can mask overrides and matching defaults do not '
          'prove a saved override was cleared. Pinned-entry preference is a direct stored field, not UI visibility proof. '
          'Optional language/summary preferences are stored fields, not translation/summary access or generation proof. '
@@ -115,8 +118,8 @@ def _read(client, context_id, topic_id, context_type, acknowledge, *, fields=BAS
     return result
 
 
-def read(client, context_id, topic_id, *, context_type='course', acknowledge=False, include_assist=False):
-    fields = BASE_FIELDS + ASSIST_FIELDS if include_assist else BASE_FIELDS
+def read(client, context_id, topic_id, *, context_type='course', acknowledge=False, include_assist=False, include_marker=False):
+    fields = BASE_FIELDS + (ASSIST_FIELDS if include_assist else ()) + (MARKER_FIELDS if include_marker else ())
     return {'topic_view': _read(client, context_id, topic_id, context_type, acknowledge, fields=fields),
             'native_query_may_initialize_participant': True, 'note': _NOTE}
 
@@ -131,23 +134,28 @@ def _options(values):
         elif key == 'preferred_language':
             if value is not None and (not isinstance(value, str) or not _ENUM_NAME.fullmatch(value)):
                 raise CanvasError('Preferred language must be an exact schema enum value or explicit clearing; use topic-languages')
-        elif key in ('show_pinned_entries', 'summary_enabled') and type(value) is not bool:
-            raise CanvasError('Pinned-entry and summary preferences require booleans; native storage does not allow null resets')
+        elif key in ('show_pinned_entries', 'summary_enabled', 'has_unread_pinned_entry') and type(value) is not bool:
+            raise CanvasError('Pinned-entry, summary and pinned-unread fields require booleans; native storage does not allow null resets')
         elif value is not None and type(value) is not bool:
             raise CanvasError('Personal display options must be explicit booleans or inheritance')
     return {FIELDS[key]: value for key, value in values.items()}
 
 
-def change(client, context_id, topic_id, values, *, context_type='course', acknowledge=False, yes=False, confirm=None):
+def change(client, context_id, topic_id, values, *, context_type='course', acknowledge=False,
+           acknowledge_marker=False, yes=False, confirm=None):
     check_flags(yes, confirm)
     options = _options(values)
-    fields = BASE_FIELDS + tuple(key for key in ASSIST_FIELDS if key in values)
+    if 'has_unread_pinned_entry' in values and not acknowledge_marker:
+        raise CanvasError('Use --acknowledge-pinned-marker-change: this changes your pinned-reply unread indicator, '
+                          'not the replies themselves or proof of reading them')
+    fields = BASE_FIELDS + tuple(key for key in ASSIST_FIELDS + MARKER_FIELDS if key in values)
     before = _read(client, context_id, topic_id, context_type, acknowledge, fields=fields,
                    language=values.get('preferred_language'))
     variables = {'input': {'discussionTopicId': topic_id, **options}}
     preview = {**before, 'requested': values, 'method': 'POST', 'route': '/api/graphql',
                'body': {'query': _SET, 'variables': variables, 'operationName': 'CanvasTopicViewSet'},
-               'native_query_may_initialize_participant': True, 'effect': _NOTE}
+               'native_query_may_initialize_participant': True, 'pinned_marker_change_acknowledged': acknowledge_marker,
+               'effect': _NOTE}
     result = review(preview, yes, confirm)
     if result is not None:
         return result

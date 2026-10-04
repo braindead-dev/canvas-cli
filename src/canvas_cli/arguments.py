@@ -704,6 +704,8 @@ def parser():
         if name == 'topic-view':
             view.add_argument('--include-assist-preferences', action='store_true',
                               help='Opt in to stored language/summary fields; does not query either service')
+            view.add_argument('--include-pinned-marker', action='store_true',
+                              help='Read your pinned-reply unread indicator, not reply read status or content')
         if name == 'topic-view-set':
             view.add_argument('--sort-order', choices=('asc', 'desc'), help='Shared locks can mask a saved override; no native inheritance reset')
             expansion = view.add_mutually_exclusive_group()
@@ -715,6 +717,9 @@ def parser():
             language.add_argument('--clear-preferred-language', action='store_true')
             view.add_argument('--summary-enabled', action=argparse.BooleanOptionalAction, default=None,
                               help='Stored own preference only; does not grant summary-generation access')
+            view.add_argument('--pinned-unread', action=argparse.BooleanOptionalAction, default=None,
+                              help='Set your pinned-reply unread indicator, not reply read status or content')
+            view.add_argument('--acknowledge-pinned-marker-change', action='store_true')
             _confirmation(view)
     from .topic_options import FIELDS
     configuration = sub.add_parser('topic-configure', help='Preview shared ungraded reply/like/view settings, not personal preferences')

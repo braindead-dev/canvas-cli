@@ -12,7 +12,7 @@ canvas topic-view 123 456 --include-assist-preferences --acknowledge-participant
 
 These commands query native GraphQL on the configured Canvas origin with the same token and HTTPS transport as REST. They report effective sort/expansion, directly stored pinned-entry preference and shared defaults/locks, not peer identities or replies. Language and summary preferences are fetched only with the opt-in flag. Exact course/group/topic scope and native topic `read` permission are checked before requesting your participant. No manager, reply or ownership requirement is invented.
 
-**A native participant query is not side-effect-free.** If your record is missing, Canvas can initialize it with default subscription/unread state and clear planner cache. The acknowledgement is required even for reading or previewing. Query/preflight is not an atomic lock; a later permission/context change can still fail after initialization. These controls never request assessment attempts, reply bodies or explicit subscription/read-marker changes.
+**A native participant query is not side-effect-free.** If your record is missing, Canvas can initialize it with default subscription/unread state and clear planner cache. The acknowledgement is required even for reading or previewing. Query/preflight is not an atomic lock; a later permission/context change can still fail after initialization. These controls never request assessment attempts, reply bodies or explicit subscription/entry/topic read-state changes.
 
 ## Change selected preferences
 
@@ -42,12 +42,22 @@ Use an exact enum value reported by your server, not a guessed UI locale. The ca
 
 These are stored preferences only. They neither request nor prove access to translation or AI summaries. Native generation has separate service/feature/role checks; storing a summary preference requires native topic read permission, not invented instructor authority. No reply content is fetched or sent to either service.
 
+## Pinned-reply unread indicator
+
+```sh
+canvas topic-view 123 456 --include-pinned-marker --acknowledge-participant-initialization
+canvas topic-view-set 123 456 --pinned-unread --acknowledge-pinned-marker-change --acknowledge-participant-initialization
+canvas topic-view-set 123 456 --no-pinned-unread --acknowledge-pinned-marker-change --acknowledge-participant-initialization
+```
+
+This is your own native `hasUnreadPinnedEntry` flag, not a list of unread replies, entry/topic read status, proof of viewing content, or a shared pin/unpin operation. Reads opt in to this field. Changes require a separate acknowledgement before any query, bind the current flag into the preview, and independently verify the direct stored boolean after one mutation. Omission preserves it; null resets are invalid. Future UI or pin/read events are not verified. No peer content, unread-count, subscription or assessment change is requested.
+
 ## What readback proves
 
 One native mutation must return an error-free, exact-scope acknowledgement. An independent query and identity check then verify the selected **native readback** against stable shared defaults/locks. The output calls these values `reported`, distinguishing their semantics below.
 
 - `sort_order` and `expanded` resolve through shared defaults/locks. A lock can mask even a valid saved override. Matching the shared default after reset does not prove raw storage was cleared. Results always label their stored overrides **unverified**, including under locks or already-matching values.
-- `show_pinned_entries` and `summary_enabled` are direct participant fields. Matching independent readback verifies stored values, not UI visibility, summary generation or service access. Nullable read metadata is not guessed to mean enabled or disabled.
+- `show_pinned_entries`, `summary_enabled` and `has_unread_pinned_entry` are direct participant fields. Matching independent readback verifies stored values, not UI visibility, content reading, summary generation or service access. Nullable read metadata is not guessed to mean enabled or disabled.
 - A non-null `preferred_language` readback verifies a supported stored preference. Native resolution can also return null for an unsupported saved locale. Matching null after clearing therefore does not prove raw storage was cleared; that result stays unverified.
 - Raw hidden sort/expansion overrides are unavailable for preview binding. Concurrent hidden changes cannot be detected from effective values alone. Preflight is not atomic.
 - Observed field changes are not exclusive causal proof. Future view behavior, summary/translation features and downstream notifications/cache effects are not verified.

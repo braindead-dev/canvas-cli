@@ -23,7 +23,7 @@ class ViewClient:
                     'sortOrderLocked': False, 'expanded': False, 'expandedLocked': False,
                     'permissions': {'read': True, 'update': False}, 'private': 'synthetic-private'}
         self.own = {'sortOrder': 'inherit', 'expanded': None, 'showPinnedEntries': True,
-                    'preferredLanguage': None, 'summaryEnabled': False}
+                    'preferredLanguage': None, 'summaryEnabled': False, 'hasUnreadPinnedEntry': False}
         self.language_type = {'name': 'PreferredLanguageType', 'kind': 'ENUM',
                               'enumValues': [{'name': name, 'isDeprecated': False} for name in ('EN', 'FR', 'PT_BR')]}
         self.language_error = False
@@ -66,7 +66,7 @@ class ViewClient:
             row['participant'] = {key: row[key] if row[key + 'Locked'] or self.own[key] in (None, 'inherit') else self.own[key]
                                   for key in ('sortOrder', 'expanded')}
             row['participant']['showPinnedEntries'] = self.own['showPinnedEntries']
-            for key in ('preferredLanguage', 'summaryEnabled'):
+            for key in ('preferredLanguage', 'summaryEnabled', 'hasUnreadPinnedEntry'):
                 if key in document:
                     value = self.own[key]
                     if key == 'preferredLanguage' and value not in {item['name'] for item in self.language_type['enumValues']}:
