@@ -901,6 +901,17 @@ def parser():
         else:
             s.add_argument('--acknowledge-feedback-indicators', action='store_true', help='Required for preview; one viewed-comment indicator is not feedback comprehension or coursework completion')
             _confirmation(s)
+    for name in ('what-if', 'what-if-set', 'what-if-clear'):
+        s = sub.add_parser(name, help='Inspect your own saved hypothetical point score, not an official grade' if name == 'what-if'
+                           else 'Preview changing one own saved what-if score with native course recalculation')
+        s.add_argument('course_id', type=identifier)
+        s.add_argument('assignment_id', type=identifier)
+        if name != 'what-if':
+            if name == 'what-if-set':
+                s.add_argument('--score', type=float, required=True, help='Finite assignment points, not a desired course percentage')
+            s.add_argument('--include-forecasts', action='store_true', help='Opt in to native hypothetical current/final total values, never raw grade-response dumps')
+            s.add_argument('--acknowledge-forecast-change', action='store_true', help='Required for preview; changes a saved hypothesis and invokes costly native recalculation, not official grading')
+            _confirmation(s)
     schema_command = sub.add_parser('schema', help='Offline machine-readable argument and safety catalog from the actual parser')
     schema_command.add_argument('--search', help='Find command schemas by name, description or safety category')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')

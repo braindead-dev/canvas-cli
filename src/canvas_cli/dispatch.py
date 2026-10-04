@@ -9,6 +9,13 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('what-if', 'what-if-set', 'what-if-clear'):
+        from . import what_if
+        if args.command == 'what-if':
+            return what_if.read(client, args.course_id, args.assignment_id)
+        return what_if.change(client, args.course_id, args.assignment_id, getattr(args, 'score', None),
+                              acknowledge=args.acknowledge_forecast_change, include_forecasts=args.include_forecasts,
+                              yes=args.yes, confirm=args.confirm)
     if args.command in ('feedback-comments', 'feedback-comment-mark-read'):
         from . import feedback_comments
         if args.command == 'feedback-comments':

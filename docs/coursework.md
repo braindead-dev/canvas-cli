@@ -62,6 +62,8 @@ Reads never include `read_status`, submit, start attempts, or grade.
 
 Use the separate [feedback attention workflows](submission-attention.md) to inspect native unread indicators or explicitly mark a selected own surface read/unread. These indicators are not coursework completion; aggregate, participation-item and preference state have different native semantics.
 
+For saved hypothetical assignment points, use [What-If workflows](what-if.md). These inspect/save/clear one own hypothesis with native recalculation, not official grade edits.
+
 ## Modules and quiz metadata
 
 ```sh

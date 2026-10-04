@@ -36,6 +36,15 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'what_if_status' in data and not data.get('dry_run'):
+        lines = [f"What-if: course {data['course_id']}, assignment {data['assignment_id']}",
+                 data['what_if_status'], 'Saved hypothetical points: ' + str(data['student_entered_score'])]
+        if data.get('mutation_acknowledged'):
+            lines.append('Hypothetical score readback verified; no official grade change requested.')
+            if data['forecasts_included']:
+                for forecast in data['native_forecast_totals']:
+                    lines.extend(kind + ': ' + str(values) for kind, values in forecast.items())
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and data.get('feedback_comment_indicators') and not data.get('dry_run'):
         lines = [f"Feedback comment indicators: course {data['course_id']}, assignment {data['assignment_id']}",
                  data['inventory_status'], 'Aggregate: ' + str(data['aggregate_read_state'])]
