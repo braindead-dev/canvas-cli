@@ -150,7 +150,8 @@ def execute(client, args):
                       acknowledge_ordering=getattr(args, 'acknowledge_topic_ordering_change', False),
                       acknowledge_schedule_removal=getattr(args, 'acknowledge_closing_schedule_removal', False),
                       max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
-    if args.command in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule', 'announcement-sections'):
+    if args.command in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule', 'announcement-sections',
+                        'announcement-attachment-remove'):
         from .announcement_authoring import change, create
         source = getattr(args, 'message_file', None)
         options = {'context_type': args.context, 'acknowledge_shared': args.acknowledge_shared_announcement,
@@ -179,6 +180,8 @@ def execute(client, args):
                       comments=getattr(args, 'comments', None),
                       acknowledge_comments=getattr(args, 'acknowledge_comment_access_change', False),
                       acknowledge_schedule_removal=getattr(args, 'acknowledge_closing_schedule_removal', False),
+                      remove_attachment=args.command == 'announcement-attachment-remove',
+                      acknowledge_attachment_removal=getattr(args, 'acknowledge_attachment_removal', False),
                       acknowledge_broadcast=getattr(args, 'acknowledge_broadcast', False),
                       acknowledge_removal=getattr(args, 'acknowledge_announcement_removal', False), **options)
     if args.command == 'topic-create':

@@ -1,8 +1,11 @@
 """Keep public docs navigable and examples aligned with the real parser."""
 
+import io
 import re
 import shlex
 import unittest
+from contextlib import redirect_stdout
+from importlib.metadata import version
 from pathlib import Path
 from unittest.mock import patch
 
@@ -69,7 +72,14 @@ class DocumentationTests(unittest.TestCase):
                     if not words or words[0] != 'canvas':
                         continue
                     with self.subTest(document=document.name, example=line):
-                        root.parse_args(words[1:])
+                        if words[1:] == ['--version']:
+                            output = io.StringIO()
+                            with redirect_stdout(output), self.assertRaises(SystemExit) as result:
+                                root.parse_args(words[1:])
+                            self.assertEqual(result.exception.code, 0)
+                            self.assertEqual(output.getvalue(), 'canvas ' + version('canvas-cli') + '\n')
+                        else:
+                            root.parse_args(words[1:])
                     examples += 1
         self.assertGreater(examples, 30)
         connect.assert_not_called()

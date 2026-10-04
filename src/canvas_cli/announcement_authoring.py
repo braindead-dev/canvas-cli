@@ -24,8 +24,8 @@ WARNING = ('Changes a shared announcement, not a private draft, reply or note. N
            'can notify participants and observers and update activity/participant records. Delivery '
            'and future execution are not verified. Native permissions, HTML processing, course comment '
            'locks and blueprint restrictions remain authoritative. Deletion does not recall notifications '
-           'or prove permanent erasure. No peer replies, grading, attachments or settings '
-           'beyond selected comment/date/section operations and acknowledged closing-date clearing, '
+           'or prove permanent erasure. No peer replies, grading, attachment transfer or settings '
+           'beyond selected comment/date/section operations, explicitly acknowledged attachment removal or closing-date clearing, '
            'automatic retry, cleanup or rollback are requested. Preflight is not an atomic lock.')
 UNCERTAIN = ('Could not verify the announcement operation. It may already have succeeded; check Canvas '
              'before repeating. No automatic retry, cleanup, rollback or private response-body logging.')
@@ -41,6 +41,14 @@ DATES_WARNING = ('Changing or clearing course announcement dates can activate a 
                  'Only selected stored instants and observed changes are verified, not participant visibility/reply '
                  'access, notifications or future jobs. Course-midnight closing is rewritten to end of day; '
                  'select an explicit non-midnight instant. No peer comments, retry or rollback.')
+ATTACHMENT_WARNING = ('Removes the announcement attachment and asks native Canvas to soft-delete its file record, '
+                      'not just hide a link. Native deletion can remove content tags, detach media/LTI/draft associations '
+                      'and update downstream records. Copies, existing downloads, message-body links and other uses may '
+                      'remain or become broken. Only the exact announcement attachment-list clearing is verified, not '
+                      'file-record deletion, related-record effects, storage erasure, other references or notification recall. Native attach '
+                      'permission is separate from update permission; it can cause silent parameter omission. '
+                      'An error does not prove the file or association was unchanged. No file download, peer reads, '
+                      'automatic retry, restoration or cleanup.')
 
 
 def _local(item, context_type, max_pages, acknowledge_shared):
@@ -68,12 +76,14 @@ def _published(parsed):
     return {**parsed, 'is_announcement': True}
 
 
-def _metadata(row, item, identifier, context_type, *, require_audience=False):
-    return _published(_topic(row, item, identifier, context_type, announcement=True, require_audience=require_audience))
+def _metadata(row, item, identifier, context_type, *, require_audience=False, require_attach=False):
+    return _published(_topic(row, item, identifier, context_type, announcement=True, require_audience=require_audience,
+                             require_attach=require_attach))
 
 
-def _current(client, route, item, identifier, context_type, *, require_audience=False):
-    return _published(_read(client, route, item, identifier, context_type, announcement=True, require_audience=require_audience))
+def _current(client, route, item, identifier, context_type, *, require_audience=False, require_attach=False):
+    return _published(_read(client, route, item, identifier, context_type, announcement=True, require_audience=require_audience,
+                            require_attach=require_attach))
 
 
 def _listed(row):
@@ -91,15 +101,15 @@ def _creation_rights(client, item, context_type):
     return route, context
 
 
-def _confirm(client, preview, yes, confirm, sections):
-    if sections is not None:
+def _confirm(client, preview, yes, confirm, uncertain_on_error):
+    if uncertain_on_error:
         # Reject stale confirmation before catching transport errors: native section
-        # associations may change even when the endpoint ultimately returns an error.
+        # associations/files may change even when the endpoint ultimately returns an error.
         review(preview, yes, confirm)
     try:
         return confirmed(client, preview, yes, confirm)
     except CanvasError:
-        if sections is not None and yes:
+        if uncertain_on_error and yes:
             raise CanvasError(UNCERTAIN) from None
         raise
 
@@ -149,7 +159,7 @@ def create(client, item, *, title, message, context_type='course', post_at=None,
     if sections is not None:
         preview.update(acknowledge_audience_change=True, section_inventory_digest=digest(section_inventory),
                        active_section_ids=[row['id'] for row in section_inventory], warning=WARNING + ' ' + topic_sections.WARNING)
-    response = _confirm(client, preview, yes, confirm, sections)
+    response = _confirm(client, preview, yes, confirm, sections is not None)
     if not yes:
         return response
     try:
@@ -192,6 +202,7 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
            comments=None, acknowledge_comments=False, acknowledge_schedule_removal=False,
            schedule=None, acknowledge_availability=False,
            sections=None, acknowledge_audience=False,
+           remove_attachment=False, acknowledge_attachment_removal=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     _local(item, context_type, max_pages, acknowledge_shared)
@@ -216,8 +227,16 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
         if delete or title is not None or message is not None or comments is not None or schedule is not None:
             raise CanvasError('Select announcement sections separately from text, comments, dates and deletion')
         sections = topic_sections.validate(sections, context_type)
+    if (type(remove_attachment) is not bool or type(acknowledge_attachment_removal) is not bool or
+            remove_attachment != acknowledge_attachment_removal):
+        raise CanvasError('Announcement attachment removal needs --acknowledge-attachment-removal, including previews; not for other edits')
+    if remove_attachment and (delete or title is not None or message is not None or comments is not None or
+                              schedule is not None or sections is not None):
+        raise CanvasError('Remove an announcement attachment separately from text, comments, dates, audience and announcement deletion')
     if delete:
         changes = None
+    elif remove_attachment:
+        changes = {'remove_attachment': True}
     elif sections is not None:
         changes = sections
     elif schedule is not None:
@@ -228,9 +247,12 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
         changes = {}
     identity = account(client)
     route, context = _scope(client, item, context_type)
-    before = _current(client, route, item, identifier, context_type, require_audience=sections is not None)
+    before = _current(client, route, item, identifier, context_type, require_audience=sections is not None,
+                      require_attach=remove_attachment)
     if before['permissions']['delete' if delete else 'update'] is not True:
         raise CanvasError('Canvas does not permit this exact announcement operation')
+    if remove_attachment and (before['permissions']['attach'] is not True or len(before['attachments']) != 1):
+        raise CanvasError('Removal requires exact native attach permission and one existing announcement attachment')
     section_inventory = topic_sections.inventory(client, route, item, max_pages) if sections is not None else None
     if sections is not None:
         topic_sections.check_selection(sections, section_inventory)
@@ -242,11 +264,12 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
         raise CanvasError('Opening this closed announcement clears its closing date; use --acknowledge-closing-schedule-removal only for that change')
     if comments is False and before['locked'] is False and before['can_lock'] is not True:
         raise CanvasError('Canvas did not report eligibility to close this announcement to comments')
-    if not delete and all(_matches(before, key, value) for key, value in changes.items()) and before['locked'] is locked:
+    if not delete and not remove_attachment and all(_matches(before, key, value) for key, value in changes.items()) and before['locked'] is locked:
         raise CanvasError('The selected announcement state already matches; no update needed')
     inventory = _inventory(client, route, item, context_type, max_pages, announcement=True)
     if (_listed(before) not in inventory or
-            _current(client, route, item, identifier, context_type, require_audience=sections is not None) != before or
+            _current(client, route, item, identifier, context_type, require_audience=sections is not None,
+                     require_attach=remove_attachment) != before or
             _scope(client, item, context_type) != (route, context) or
             _inventory(client, route, item, context_type, max_pages, announcement=True) != inventory or account(client) != identity):
         raise CanvasError('Announcement/context/inventory/account changed during preflight')
@@ -270,7 +293,10 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if sections is not None:
         preview.update(acknowledge_audience_change=True, section_inventory_digest=digest(section_inventory),
                        active_section_ids=[row['id'] for row in section_inventory], warning=WARNING + ' ' + topic_sections.WARNING)
-    response = _confirm(client, preview, yes, confirm, sections)
+    if remove_attachment:
+        preview.update(acknowledge_attachment_removal=True, removed_attachment_id=before['attachments'][0]['id'],
+                       warning=WARNING + ' ' + ATTACHMENT_WARNING)
+    response = _confirm(client, preview, yes, confirm, sections is not None or remove_attachment)
     if not yes:
         return response
     try:
@@ -292,11 +318,15 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
             else:
                 raise CanvasError('Deleted announcement remains readable')
         else:
-            after = _metadata(response, item, identifier, context_type, require_audience=sections is not None)
-            if (_current(client, route, item, identifier, context_type, require_audience=sections is not None) != after or
+            after = _metadata(response, item, identifier, context_type, require_audience=sections is not None,
+                              require_attach=remove_attachment)
+            if (_current(client, route, item, identifier, context_type, require_audience=sections is not None,
+                         require_attach=remove_attachment) != after or
                     schedule is None and after['locked'] is not locked or
                     clearing and after['lock_at'] is not None):
                 raise CanvasError('Announcement readback or selected/preserved comment lock/date clearing did not agree')
+            if remove_attachment and after['attachments'] != []:
+                raise CanvasError('Canvas did not clear the announcement attachment list')
             if schedule is not None and not all(matches(after, key, value) for key, value in schedule.items()):
                 raise CanvasError('Canvas did not store every selected announcement date as an exact instant or explicit clearing')
             if sections is not None and (not topic_sections.matches(after, sections) or
@@ -321,6 +351,8 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     requested = {'message_digest' if key == 'message' else key for key in changes}
     if sections is not None:
         requested.update(('is_section_specific', 'section_ids'))
+    if remove_attachment:
+        requested.add('attachments')
     if comments is not None:
         requested.add('locked')
     if clearing:
@@ -333,7 +365,7 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                                               'participant_reply_access_verified': False}} if comments is not None else {}),
             'stored_text_matches_request': {key: _matches(after, key, value) for key, value in changes.items() if key in ('title', 'message')},
             'changed_fields': changed, 'unrequested_changed_fields': [key for key in changed if key not in requested],
-            'note': 'One native PUT, independent announcement/inventory readback and selected text/comment/date/section state '
+            'note': 'One native PUT, independent announcement/inventory readback and selected text/comment/date/section/attachment state '
                     'verified with stable context/account. HTML normalization and other observed changes are '
                     'labeled, not causal proof. No private prompt, peer replies, explicit preference write, retry or rollback.' +
                     (' ' + COMMENTS_WARNING if comments is not None else '')}
@@ -347,4 +379,9 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
             'future_execution_verified': False}, note=result['note'] + ' ' + DATES_WARNING)
     if sections is not None:
         result.update(announcement_section_filter=_section_result(after, sections), note=result['note'] + ' ' + topic_sections.WARNING)
+    if remove_attachment:
+        result.update(announcement_attachment_removal={'removed_attachment_id': before['attachments'][0]['id'],
+                      'attachment_list_cleared': True, 'verified': True, 'file_record_deletion_verified': False,
+                      'related_record_effects_verified': False, 'storage_erasure_verified': False, 'other_references_verified': False},
+                      note=result['note'] + ' ' + ATTACHMENT_WARNING)
     return result

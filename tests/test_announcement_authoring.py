@@ -39,6 +39,8 @@ class AnnouncementClient(TopicClient):
         self.sections_denied = self.sections_denied_after = False
         self.sections_after = self.section_mutation = self.section_visible_ids = None
         self.sections_error_after_apply = self.ignore_sections = False
+        self.attachment_removal_error = self.ignore_attachment_removal = False
+        self.destroyed_attachments = []
 
     def request(self, route, method='GET', body=None):
         url = urlsplit(route)
@@ -89,6 +91,11 @@ class AnnouncementClient(TopicClient):
                 for key in ('title', 'message'):
                     if key in body:
                         row[key] = body[key]
+                if 'remove_attachment' in body and row['permissions'].get('attach') is True and not self.ignore_attachment_removal:
+                    self.destroyed_attachments.extend(attachment['id'] for attachment in row['attachments'] or [])
+                    row['attachments'] = []
+                    if self.attachment_removal_error:
+                        raise CanvasError('synthetic-private-error-after-attachment-destruction', status=500)
                 apply_date_lock(row, body, ignored_dates=self.ignored_fields | ({'delayed_post_at'} if self.ignore_posting else set()),
                                 ignore_comments=self.ignore_comment_lock, keep_closing=self.keep_closing_date)
                 if self.force_comment_lock:

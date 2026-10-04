@@ -48,7 +48,7 @@ def _parent(row, item, context_type):
         raise CanvasError('Canvas returned a topic outside the requested context')
 
 
-def _topic(row, item, topic_id, context_type, *, require_audience=False, announcement=False):
+def _topic(row, item, topic_id, context_type, *, require_audience=False, announcement=False, require_attach=False):
     if _id(row) != int(topic_id):
         raise CanvasError('Canvas returned a different discussion topic')
     _parent(row, item, context_type)
@@ -70,8 +70,9 @@ def _topic(row, item, topic_id, context_type, *, require_audience=False, announc
                              'can_view' in lock and type(lock['can_view']) is not bool):
         raise CanvasError('The actual discussion prompt is not readable; lock explanations cannot be edited as content')
     permissions = row.get('permissions')
-    if not isinstance(permissions, dict) or any(type(permissions.get(key)) is not bool for key in ('update', 'delete')):
-        raise CanvasError('Canvas did not report exact native topic update/delete permissions')
+    permission_keys = ('update', 'delete', 'attach') if require_attach else ('update', 'delete')
+    if not isinstance(permissions, dict) or any(type(permissions.get(key)) is not bool for key in permission_keys):
+        raise CanvasError('Canvas did not report exact native topic ' + '/'.join(permission_keys) + ' permissions')
     author = row.get('author')
     author_id = _id(author) if author is not None else None
     attachments = [] if row.get('attachments') is None else row['attachments']
@@ -119,7 +120,7 @@ def _topic(row, item, topic_id, context_type, *, require_audience=False, announc
     return {**{key: row.get(key) for key in FIELDS}, 'author_id': author_id,
             'message_digest': digest(row['message'] or ''), 'attachments': sorted(attached, key=lambda row: row['id']),
             'section_ids': sorted(section_ids), 'audience_digest': digest(row.get('ungraded_discussion_overrides')),
-            'permissions': {key: permissions[key] for key in ('update', 'delete')}}
+            'permissions': {key: permissions[key] for key in permission_keys}}
 
 
 def _scope(client, item, context_type):
@@ -132,9 +133,10 @@ def _scope(client, item, context_type):
     return route, {key: row.get(key) for key in ('id', 'name', 'workflow_state', 'concluded', 'non_collaborative', 'time_zone')}
 
 
-def _read(client, route, item, topic_id, context_type, *, require_audience=False, announcement=False):
+def _read(client, route, item, topic_id, context_type, *, require_audience=False, announcement=False, require_attach=False):
     row, _ = client.request(route + '/discussion_topics/' + topic_id + '?include%5B%5D=sections&no_verifiers=true')
-    return _topic(row, item, topic_id, context_type, require_audience=require_audience, announcement=announcement)
+    return _topic(row, item, topic_id, context_type, require_audience=require_audience, announcement=announcement,
+                  require_attach=require_attach)
 
 
 def _inventory(client, route, item, context_type, max_pages, *, announcement=False):

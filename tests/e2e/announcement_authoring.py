@@ -93,6 +93,9 @@ def initialize(state, *, enabled=False):
     state.announcement_sections_denied = state.announcement_sections_denied_after = False
     state.announcement_sections_after = None
     state.announcement_sections_error_after_apply = state.announcement_ignore_sections = False
+    state.announcement_ignore_attachment_removal = state.announcement_attachment_removal_error = False
+    state.announcement_drop_attach_on_write = False
+    state.announcement_destroyed_attachments = []
 
 
 def _route(state, handler):
@@ -180,7 +183,7 @@ def write(state, handler, body):
     deleting = handler.command == 'DELETE'
     identifier = state.announcement_next_id if creating else int(url.path.rsplit('/', 1)[1])
     row = _announcement(identifier) if creating else state.announcements.get(identifier)
-    allowed = {'title', 'message', 'is_announcement', 'lock_comment'} | ({'delayed_post_at', 'lock_at', 'specific_sections'} if '/courses/' in prefix else set())
+    allowed = {'title', 'message', 'is_announcement', 'lock_comment', 'remove_attachment'} | ({'delayed_post_at', 'lock_at', 'specific_sections'} if '/courses/' in prefix else set())
     if (handler.command not in ('POST', 'PUT', 'DELETE') or query != {'no_verifiers': ['true']} or
             deleting and body or not deleting and (set(body) - allowed or body.get('is_announcement') is not True)):
         _send(handler, {'private': 'synthetic-private-invalid-announcement-write'}, 400)
@@ -230,6 +233,14 @@ def write(state, handler, body):
             row['permissions']['update'] = False
         if state.announcement_sanitize:
             row['message'] = row['message'].replace('<br>', '<br />')
+        if state.announcement_drop_attach_on_write:
+            row['permissions']['attach'] = False
+        if 'remove_attachment' in body and row['permissions'].get('attach') is True and not state.announcement_ignore_attachment_removal:
+            state.announcement_destroyed_attachments.extend(attachment['id'] for attachment in row['attachments'] or [])
+            row['attachments'] = []
+            if state.announcement_attachment_removal_error:
+                _send(handler, {'private': 'synthetic-private-error-after-attachment-destruction'}, 500)
+                return True
         state.announcement_notifications.append(identifier)
         response = _scoped(row, prefix)
     if state.announcement_ack_patch is not None:

@@ -4,11 +4,32 @@ import os
 import subprocess
 import sys
 import unittest
-from importlib.metadata import distribution
+from importlib.metadata import distribution, version
 from pathlib import Path
 
 
 class PackagingTests(unittest.TestCase):
+    def test_installed_canvas_version_is_offline_and_uses_distribution_metadata(self):
+        binary = Path(sys.executable).with_name('canvas.exe' if os.name == 'nt' else 'canvas')
+        environment = {**os.environ, 'CANVAS_ORIGIN': 'http://invalid.example', 'CANVAS_TOKEN': 'synthetic-not-used'}
+        result = subprocess.run([str(binary), '--version'], env=environment,
+                                capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'canvas ' + version('canvas-cli') + '\n')
+        self.assertNotIn('synthetic-not-used', result.stdout + result.stderr)
+
+    def test_module_version_is_offline_and_root_help_advertises_it(self):
+        environment = {**os.environ, 'CANVAS_ORIGIN': 'http://invalid.example', 'CANVAS_TOKEN': 'synthetic-not-used'}
+        result = subprocess.run([sys.executable, '-m', 'canvas_cli.cli', '--version'],
+                                env=environment, capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'canvas ' + version('canvas-cli') + '\n')
+        result = subprocess.run([sys.executable, '-m', 'canvas_cli.cli', '--help'],
+                                env=environment, capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('--version', result.stdout)
+        self.assertLess(len(result.stdout.splitlines()), 60)
+
     def test_installed_project_name_and_canvas_console_entrypoint(self):
         package = distribution('canvas-cli')
         self.assertEqual(package.metadata['Name'], 'canvas-cli')

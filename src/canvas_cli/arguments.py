@@ -3,6 +3,7 @@
 import argparse
 import re
 from datetime import date
+from importlib.metadata import version
 from pathlib import Path
 
 
@@ -42,11 +43,14 @@ class _RootParser(argparse.ArgumentParser):
                           '  canvas completion zsh --format brief', '', 'Global options',
                           '  --format {json,brief}  JSON is complete; brief is a human index.',
                           '  --max-pages N          Pagination cap (default 100).',
+                          '  --version              Show the installed version without authentication.',
                           '  -h, --help             Show this offline entry point.', ''])
 
 
 def parser():
     p = _RootParser(prog='canvas', description='Canvas API CLI. JSON output may contain private academic data.')
+    p.add_argument('--version', action='version', version='%(prog)s ' + version('canvas-cli'),
+                   help='Show installed package version without authentication')
     p.add_argument('--max-pages', type=int, default=100)
     p.add_argument('--format', choices=('json', 'brief'), default='json', help='Output format; JSON is complete')
     sub = p.add_subparsers(dest='command', required=True, metavar='COMMAND', parser_class=argparse.ArgumentParser)
@@ -716,7 +720,8 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
-    for name in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule', 'announcement-sections'):
+    for name in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule', 'announcement-sections',
+                 'announcement-attachment-remove'):
         announcement = sub.add_parser(name, help='Preview native shared announcement authoring; not a discussion draft or reply')
         course_only = name in ('announcement-schedule', 'announcement-sections')
         announcement.add_argument('context_id', type=identifier, metavar='COURSE_ID' if course_only else None)
@@ -741,6 +746,9 @@ def parser():
             announcement.add_argument('--comments', action=argparse.BooleanOptionalAction, default=None, help='Select shared comment access; omission preserves it')
             announcement.add_argument('--acknowledge-comment-access-change', action='store_true', help='Required when selecting comments, including previews; acknowledges possible participant reply-access changes')
             announcement.add_argument('--acknowledge-closing-schedule-removal', action='store_true', help='Required only when opening a closed announcement with a closing date')
+        if name == 'announcement-attachment-remove':
+            announcement.add_argument('--acknowledge-attachment-removal', action='store_true',
+                                      help='Required including previews; native removal soft-deletes the attached file and can affect related records')
         if name == 'announcement-schedule':
             for field, flag, clearing in (('posting', '--post-at', '--clear-posting'),
                                            ('closing', '--closes-at', '--clear-closing')):

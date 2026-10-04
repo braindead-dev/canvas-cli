@@ -8,12 +8,13 @@ Python 3.10+ and a supported OS keyring are required. Install [pipx](https://pip
 
 ```sh
 pipx install git+https://github.com/braindead-dev/canvas-cli.git
+canvas --version
 canvas auth login --origin https://canvas.example.edu
 canvas auth status
 canvas courses --active --format brief
 ```
 
-This is a developer preview; no npm/PyPI release is published.
+`canvas --version` reads installed package metadata offline without authentication. This is a developer preview; no npm/PyPI release is published.
 
 Upgrading from Canvas Pocket? Install from the new URL above, check `canvas auth status`, then remove the old pipx package with `pipx uninstall canvas-pocket`. The new command is `canvas`; saved authentication and sync storage are unchanged.
 

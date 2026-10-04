@@ -163,6 +163,10 @@ def _brief(data):
             lines.append('Section filter: ' + (', '.join(str(value) for value in selection['section_ids'])
                                               if selection['is_section_specific'] else 'all sections'))
             lines.append('Stored filter verified; effective participant visibility and participant-record effects are not verified.')
+        if 'announcement_attachment_removal' in data:
+            removal = data['announcement_attachment_removal']
+            lines.append(f"Attachment {removal['removed_attachment_id']}: announcement attachment-list clearing verified.")
+            lines.append('Underlying file deletion, related-record effects, storage erasure and other references are not verified.')
         if data.get('unrequested_changed_fields'):
             lines.append('Other observed changes: ' + ', '.join(data['unrequested_changed_fields']))
         return '\n'.join([*lines, data['note']])

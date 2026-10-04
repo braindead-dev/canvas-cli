@@ -94,9 +94,24 @@ Native section changes can synchronize participant/read-tracking records and act
 
 Section associations may persist before the endpoint reports an authorization or validation error. **An HTTP error does not prove nothing changed.** Every attempted section update with failed or unverifiable readback is uncertain; inspect Canvas before repeating. No peer comments, participant overrides, enrollment/settings changes, retry, cleanup or rollback are requested.
 
+## Remove an attachment
+
+```sh
+canvas announcement-attachment-remove 123 456 --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-attachment-removal
+canvas announcement-attachment-remove 123 456 --context group --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-attachment-removal
+```
+
+Native removal soft-deletes the attached file, not just the announcement link. It can remove content tags, detach media/LTI/draft associations and update downstream records. Existing downloads/copies can remain; message-body links or other references can break. All three acknowledgements are required even for preview. This operation cannot combine text, comment, date, audience or announcement deletion changes.
+
+The exact readable announcement must report native update **and attach** permission and one existing attachment. Creation/delete rights and guessed authorship/roles are not substitutes. Account, context, content/author, attachment ID/metadata, permissions and complete accessible announcement inventory bind confirmation. Signed URLs and private prompt/audience records are not printed; no file download or peer-comment enumeration runs.
+
+One PUT sends `remove_attachment=true`, announcement kind and the preserved comment lock. Matching acknowledgement, independent announcement readback and complete inventory must show the cleared attachment list. Results verify that association clearing only, not underlying file deletion, related-record effects, storage erasure, other references or notification recall. Silent parameter omission, lost permission, readback failure or an HTTP error after deletion is uncertain; there is no automatic retry, restoration, cleanup or separate file deletion.
+
+This parameter follows the pinned native [request handling](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/controllers/discussion_topics_controller.rb#L1857) and [file deletion](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/models/attachment.rb#L1768), not an API promise that every deployment behaves identically. Native permissions remain authoritative.
+
 ## Boundaries
 
-Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Attachments, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
+Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Attachment upload/replacement, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
 
 Validation covers unit tests and subprocess/local HTTPS fixtures with synthetic records. No real announcement mutation has been live-tested. Delivery, future jobs, hidden inventory effects and remote preference storage remain unverified.
 

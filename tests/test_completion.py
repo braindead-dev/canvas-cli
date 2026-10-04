@@ -25,6 +25,8 @@ class CompletionTests(unittest.TestCase):
         self.assertIn('courses', self.complete(''))
         self.assertEqual(self.complete('what-if-r'), ['what-if-reset'])
         self.assertEqual(self.complete('--max-p'), ['--max-pages'])
+        self.assertEqual(self.complete('--ver'), ['--version'])
+        self.assertEqual(self.complete('courses', '--ver'), [])
         self.assertEqual(candidates(parser(), ['can'], 0)['completion_candidates'], ['canvas'])
         self.assertEqual(candidates(parser(), ['not-canvas'], 0)['completion_candidates'], [])
         self.assertIn('courses', candidates(parser(), ['canvas'], 1)['completion_candidates'])
