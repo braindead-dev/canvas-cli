@@ -21,6 +21,7 @@ canvas schema --search upload
 | [Files and exports](docs/content.md) | Private downloads, bounded batch downloads, scoped uploads, own-file/folder organization, asynchronous exports | No recursive deletion/rich sharing changes; exports and uploads can be role-restricted |
 | [Communication](docs/communication.md) | Inbox workflows; discussion replies/own edits, likes/subscriptions/markers; shared ungraded prompt authoring/copy/state/settings, pinned ordering, course availability/section filtering and course/group student to-do dates | Copies are not full backups. Graded/anonymous/announcement/root-child authoring, group/linked availability, podcasts, modern participant overrides and bulk attachments remain open. Section filtering is not all-participant visibility proof. Readback does not prove future jobs, planner effects or completion |
 | [Activity and peer reviews](docs/communication.md) | Own activity/announcement feeds and dismissal; authorized received/visible reviews | Not a complete owed-review inventory; review allocation/completion/grading excluded |
+| [Personal discussion views](docs/discussion-view.md) | Native own sort/expansion/pinned-entry settings, omissions and explicit resets; account/context/state-bound preview and independent effective readback | Queries may initialize own participant/default state. Shared locks mask raw overrides; sort/expansion storage stays unverified. Summary/language preferences remain open; no peer content or assessment requests |
 | [Planning](docs/planning.md) | Own notes/events, calendar/planner feeds, checkbox overrides, Scheduler discovery and verified individual/team reservation changes | Team changes affect all members; checkboxes do not submit/grade; appointment administration and series mutations remain open |
 | [Account settings](docs/account.md) | Whitelisted profile with verified edits, favorites, aliases, colors, interface/dashboard settings, exact-key notification preferences, verified own contact creation/retirement | Defaults can have native GET effects; contacts need native confirmation; push registration needs provider/developer-key configuration |
 | [Groups and enrollment](docs/account.md) | Scoped rosters/permission/group-set reads, own community joins/leaves and pending invitation responses | Not university registration; project switches/moderation/admin allocation excluded |
@@ -32,7 +33,7 @@ canvas schema --search upload
 
 One API transport/paginator, separate credential-free binary transport, metadata-first where appropriate, explicit account/scope/access checks, preview-bound writes, no automatic ambiguous-write retry, and synthetic public fixtures only.
 
-Help/schema derive syntax from the parser; the schema is not a standard JSON Schema or authorization contract. Native GET effects are explicitly classified. See [safety](docs/safety.md) and [architecture](docs/development.md#architecture).
+Help/schema derive syntax from the parser; the schema is not a standard JSON Schema or authorization contract. Native GET/GraphQL query effects are explicitly classified. See [safety](docs/safety.md) and [architecture](docs/development.md#architecture).
 
 ## Validation and next work
 

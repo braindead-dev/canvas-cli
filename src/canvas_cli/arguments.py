@@ -692,6 +692,23 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
+    for name in ('topic-view', 'topic-view-set'):
+        view = sub.add_parser(name, help='Read own effective discussion view; native queries can initialize your participant record' if name == 'topic-view' else
+                              'Preview own discussion display preferences, not shared topic defaults')
+        view.add_argument('context_id', type=identifier)
+        view.add_argument('topic_id', type=identifier)
+        view.add_argument('--context', choices=('course', 'group'), default='course')
+        view.add_argument('--acknowledge-participant-initialization', action='store_true',
+                          help='Required even for reads/previews; native query can create your own participant/default state')
+        if name == 'topic-view-set':
+            view.add_argument('--sort-order', choices=('asc', 'desc', 'inherit'), help='Shared locks can mask a saved override')
+            expansion = view.add_mutually_exclusive_group()
+            expansion.add_argument('--expanded', action=argparse.BooleanOptionalAction, default=None)
+            expansion.add_argument('--inherit-expansion', action='store_true', help='Request explicit null, not a copied shared default')
+            pinned = view.add_mutually_exclusive_group()
+            pinned.add_argument('--show-pinned-entries', action=argparse.BooleanOptionalAction, default=None)
+            pinned.add_argument('--clear-pinned-entry-preference', action='store_true')
+            _confirmation(view)
     from .topic_options import FIELDS
     configuration = sub.add_parser('topic-configure', help='Preview shared ungraded reply/like/view settings, not personal preferences')
     configuration.add_argument('context_id', type=identifier)

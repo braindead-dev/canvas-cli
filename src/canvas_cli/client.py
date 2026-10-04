@@ -58,6 +58,23 @@ class Client:
                      any(key != 'auto_mark_as_read' and key.startswith('auto_mark_as_read[')
                          for key in parameters))):
             raise CanvasError('Conversation reads require auto_mark_as_read=false to avoid changing Inbox state')
+        return self._send(url, method, body, expect_no_content=expect_no_content)
+
+    def graphql(self, document, variables, operation_name):
+        """Fixed native endpoint; domain commands supply documents, never user query files."""
+        if (not isinstance(document, str) or not document.strip() or
+                not isinstance(variables, dict) or not isinstance(operation_name, str) or
+                not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', operation_name)):
+            raise CanvasError('Invalid GraphQL operation; no request was sent')
+        body = {'query': document, 'variables': variables, 'operationName': operation_name}
+        result, _ = self._send(self.host + '/api/graphql', 'POST', body, expected_status=200)
+        if (not isinstance(result, dict) or result.get('errors') not in (None, []) or
+                not isinstance(result.get('data'), dict)):
+            raise CanvasError('Canvas returned GraphQL errors or incomplete data; no private response was logged. '
+                              'An operation may have applied; check Canvas before repeating. No automatic retries.')
+        return result['data']
+
+    def _send(self, url, method, body, *, expect_no_content=False, expected_status=None):
         try:
             payload = json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8') if body is not None else None
         except (TypeError, ValueError, UnicodeError):
@@ -68,6 +85,9 @@ class Client:
             data=payload)
         try:
             with self.transport(req, timeout=30) as response:
+                if expected_status is not None and response.status != expected_status:
+                    raise CanvasError('Canvas returned an unexpected GraphQL HTTP acknowledgement. '
+                                      'Check Canvas before repeating an operation; no automatic retries.')
                 if expect_no_content:
                     if response.status != 204 or response.read(1):
                         raise CanvasError('Canvas did not return the expected empty 204 acknowledgement. '

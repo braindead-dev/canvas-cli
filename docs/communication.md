@@ -180,6 +180,8 @@ Changing the initial-post requirement needs separate visibility acknowledgement 
 
 The existing account/content/audience/inventory-bound pipeline performs one PUT and independently verifies every selected stored value plus the inventory entry. Unrequested metadata/inventory changes remain observations, not exclusive causal proof. No entry rewriting/deletion, read-marker change, automatic retry, cleanup or rollback. Podcasts and modern participant/assignment override configuration remain open.
 
+Personal sort/expansion/pinned-entry preferences are separate from shared configuration. See [personal discussion views](discussion-view.md) for native GraphQL controls, query initialization and effective-versus-stored verification.
+
 ## Peer reviews
 
 ```sh

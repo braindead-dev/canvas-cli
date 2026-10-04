@@ -30,8 +30,8 @@ def digest(preview):
     return hashlib.sha256(encoded).hexdigest()
 
 
-def confirmed(client, preview, yes=False, confirm=None):
-    """The caller must re-read identity and destination to construct this fresh preview."""
+def review(preview, yes=False, confirm=None):
+    """Validate a fresh account/destination-bound preview before any explicit mutation."""
     check_flags(yes, confirm)
     expected = digest(preview)
     if not yes:
@@ -39,6 +39,13 @@ def confirmed(client, preview, yes=False, confirm=None):
                 'next': 'Review the account, destination and exact changes, then repeat with --yes --confirm DIGEST.'}
     if confirm != expected:
         raise CanvasError('Preview changed (account, destination or content); review a fresh preview')
+
+
+def confirmed(client, preview, yes=False, confirm=None):
+    """The caller must re-read identity and destination to construct this fresh preview."""
+    result = review(preview, yes, confirm)
+    if result is not None:
+        return result
     if preview.get('expected_response') == 'no_content':
         return client.request(preview['route'], preview['method'], preview.get('body'),
                               expect_no_content=True)[0]

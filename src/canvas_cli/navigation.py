@@ -8,11 +8,11 @@ from .client import CanvasError
 
 def command_groups():
     capabilities = describe()
-    groups = {'Read-only': set(), 'Canvas GET (server-side effects possible)': set(),
+    groups = {'Read-only': set(), 'Canvas queries (server-side effects possible)': set(),
               'Local file writes': set(), 'Canvas writes (preview-first)': set(),
               'Authentication': {'auth'}, 'Local help': {'help', 'schema', 'capabilities'}}
     for field, category in [('read', 'Read-only'),
-                            ('read_with_native_side_effects', 'Canvas GET (server-side effects possible)'),
+                            ('read_with_native_side_effects', 'Canvas queries (server-side effects possible)'),
                             ('local_write', 'Local file writes'),
                             ('canvas_write', 'Canvas writes (preview-first)')]:
         for label in capabilities[field]:

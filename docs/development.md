@@ -24,9 +24,9 @@ src/canvas_cli/
   auth.py         origin config, keyring, login/logout/client setup
   dispatch.py     parsed arguments → domain operations
   formatting.py   human summaries; no credentials/network
-  client.py       HTTPS transport, guarded paths, pagination
+  client.py       HTTPS transport, guarded REST paths, fixed GraphQL endpoint, pagination
   strict_json.py  unambiguous API/snapshot decoding
-  writes.py       identity and confirmation digests
+  writes.py       identity, confirmation digests and pure preview review
   text.py         bounded explicit UTF-8 file inputs
   wiki_content.py shared native page metadata and private content fingerprints
   download.py     credential-free binary transport
@@ -48,6 +48,7 @@ tests/
     topic_management.py  native prompt authoring/states/dates/settings/deletion, pinned ordering and permissions
     topic_duplication.py  native prompt copies, eligibility and serialize-before-insert position evidence
     topic_sections.py  native course section associations and old/new visibility checks
+    topic_view.py    native GraphQL own preferences, initialization and effective-value resolution
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```
 

@@ -29,6 +29,7 @@ def describe():
             'snapshot-search (offline)',
         ],
         'read_with_native_side_effects': [
+            'topic-view (own effective discussion display and shared defaults/locks through native GraphQL; explicit participant-initialization acknowledgement, no peer replies; query can create own participant/default subscription/unread counters and planner cache)',
             'module-paths (own eligible mastery choices and assignment-ID projection; native module/conditional evaluation can have downstream effects, no path chosen or content/assessment navigation)',
             'module-sequence (native previous/next metadata, at most ten occurrences; no content navigation or mastery choice; conditional-release evaluation may have native effects)',
             'module-progress/module-item (metadata through paginated lists; native evaluation may materialize/recalculate progression, no explicit view/done events)',
@@ -44,6 +45,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'topic-view-set (own native discussion sort/expansion/pinned-entry preferences, including explicit null resets; read-permission and account/context/state-bound preview, participant-initialization acknowledgement and one GraphQL mutation; independent effective readback, shared locks and unverified raw sort/expansion overrides labeled, no peer reads or automatic retry/rollback)',
             'topic-sections (native course discussion section filter, distinct from modern participant overrides; exact topic update, shared/audience acknowledgements, account/content/sections/inventory-bound preview, one PUT and independent exact-filter readback; old/new visibility remains endpoint-authoritative, no all-student visibility guarantee, roster/reply reads, retries or rollback)',
             'topic-todo (shared course/group ungraded discussion student to-do date or explicit clearing, not a private task or graded due date; exact topic update and native context-add permission for setting, shared/todo acknowledgements, account/content/audience/inventory-bound preview, one PUT and exact-instant independent readback; no planner/completion/availability guarantee, peer reads, retry or rollback)',
             'topic-duplicate (native ungraded prompt copy; dynamic creation rights, endpoint-authoritative instructor/admin/group eligibility, initial-post enforcement and shared/copy-effect acknowledgements; source/account/inventory-bound preview, one source POST, new-ID/own-author/independent readback and pinned-position map; replies/attachments/participant overrides are not a full backup, audience/publication/dates/order can change, no retry/cleanup)',

@@ -462,7 +462,7 @@ class PageHistoryTests(unittest.TestCase):
 
     def test_revision_commands_have_distinct_native_get_or_preview_write_classifications(self):
         for name in ('page-revisions', 'page-revision'):
-            self.assertEqual(command_help(parser(), name)['safety'], 'Canvas GET (server-side effects possible)')
+            self.assertEqual(command_help(parser(), name)['safety'], 'Canvas queries (server-side effects possible)')
         self.assertEqual(command_help(parser(), 'page-restore')['safety'], 'Canvas writes (preview-first)')
 
 

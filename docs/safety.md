@@ -20,6 +20,7 @@ Schema syntax, a preview, or broad automation instructions are not permission to
 ## Transport boundaries
 
 - One HTTPS API client and Link-pagination implementation.
+- Typed GraphQL operations use that same transport on fixed `/api/graphql`; expert REST get cannot access it. Partial/error responses are not success or retry permission.
 - Pagination stays on configured origin/API paths; redirects cannot carry credentials elsewhere.
 - URL credentials/impersonation/credential query parameters/path traversal are refused, including encoded/bracketed forms.
 - Conversation GETs must disable automatic mark-read; submission read-status inclusion is blocked.
@@ -31,6 +32,8 @@ Schema syntax, a preview, or broad automation instructions are not permission to
 Expert get is for guarded documented API reads, not arbitrary harmless HTTP or permission bypass.
 
 Native GETs can log analytics. Root/path lookup may create a missing root; notification preferences may persist defaults. Those commands are labeled in help/schema. Undocumented server effects are outside the guarantee.
+
+Native GraphQL queries can also have effects: [own discussion view queries](discussion-view.md) may initialize participant/default subscription/unread state and planner cache. Explicit acknowledgement is required even for reads and previews; a preview does not send the selected preference mutation.
 
 ## Private output
 

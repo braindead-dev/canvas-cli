@@ -9,6 +9,21 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('topic-view', 'topic-view-set'):
+        from . import topic_view
+        if args.command == 'topic-view':
+            return topic_view.read(client, args.context_id, args.topic_id, context_type=args.context,
+                                   acknowledge=args.acknowledge_participant_initialization)
+        values = {}
+        if args.sort_order is not None:
+            values['sort_order'] = None if args.sort_order == 'inherit' else args.sort_order
+        if args.expanded is not None or args.inherit_expansion:
+            values['expanded'] = None if args.inherit_expansion else args.expanded
+        if args.show_pinned_entries is not None or args.clear_pinned_entry_preference:
+            values['show_pinned_entries'] = None if args.clear_pinned_entry_preference else args.show_pinned_entries
+        return topic_view.change(client, args.context_id, args.topic_id, values, context_type=args.context,
+                                 acknowledge=args.acknowledge_participant_initialization,
+                                 yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-sections':
         from .topic_management import change
         return change(client, args.course_id, args.topic_id,
