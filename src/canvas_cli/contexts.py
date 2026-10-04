@@ -3,6 +3,12 @@
 from .client import CanvasError
 
 
+def require_entry_api(topic):
+    """Legacy REST entry readback deliberately excludes anonymous discussions."""
+    if topic.get('anonymous_state') is not None:
+        raise CanvasError('Anonymous discussions require a separate native entry workflow; REST entry readback is unavailable')
+
+
 def discussion_base(context_id, topic_id=None, context_type='course'):
     if context_type not in ('course', 'group'):
         raise CanvasError('Discussion context must be course or group')

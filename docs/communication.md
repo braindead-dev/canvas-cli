@@ -36,9 +36,9 @@ Discussion/announcement listings, topics, threads, entries/replies, posts, edits
 
 Thread follows entry and separate reply pagination when embedded ten-reply lists are insufficient. Denied replies are partial. Output can contain classmates' names/posts; keep private. No explicit mark-read write occurs.
 
-Posts escape UTF-8 text to HTML and bind current topic/account/content. Replies also verify the exact visible non-deleted entry.
+Posts escape UTF-8 text to HTML and bind current topic/account/content. Replies also verify the exact visible non-deleted entry. Anonymous discussions need a separate modern entry workflow and are refused before posting through REST.
 
-[Prompt attachments](attachments.md) support native course/group single-file upload and destructive replacement with separate consent. These change the shared prompt, not your reply attachment.
+[Discussion attachments](attachments.md) cover optional native files on your new post/reply and separate shared-prompt replacement. Entry uploads use posting rights and can fail after the post is saved; prompt replacement uses update/attach rights and can remove the old file before storage succeeds.
 
 ### Own edits and likes
 

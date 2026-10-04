@@ -36,6 +36,10 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'attached_post' in data:
+        entry = data['attached_post']
+        return '\n'.join([f"Own entry {entry['id']}: attachment {entry['attachment']['id']} ({entry['attachment']['size']} bytes)",
+                          'Entry/parent and attachment metadata verified; stored bytes and grade credit are unverified.', data['note']])
     if isinstance(data, dict) and 'attachment_transfer' in data:
         attached = data['attachment_transfer']
         row = data['attached_topic']

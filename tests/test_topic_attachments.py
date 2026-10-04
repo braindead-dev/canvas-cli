@@ -212,12 +212,12 @@ class AttachmentTests(unittest.TestCase):
             self.preview()
         self.assertEqual(self.writes(), [])
         self.reset()
-        from canvas_cli.topic_attachments import file_info as inspect
+        from canvas_cli.upload import file_info as inspect
         def mutate(*args):
             result = inspect(*args)
             self.file.write_bytes(b'x' * result['size'])
             return result
-        with patch('canvas_cli.topic_attachments.file_info', side_effect=mutate), self.assertRaisesRegex(CanvasError, 'changed'):
+        with patch('canvas_cli.upload.file_info', side_effect=mutate), self.assertRaisesRegex(CanvasError, 'changed'):
             self.preview()
         self.assertEqual(self.client.calls, [])
 

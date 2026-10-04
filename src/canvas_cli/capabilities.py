@@ -94,7 +94,7 @@ def describe():
             'appointment-team-reserve/appointment-team-cancel (one accepted own course team in the exact Scheduler group set; shared-team acknowledgement, account/membership/full-team-inventory-bound preview and matching digest, no booking replacement, separate participant and full-inventory read-back)',
             'task-create/task-edit/task-delete (personal planner notes; account-bound preview and matching digest required)',
             'planner-override-create/planner-override-edit/planner-override-delete (planner completion/dismissal; account-bound preview, explicit module-progress acknowledgement for course content)',
-            'post (preview and matching digest required)',
+            'post (preview and matching digest required; optional native multipart attachment with separate upload consent, frozen bytes, exact own author/parent and independent attachment ID/size readback; entry can save before file storage, native attach rights endpoint-authoritative, no byte/grade/storage/delivery proof, retry or orphan cleanup)',
             'entry-edit/entry-delete (own entry only; account-bound preview, matching digest and attachment-loss acknowledgement)',
             'entry-rate (own like only; visible target, enabled ratings, account-bound preview and matching digest required)',
             'topic-subscribe/topic-unsubscribe/topic-mark-read/topic-mark-unread/entry-mark-read/entry-mark-unread (only own subscription/read markers; account-bound preview and matching digest required)',

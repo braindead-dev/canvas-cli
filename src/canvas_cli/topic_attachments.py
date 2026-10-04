@@ -3,9 +3,8 @@
 from .announcement_authoring import _listed, _published
 from .client import CanvasError
 from .group_content import _number, base
-from .multipart import MAX_BYTES, filename
+from .multipart import MAX_BYTES, inspect_file
 from .topic_management import _inventory, _inventory_delta, _read, _scope, _topic
-from .upload import file_info, staged_file
 from .writes import account, check_flags, digest, review
 
 WARNING = ('Uploads a file to a shared discussion or announcement using one native multipart PUT. '
@@ -47,10 +46,7 @@ def set_attachment(client, item, identifier, source, *, kind='topic', context_ty
         raise CanvasError('Use explicit shared/upload consent; announcements also require broadcast consent, including previews')
     if type(max_bytes) is not int or not 0 < max_bytes <= MAX_BYTES or type(max_pages) is not int or max_pages < 1:
         raise CanvasError('Attachment limits must be positive; native multipart files are bounded to 25 MiB')
-    info = file_info(source, max_bytes)
-    filename(info['name'], info['content_type'])
-    with staged_file(info, max_bytes) as staged:
-        content = staged.read(max_bytes + 1)
+    info, content = inspect_file(source, max_bytes)
     identity = account(client)
     route, context = _scope(client, item, context_type)
     before = _current(client, route, item, identifier, context_type, announcement)

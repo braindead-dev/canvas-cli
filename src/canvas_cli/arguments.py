@@ -6,6 +6,8 @@ from datetime import date
 from importlib.metadata import version
 from pathlib import Path
 
+from .multipart import MAX_BYTES
+
 
 def identifier(value):
     if not value.isdecimal() or int(value) < 1:
@@ -697,6 +699,9 @@ def parser():
         if name == 'post':
             s.add_argument('--reply-to', type=identifier)
             s.add_argument('--message-file', required=True, type=Path)
+            s.add_argument('--attachment', type=Path, help='Optional native entry attachment; not a pre-uploaded file ID')
+            s.add_argument('--max-attachment-bytes', type=int, default=MAX_BYTES, help='Optional lower file limit; at most 25 MiB')
+            s.add_argument('--acknowledge-attachment-upload', action='store_true', help='Required only for a selected attachment, including previews')
             _confirmation(s)
     for name in ('entry', 'entry-edit', 'entry-delete'):
         s = sub.add_parser(name, help='Read one visible discussion entry' if name == 'entry' else
@@ -720,7 +725,6 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
-    from .multipart import MAX_BYTES
     for kind in ('topic', 'announcement'):
         attachment = sub.add_parser(kind + '-attachment-set', help='Preview native prompt attachment upload or destructive replacement')
         attachment.add_argument('context_id', type=identifier)

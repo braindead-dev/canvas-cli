@@ -8,6 +8,18 @@ from .client import CanvasError
 MAX_BYTES = 25 * 1024 * 1024
 
 
+def inspect_file(source, max_bytes):
+    """Shared private byte capture for native prompt and entry attachment commands."""
+    from .upload import file_info, staged_file
+    if type(max_bytes) is not int or not 0 < max_bytes <= MAX_BYTES:
+        raise CanvasError('Native multipart files must fit a positive byte limit within 25 MiB')
+    info = file_info(source, max_bytes)
+    filename(info['name'], info['content_type'])
+    with staged_file(info, max_bytes) as staged:
+        content = staged.read(max_bytes + 1)
+    return info, content
+
+
 def filename(name, content_type):
     try:
         valid = (isinstance(name, str) and name not in ('', '.', '..') and len(name.encode('utf-8')) <= 255 and

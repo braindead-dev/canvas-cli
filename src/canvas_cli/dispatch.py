@@ -5,6 +5,7 @@ from urllib.parse import quote, urlencode
 
 from .auth import config_path
 from .client import CanvasError
+from .multipart import MAX_BYTES
 from .text import read_utf8
 
 
@@ -805,7 +806,15 @@ def execute(client, args):
             route += f'/{args.entry}/replies'
         if args.command == 'post':
             from .discussion import post
-            message = args.message_file.read_text(encoding='utf-8')
+            if args.attachment is not None:
+                from .entry_attachments import post as attached_post
+                return attached_post(client, args.course, args.topic, args.reply_to,
+                        read_utf8(args.message_file, label='Post'), args.attachment, context_type=args.context,
+                        max_bytes=args.max_attachment_bytes, acknowledge_upload=args.acknowledge_attachment_upload,
+                        max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
+            if args.acknowledge_attachment_upload or args.max_attachment_bytes != MAX_BYTES:
+                raise CanvasError('Attachment consent and limits require --attachment')
+            message = read_utf8(args.message_file, label='Post')
             return post(client, args.course, args.topic, args.reply_to, message,
                         args.yes, args.confirm, args.context)
         read_topic(client, args.course, args.topic, args.context, require_entries=True)

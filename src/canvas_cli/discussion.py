@@ -6,7 +6,7 @@ import json
 from urllib.parse import urlencode
 
 from .client import CanvasError
-from .contexts import discussion_base, read_topic
+from .contexts import discussion_base, read_topic, require_entry_api
 from .writes import account, check_flags, confirmed, digest
 
 
@@ -141,6 +141,7 @@ def prepare(client, course_id, topic_id, reply_to, message, context_type='course
     discussion_base(course_id, topic_id, context_type)
     identity = account(client)
     topic = read_topic(client, course_id, topic_id, context_type, require_entries=bool(reply_to))
+    require_entry_api(topic)
     route = discussion_base(course_id, topic_id, context_type) + '/entries'
     if reply_to:
         target = _entry(client, discussion_base(course_id, topic_id, context_type), topic_id, reply_to, 100)

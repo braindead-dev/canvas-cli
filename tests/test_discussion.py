@@ -48,3 +48,11 @@ class DiscussionTests(unittest.TestCase):
             with self.assertRaisesRegex(CanvasError, 'Preview changed'):
                 post(self.client, '7', '8', None, 'Synthetic', yes=True, confirm=preview['confirm'])
             self.assertTrue(all(len(call.args) == 1 for call in self.client.request.call_args_list))
+
+    def test_anonymous_rest_posts_refuse_before_mutation(self):
+        for anonymous in ('partial_anonymity', 'full_anonymity', False):
+            self.client.request.return_value = ({**self.topic, 'anonymous_state': anonymous}, '')
+            self.client.request.reset_mock()
+            with self.assertRaisesRegex(CanvasError, 'Anonymous discussions'):
+                post(self.client, '7', '8', None, 'hello')
+            self.assertTrue(all(len(call.args) == 1 for call in self.client.request.call_args_list))

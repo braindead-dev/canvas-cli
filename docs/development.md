@@ -33,6 +33,7 @@ src/canvas_cli/
   own_submission.py shared exact own GraphQL submission/assignment metadata checks
   comment_inventory.py shared bounded own-submission comment pagination, with explicit author/feedback projections
   download.py     credential-free binary transport
+  multipart.py    bounded native forms and shared private file capture
   <domain>.py     resource-specific validation/projection/behavior
 tests/
   test_<domain>.py  focused unit tests
@@ -52,6 +53,7 @@ tests/
     topic_duplication.py  native prompt copies, eligibility and serialize-before-insert position evidence
     topic_sections.py  native course section associations and old/new visibility checks
     announcement_authoring.py  native broadcast/date/comment-lock/section audiences and soft-delete semantics
+    entry_attachments.py  native entry-before-file save, own-entry pagination and partial storage failures
     topic_view.py    native GraphQL own preferences, initialization and effective-value resolution
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```

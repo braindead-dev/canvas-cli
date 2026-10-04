@@ -18,6 +18,7 @@ from . import (
     announcement_authoring,
     appointments,
     channels,
+    entry_attachments,
     feedback_comments,
     module_items,
     module_paths,
@@ -67,6 +68,7 @@ class CanvasFixture(unittest.TestCase):
         snapshot_revalidation.initialize(cls)
         topic_management.initialize(cls)
         topic_attachments.initialize(cls)
+        entry_attachments.initialize(cls)
         topic_view.initialize(cls)
         submission_drafts.initialize(cls)
         submission_comments.initialize(cls)
@@ -215,6 +217,8 @@ class CanvasFixture(unittest.TestCase):
                     return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if entry_attachments.read(cls, self):
+                    return
                 if announcement_authoring.read(cls, self):
                     return
                 if snapshot_revalidation.read(cls, self):
@@ -733,7 +737,7 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 if self.headers.get('Content-Type', '').startswith('multipart/form-data;'):
-                    if not topic_attachments.write(cls, self, raw):
+                    if not entry_attachments.write(cls, self, raw) and not topic_attachments.write(cls, self, raw):
                         self.send_response(404); self.end_headers()
                     return
                 body = json.loads(raw) if raw else {}
