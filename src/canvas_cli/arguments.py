@@ -28,11 +28,28 @@ def _confirmation(command):
     command.add_argument('--yes', action='store_true', help='Execute only if --confirm matches the fresh preview')
 
 
+class _RootParser(argparse.ArgumentParser):
+    """Short discovery entry point; exact command options stay with argparse."""
+
+    def format_help(self):
+        from .navigation import command_help
+        groups = command_help(self)['command_index']
+        rows = [self.format_usage().rstrip(), '', self.description, '', 'Discover commands',
+                '  canvas help --format brief', '  canvas help --search TEXT --format brief',
+                '  canvas help COMMAND --format brief', '  canvas schema COMMAND', '', 'Safety categories']
+        rows.extend(f'  {name}: {len(commands)} command(s)' for name, commands in groups.items())
+        return '\n'.join([*rows, '', 'Examples', '  canvas courses --active', '  canvas deadlines --format brief',
+                          '  canvas completion zsh --format brief', '', 'Global options',
+                          '  --format {json,brief}  JSON is complete; brief is a human index.',
+                          '  --max-pages N          Pagination cap (default 100).',
+                          '  -h, --help             Show this offline entry point.', ''])
+
+
 def parser():
-    p = argparse.ArgumentParser(prog='canvas', description='Canvas API CLI. JSON output may contain private academic data.')
+    p = _RootParser(prog='canvas', description='Canvas API CLI. JSON output may contain private academic data.')
     p.add_argument('--max-pages', type=int, default=100)
     p.add_argument('--format', choices=('json', 'brief'), default='json', help='Output format; JSON is complete')
-    sub = p.add_subparsers(dest='command', required=True)
+    sub = p.add_subparsers(dest='command', required=True, metavar='COMMAND', parser_class=argparse.ArgumentParser)
     a = sub.add_parser('auth').add_subparsers(dest='action', required=True)
     login = a.add_parser('login', help='Personal development testing with your own account')
     login.add_argument('--origin', required=True)
@@ -920,6 +937,11 @@ def parser():
             s.add_argument('--include-totals', action='store_true', help='Opt in to native recalculated current/final numeric totals, not raw grade responses')
             s.add_argument('--acknowledge-all-what-if', action='store_true', help='Required for preview; clears hidden/historical hypotheses and updates all own submission timestamps')
             _confirmation(s)
+    completion = sub.add_parser('completion', help='Print a reviewable Bash/Zsh completion function; no dotfile edits or authentication')
+    completion.add_argument('shell', choices=('bash', 'zsh'))
+    completion = sub.add_parser('complete', help='Offline parser-derived shell candidates; no Canvas, credential or file lookups')
+    completion.add_argument('--cword', required=True, type=int, help='Zero-based cursor word, including the executable word')
+    completion.add_argument('words', nargs=argparse.REMAINDER, help='Use -- before shell words; they are never logged or echoed')
     schema_command = sub.add_parser('schema', help='Offline machine-readable argument and safety catalog from the actual parser')
     schema_command.add_argument('--search', help='Find command schemas by name, description or safety category')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')

@@ -24,6 +24,7 @@ src/canvas_cli/
   auth.py         origin config, keyring, login/logout/client setup
   dispatch.py     parsed arguments → domain operations
   formatting.py   human summaries; no credentials/network
+  completion.py   offline argparse candidates and reviewable Bash/Zsh functions
   client.py       HTTPS transport, guarded REST paths, fixed GraphQL endpoint, pagination
   strict_json.py  unambiguous API/snapshot decoding
   writes.py       identity, confirmation digests and pure preview review

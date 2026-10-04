@@ -36,6 +36,10 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'completion_script' in data:
+        return data['completion_script'].rstrip()
+    if isinstance(data, dict) and 'completion_candidates' in data:
+        return '\n'.join(data['completion_candidates'])
     if isinstance(data, dict) and 'what_if_course_inventory' in data:
         if data.get('dry_run'):
             return json.dumps(data, indent=2)

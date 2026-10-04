@@ -47,6 +47,20 @@ Help/schema run offline without configuration, keyring, or network. The versione
 
 It is not a standard JSON Schema or authorization/execution contract. Runtime identity, scope, bounds, access, and confirmation checks remain mandatory.
 
+## Shell completion
+
+```sh
+canvas completion bash --format brief
+canvas completion zsh --format brief
+canvas complete --cword 3 -- canvas files 123 --cont
+```
+
+Review the printed function, then source it in your **current shell** with `eval "$(canvas completion bash --format brief)"` or the Zsh equivalent. Zsh requires `compinit` first. The CLI does not edit shell startup files or install hooks automatically.
+
+Tab completion derives current commands, nested auth commands, flags, finite choices, repeatable options and argument-exclusion groups from argparse. `--option=value` and Bash's split-equals convention are supported. The helper is offline and emits known parser candidates only; it does not inspect credentials, configuration, course IDs, Canvas data or file contents. Bash/Zsh can use their own ordinary filename fallback when no parser candidate exists.
+
+Completion is a discovery aid, not a syntax, permission or execution validator. Free-form values/numeric IDs are not guessed. It never runs an action, previews a write, reads a secret or supplies a confirmation digest. New commands appear without regenerating a separate manual command catalog.
+
 ## Troubleshooting
 
 | Result | Next step |

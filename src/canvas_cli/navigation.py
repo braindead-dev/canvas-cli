@@ -10,7 +10,7 @@ def command_groups():
     capabilities = describe()
     groups = {'Read-only': set(), 'Canvas queries (server-side effects possible)': set(),
               'Local file writes': set(), 'Canvas writes (preview-first)': set(),
-              'Authentication': {'auth'}, 'Local help': {'help', 'schema', 'capabilities'}}
+              'Authentication': {'auth'}, 'Local help': {'help', 'schema', 'capabilities', 'completion', 'complete'}}
     for field, category in [('read', 'Read-only'),
                             ('read_with_native_side_effects', 'Canvas queries (server-side effects possible)'),
                             ('local_write', 'Local file writes'),

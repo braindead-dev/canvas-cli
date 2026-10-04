@@ -13,6 +13,12 @@ from .formatting import brief
 def run(args):
     if args.max_pages < 1:
         raise CanvasError('--max-pages must be positive')
+    if args.command in ('complete', 'completion'):
+        from .completion import candidates, script
+        if args.command == 'completion':
+            return script(args.shell)
+        words = args.words[1:] if args.words[:1] == ['--'] else args.words
+        return candidates(parser(), words, args.cword)
     if args.command == 'help':
         from .navigation import command_help
         return command_help(parser(), args.topic, args.search)
