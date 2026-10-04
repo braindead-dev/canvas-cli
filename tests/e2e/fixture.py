@@ -25,6 +25,7 @@ from . import (
     page_duplication,
     page_history,
     page_scheduling,
+    snapshot_revalidation,
     submission_attention,
     submission_comments,
     submission_drafts,
@@ -60,6 +61,7 @@ class CanvasFixture(unittest.TestCase):
         page_deletion.initialize(cls)
         page_duplication.initialize(cls)
         page_scheduling.initialize(cls)
+        snapshot_revalidation.initialize(cls)
         topic_management.initialize(cls)
         topic_view.initialize(cls)
         submission_drafts.initialize(cls)
@@ -209,6 +211,8 @@ class CanvasFixture(unittest.TestCase):
                     return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if snapshot_revalidation.read(cls, self):
+                    return
                 if what_if_course.read(cls, self):
                     return
                 if what_if.read(cls, self):

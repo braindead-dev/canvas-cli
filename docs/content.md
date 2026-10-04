@@ -145,6 +145,7 @@ Canvas can ignore unavailable features and PUT can create a page after concurren
 ```sh
 canvas snapshot 123 --output /private/path/course.json
 canvas sync 123 --include-linked-files
+canvas sync 123 --incremental --format brief
 canvas snapshot-diff /private/path/older.json /private/path/newer.json --format brief
 canvas snapshot-search /private/path/course.json --query 'research paper'
 canvas snapshot-agenda /private/path/course.json /private/path/other-course.json --days 21 --format brief
@@ -162,6 +163,20 @@ Snapshots are immutable mode-0600 files outside Git with no overwrite, including
 Baselines are per origin, numeric signed-in viewer, and course. Identity is checked before/after capture; a changed account refuses saving, not an atomic content/permission lock.
 
 Legacy unscoped files and other viewers' histories stay untouched and are never automatic baselines. The upgraded naming scheme starts fresh without migration/rename/deletion/implicit merge. Files accumulate until you prune them. Failed refreshes preserve the prior baseline.
+
+### Conditional page refresh
+
+`sync --incremental` optionally revalidates page bodies from the latest account-separated snapshot. Course metadata, assignments, modules, page listings and discussions are still fetched and paginated every time. Deleted/hidden pages are not carried forward. Without this flag, sync remains a full capture and does not retain validator hints.
+
+Each readable page is requested again with `Cache-Control: no-cache`. A saved ETag is sent only for the same native page ID/URL and a checksum-matching saved representation. Explicit `page_id:` routes avoid numeric-slug collisions. Only an empty 304 with the exact tag permits reuse; changed pages return fresh bodies. Legacy/edited/malformed hints or missing validators fall back to ordinary full reads. Checksums detect accidental edits, not malicious rewriting of both data and hints; keep these private files under your control.
+
+Missing/invalid ETags, `no-store`, wildcard/unsupported `Vary` and ambiguous repeated headers disable validator retention. This concerns HTTP revalidation hints, not the explicitly requested private course export. 403/404 exclude the old page and mark coverage partial. Authentication/rate-limit/network/malformed-acknowledgement failures stop without saving a new snapshot or automatically retrying. Identity is still checked before and after capture.
+
+The summary reports fetched/revalidated counts, not private tags/bodies. This can reduce transferred page-body bytes, not request count or guaranteed server work/rate-limit cost. Canvas may still record native page access/module progress before producing a conditional response. ETag availability varies by deployment; this feature is source-checked and synthetic HTTPS-tested, not live-validated on every institution.
+
+[Native page IDs and reads](https://developerdocs.instructure.com/services/canvas/resources/pages), [native page authorization/access logging](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/controllers/wiki_pages_api_controller.rb), [Rack conditional responses](https://github.com/rack/rack/blob/v3.2.6/lib/rack/conditional_get.rb), [Rack entity tags](https://github.com/rack/rack/blob/v3.2.6/lib/rack/etag.rb).
+
+### Offline comparison
 
 Offline diff refuses known viewer mismatches and labels explicit legacy comparisons identity-unverified. File metadata is not current authorization. Output shows titles/changed field names, not full bodies. Incomplete categories skip full add/remove claims; overlapping partial pages/files report observed changes. Absent older discussion/file coverage is skipped, not invented as additions.
 

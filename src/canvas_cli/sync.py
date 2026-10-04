@@ -6,12 +6,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .client import CanvasError
+from .page_revalidation import PageRevalidation
 from .snapshot import capture, save_private
 from .snapshot_diff import compare, read
 from .writes import account
 
 
-def sync_course(client, course_id, max_pages, directory, include_linked_files=False):
+def sync_course(client, course_id, max_pages, directory, include_linked_files=False, *, incremental=False):
     if (not isinstance(course_id, str) or not course_id.isascii() or not course_id.isdecimal() or
             int(course_id) < 1 or str(int(course_id)) != course_id):
         raise CanvasError('Sync requires a positive numeric course ID')
@@ -32,8 +33,10 @@ def sync_course(client, course_id, max_pages, directory, include_linked_files=Fa
                      or type(previous.get('course_id')) is not int or str(previous['course_id']) != course_id):
         raise CanvasError('Latest stored snapshot is for a different origin, viewer or course')
 
+    revalidation = PageRevalidation(previous) if incremental else None
+    options = {'page_revalidation': revalidation} if incremental else {}
     current = capture(client, course_id, max_pages,
-                      include_linked_files=include_linked_files)
+                      include_linked_files=include_linked_files, **options)
     if account(client) != identity:
         raise CanvasError('Canvas account changed during capture; no snapshot was saved')
     if (not isinstance(current, dict) or current.get('origin') != identity['origin'] or
@@ -46,7 +49,7 @@ def sync_course(client, course_id, max_pages, directory, include_linked_files=Fa
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     destination = directory / f'{prefix}{timestamp}-{secrets.token_hex(4)}.json'
     saved = save_private(destination, current)
-    return {
+    result = {
         **identity,
         'baseline': previous is None,
         'previous': str(previous_paths[-1]) if previous_paths else None,
@@ -58,3 +61,8 @@ def sync_course(client, course_id, max_pages, directory, include_linked_files=Fa
                 'Legacy unscoped snapshots and other viewers are never selected as automatic baselines. '
                 'Existing files are not migrated, renamed or removed; prune old files yourself when no longer needed.',
     }
+    if revalidation is not None:
+        result['revalidation'] = {**revalidation.stats,
+                                  'validator_pages': len(revalidation.entries),
+                                  'scope': 'page-bodies-only'}
+    return result

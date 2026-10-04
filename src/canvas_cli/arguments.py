@@ -446,6 +446,8 @@ def parser():
                       help='Private snapshot directory; defaults to the app config directory')
     sync.add_argument('--include-linked-files', action='store_true',
                       help='Also index files referenced by readable course content')
+    sync.add_argument('--incremental', action='store_true',
+                      help='Revalidate unchanged page bodies when Canvas supplies ETags; listings remain fresh')
     difference = sub.add_parser('snapshot-diff', help='Compare two local snapshots without Canvas login')
     difference.add_argument('older', type=Path)
     difference.add_argument('newer', type=Path)

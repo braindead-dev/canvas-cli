@@ -639,6 +639,10 @@ def _brief(data):
             lines.append('Baseline created; no earlier snapshot to compare.')
         else:
             lines.extend(_diff_lines(data['diff']))
+        if 'revalidation' in data:
+            refresh = data['revalidation']
+            lines.append(f"{refresh['pages_revalidated']} page body revalidated; "
+                         f"{refresh['pages_fetched']} fetched. All inventories were fetched fresh.")
         return '\n'.join(lines)
     if isinstance(data, dict) and all(key in data for key in
                                        ('course_changed_fields', 'changes', 'observed_changes', 'skipped',

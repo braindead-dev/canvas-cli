@@ -21,6 +21,30 @@ def origin(value):
     return f'https://{u.netloc}'.rstrip('/')
 
 
+def valid_etag(value):
+    """One bounded ASCII entity tag, never a wildcard/list or injected header."""
+    return (isinstance(value, str) and len(value) <= 512 and
+            re.fullmatch(r'(?:W/)?"[\x21\x23-\x7e]*"', value) is not None)
+
+
+def _header(headers, name, *, combine=False):
+    values = headers.get_all(name, []) if hasattr(headers, 'get_all') else [headers.get(name, '')]
+    if not all(isinstance(value, str) for value in values):
+        return None
+    return ','.join(values) if combine else values[0] if len(values) == 1 else None
+
+
+def _reusable(headers):
+    control = _header(headers, 'Cache-Control', combine=True)
+    vary = _header(headers, 'Vary', combine=True)
+    if control is None or vary is None:
+        return False
+    control, vary = control.lower(), vary.lower()
+    return ('no-store' not in control and
+            all(field.strip() in ('', 'accept', 'accept-encoding', 'authorization')
+                for field in vary.split(',')))
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -33,6 +57,17 @@ class Client:
         self.transport = transport or build_opener(NoRedirect()).open
 
     def request(self, route, method='GET', body=None, *, expect_no_content=False):
+        url = self._request_url(route, method, expect_no_content)
+        return self._send(url, method, body, expect_no_content=expect_no_content)
+
+    def conditional_get(self, route, etag=None):
+        """Revalidate one JSON resource; callers must bind their saved representation."""
+        url = self._request_url(route, 'GET', False)
+        if etag is not None and not valid_etag(etag):
+            raise CanvasError('Invalid revalidation tag; no request was sent')
+        return self._send(url, 'GET', None, conditional=True, etag=etag)
+
+    def _request_url(self, route, method, expect_no_content):
         url = urljoin(self.host, route)
         u = urlsplit(url)
         decoded = unquote(u.path)
@@ -58,7 +93,7 @@ class Client:
                      any(key != 'auto_mark_as_read' and key.startswith('auto_mark_as_read[')
                          for key in parameters))):
             raise CanvasError('Conversation reads require auto_mark_as_read=false to avoid changing Inbox state')
-        return self._send(url, method, body, expect_no_content=expect_no_content)
+        return url
 
     def graphql(self, document, variables, operation_name):
         """Fixed native endpoint; domain commands supply documents, never user query files."""
@@ -74,7 +109,8 @@ class Client:
                               'An operation may have applied; check Canvas before repeating. No automatic retries.')
         return result['data']
 
-    def _send(self, url, method, body, *, expect_no_content=False, expected_status=None):
+    def _send(self, url, method, body, *, expect_no_content=False, expected_status=None,
+              conditional=False, etag=None):
         try:
             payload = json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8') if body is not None else None
         except (TypeError, ValueError, UnicodeError):
@@ -83,8 +119,16 @@ class Client:
             'Authorization': f'Bearer {self.token}', 'Accept': 'application/json',
             'Content-Type': 'application/json', 'User-Agent': 'canvas-cli/0.1.0'},
             data=payload)
+        if conditional:
+            req.add_header('Cache-Control', 'no-cache')
+        if etag is not None:
+            req.add_header('If-None-Match', etag)
         try:
             with self.transport(req, timeout=30) as response:
+                if conditional:
+                    return self._conditional_response(response, etag)
+                if response.status == 304:
+                    raise CanvasError('Unexpected revalidation response; no saved body was reused')
                 if expected_status is not None and response.status != expected_status:
                     raise CanvasError('Canvas returned an unexpected GraphQL HTTP acknowledgement. '
                                       'Check Canvas before repeating an operation; no automatic retries.')
@@ -95,6 +139,12 @@ class Client:
                     return None, response.headers.get('Link', '')
                 return load(response), response.headers.get('Link', '')
         except HTTPError as e:
+            if conditional and e.code == 304:
+                try:
+                    with e:
+                        return self._conditional_response(e, etag)
+                except (TimeoutError, OSError):
+                    raise CanvasError('Network failure during revalidation; no saved body was reused') from None
             e.close()
             if e.code == 401:
                 raise CanvasError('Authentication expired or revoked. Run auth login again.', status=401) from None
@@ -108,6 +158,23 @@ class Client:
         except (ValueError, UnicodeError):
             warning = ' The write may have applied; check Canvas before repeating. No automatic retries.' if method != 'GET' else ''
             raise CanvasError('Canvas returned an unexpected response; no response body was logged.' + warning) from None
+
+    @staticmethod
+    def _conditional_response(response, supplied):
+        tag = _header(response.headers, 'ETag')
+        reusable = _reusable(response.headers)
+        if response.status == 304:
+            if supplied is None or tag != supplied or not reusable or response.read(1):
+                raise CanvasError('Canvas returned an invalid revalidation acknowledgement; no saved body was reused')
+            return {'not_modified': True, 'data': None, 'etag': tag}
+        if response.status != 200:
+            raise CanvasError('Canvas returned an unexpected revalidation response; no saved body was reused')
+        try:
+            data = load(response)
+        except (ValueError, UnicodeError):
+            raise CanvasError('Canvas returned an unexpected response; no response body was logged.') from None
+        return {'not_modified': False, 'data': data,
+                'etag': tag if reusable and valid_etag(tag) else None}
 
     def list(self, route, max_pages=100):
         rows, seen = [], set()

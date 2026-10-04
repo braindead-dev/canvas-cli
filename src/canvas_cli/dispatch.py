@@ -342,7 +342,7 @@ def execute(client, args):
         from .sync import sync_course
         directory = args.directory or config_path().parent / 'snapshots'
         return sync_course(client, args.course, args.max_pages, directory,
-                           include_linked_files=args.include_linked_files)
+                           include_linked_files=args.include_linked_files, incremental=args.incremental)
     if args.command in ('upload-personal', 'upload-assignment-file', 'upload-context'):
         from .upload import upload
         return upload(client, args.file, args.max_bytes,

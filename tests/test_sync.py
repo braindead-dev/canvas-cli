@@ -157,6 +157,21 @@ class SyncTests(unittest.TestCase):
                 sync_course(client, '12', 100, Path(folder), include_linked_files=True)
             capture.assert_called_once_with(client, '12', 100, include_linked_files=True)
 
+    def test_incremental_opt_in_receives_only_the_account_bound_baseline(self):
+        client = Mock(host='https://canvas.example.edu')
+        with (tempfile.TemporaryDirectory() as folder,
+              patch('canvas_cli.sync.capture', return_value=snapshot('synthetic')) as capture):
+            first = sync_course(client, '12', 100, Path(folder), incremental=True)
+            cache = capture.call_args.kwargs['page_revalidation']
+            self.assertEqual(cache.candidates, {})
+            self.assertEqual(first['revalidation']['scope'], 'page-bodies-only')
+            second = sync_course(client, '12', 100, Path(folder), incremental=True)
+            self.assertEqual(second['previous'], first['saved'])
+            self.account.side_effect = lambda client: {'origin': client.host, 'user_id': 8}
+            other = sync_course(client, '12', 100, Path(folder), incremental=True)
+            self.assertTrue(other['baseline'])
+            self.assertEqual(capture.call_args.kwargs['page_revalidation'].candidates, {})
+
     def test_invalid_previous_snapshot_is_not_silently_ignored(self):
         client = Mock(host='https://canvas.example.edu')
         with tempfile.TemporaryDirectory() as folder:

@@ -87,7 +87,7 @@ Recipient/compose preview were checked without sending. No unlocked live thread 
 
 ## Remaining work
 
-Prioritize useful student workflows with documented/testable boundaries. Incremental sync, broader offline planning beyond cached assignment dates, and institution-approved OAuth remain open. Admin controls/external-tool authorization/project switches/quiz attempts are distinct surfaces, not generic-write shortcuts.
+Prioritize useful student workflows with documented/testable boundaries. Broader revalidation beyond page bodies, offline planning beyond cached assignment dates, and institution-approved OAuth remain open. Admin controls/external-tool authorization/project switches/quiz attempts are distinct surfaces, not generic-write shortcuts.
 
 See the capability map for domain limits. No npm/PyPI release or universal browser-login promise.
 

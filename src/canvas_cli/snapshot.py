@@ -45,7 +45,7 @@ def redact(value):
     return value
 
 
-def capture(client, course_id, max_pages, include_linked_files=False):
+def capture(client, course_id, max_pages, include_linked_files=False, *, page_revalidation=None):
     base = f'/api/v1/courses/{course_id}'
     course, _ = client.request(base + '?include[]=syllabus_body')
     if not isinstance(course, dict) or str(course.get('id')) != course_id:
@@ -85,14 +85,17 @@ def capture(client, course_id, max_pages, include_linked_files=False):
             excluded_pages += 1
             continue
         slug = item.get('url')
-        if not slug:
+        if not isinstance(slug, str) or not slug:
             unavailable[f"page {item.get('page_id', 'without-url')}"] = 'No page URL returned'
             continue
         if slug in seen_pages:
             continue
         seen_pages.add(slug)
         try:
-            page, _ = client.request(base + '/pages/' + quote(slug, safe=''))
+            if page_revalidation is None:
+                page, _ = client.request(base + '/pages/' + quote(slug, safe=''))
+            else:
+                page = page_revalidation.read(client, course_id, item)
             if not visible(page):
                 excluded_pages += 1
             else:
@@ -142,6 +145,8 @@ def capture(client, course_id, max_pages, include_linked_files=False):
     if include_linked_files:
         record['linked_files'] = linked_items
         record['linked_file_scope'] = 'readable-references-only'
+    if page_revalidation is not None:
+        record['page_revalidation'] = page_revalidation.metadata()
     record['complete'] = not unavailable
     record['unavailable'] = unavailable
     return redact(record)
