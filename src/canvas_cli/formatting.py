@@ -36,6 +36,21 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'submission_draft' in data and not data.get('dry_run'):
+        row = data['submission_draft']
+        lines = [f"Own draft: course {data['course_id']}, assignment {data['assignment_id']}"]
+        if row is None:
+            lines.append(data['next_draft_status'])
+        else:
+            lines.append(f"Draft {row['id']}, attempt {row['attempt']}, type {row['type']}")
+            lines.append(f"{len(row['file_ids'])} reported attachment(s); content is private, use JSON to inspect it.")
+        if data.get('next_attempt_draft_identity_verified'):
+            lines.append('Next-attempt draft identity verified; this did not turn in work.')
+            if not all(data['reported_fields_match_request'].values()):
+                lines.append('Returned content differs from the request; inspect Canvas and JSON. Raw storage is unverified.')
+        if data.get('next_attempt_absence_verified'):
+            lines.append('Next-attempt absence verified; historical deletion is server-reported only. Deleted drafts cannot be restored by the CLI.')
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'discussion_languages' in data:
         rows = data['discussion_languages']['values']
         return '\n'.join([*(row['enum'] + (' (deprecated)' if row['deprecated'] else '') for row in rows), data['note']])

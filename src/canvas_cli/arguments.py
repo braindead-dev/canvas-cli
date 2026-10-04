@@ -818,6 +818,31 @@ def parser():
             s.add_argument('--forced-read-state', action=argparse.BooleanOptionalAction,
                            help='Explicitly set or clear the manual read-marker override; omitted leaves it unchanged')
         _confirmation(s)
+    for name in ('draft', 'draft-save', 'draft-delete'):
+        s = sub.add_parser(name, help={'draft': 'Read your native next-attempt submission draft, not all draft history',
+                                      'draft-save': 'Preview saving your native next-attempt draft without turning in work',
+                                      'draft-delete': 'Preview deleting ALL own submission drafts, including hidden historical attempts'}[name])
+        s.add_argument('course_id', type=identifier)
+        s.add_argument('assignment_id', type=identifier)
+        if name == 'draft':
+            s.add_argument('--include-content', action='store_true', help='Opt in to rendered draft text/URLs; private data, not raw storage')
+        elif name == 'draft-delete':
+            s.add_argument('--acknowledge-all-drafts', action='store_true', help='Required even for preview; historical draft inventory is unknown')
+            _confirmation(s)
+        else:
+            from .submission_drafts import TYPES
+            s.add_argument('--type', dest='draft_type', choices=TYPES, required=True)
+            body = s.add_mutually_exclusive_group()
+            body.add_argument('--text-file', type=Path, help='UTF-8 plain text, escaped to HTML')
+            body.add_argument('--html-file', type=Path, help='Explicit UTF-8 HTML; Canvas sanitizes and processes it')
+            s.add_argument('--url-file', type=Path, help='UTF-8 URL draft; incomplete URLs are permitted, never followed by the CLI')
+            s.add_argument('--file-id', action='append', type=identifier, help='Already uploaded file ID; repeated IDs refused')
+            s.add_argument('--media-id', help='Existing native media ID; no recording or upload')
+            s.add_argument('--external-tool-id', type=identifier, help='Existing native tool ID; no tool launch')
+            s.add_argument('--lti-url-file', type=Path, help='UTF-8 native tool launch URL metadata, not a launch request')
+            s.add_argument('--resource-link-lookup-uuid', help='Optional native resource-link metadata for the tool draft')
+            s.add_argument('--clear-content', action='store_true', help='Explicitly clear selected text/URL/files/media, not other retained type fields')
+            _confirmation(s)
     schema_command = sub.add_parser('schema', help='Offline machine-readable argument and safety catalog from the actual parser')
     schema_command.add_argument('--search', help='Find command schemas by name, description or safety category')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')

@@ -4,6 +4,7 @@
 def describe():
     return {
         'read': [
+            'draft (own next-attempt native submission draft only; metadata/fingerprints by default, rendered-content opt-in; no historical inventory, annotation/criteria initialization, final submission or quiz attempt)',
             'topic-languages (native preferred-language enum catalog, including deprecated values; schema acceptance only, no participant query, service access or translation generation)',
             'courses', 'doctor', 'find', 'me', 'profile', 'favorites', 'groups', 'group', 'course-groups',
             'course-users', 'group-users', 'group-membership',
@@ -46,6 +47,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'draft-save/draft-delete (own native GraphQL draft storage across six types, explicit current+1 attempt and account/assignment/current-rendered-state-bound preview; native submit rights stay endpoint-authoritative; one mutation and separate identity/attempt/representation readback, never final submission; deletion acknowledges ALL attempts with unknown historical inventory/absence; raw content storage, attachment normalization and submission criteria remain unverified; no retries, cleanup, upload or external launch)',
             'topic-view-set (own native sort/expansion/pinned-entry/language/summary preferences and separately acknowledged pinned-unread indicator; expansion inheritance and language clearing only, no null resets for non-null storage; schema catalog and account/context/state-bound preview, initialization acknowledgement and one GraphQL mutation; independent reported readback, hidden sort/expansion and cleared-language storage unverified; no content-read proof, translation/summary generation, peer reads, retry or rollback)',
             'topic-sections (native course discussion section filter, distinct from modern participant overrides; exact topic update, shared/audience acknowledgements, account/content/sections/inventory-bound preview, one PUT and independent exact-filter readback; old/new visibility remains endpoint-authoritative, no all-student visibility guarantee, roster/reply reads, retries or rollback)',
             'topic-todo (shared course/group ungraded discussion student to-do date or explicit clearing, not a private task or graded due date; exact topic update and native context-add permission for setting, shared/todo acknowledgements, account/content/audience/inventory-bound preview, one PUT and exact-instant independent readback; no planner/completion/availability guarantee, peer reads, retry or rollback)',

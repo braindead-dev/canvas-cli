@@ -112,6 +112,8 @@ Already-reported choices are refused by default. Use `--reapply-selected-path` o
 
 ## Turn in work deliberately
 
+To save progress **without turning it in**, use the separate [submission draft workflows](submission-drafts.md). Native draft deletion removes all draft attempts, not just the visible next attempt.
+
 ```sh
 canvas upload-assignment-file 123 456 --file paper.pdf
 canvas submit-file 123 456 789

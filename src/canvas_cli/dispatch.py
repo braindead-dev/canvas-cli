@@ -9,6 +9,27 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('draft', 'draft-save', 'draft-delete'):
+        from . import submission_drafts
+        if args.command == 'draft':
+            return submission_drafts.read(client, args.course_id, args.assignment_id, include_content=args.include_content)
+        if args.command == 'draft-delete':
+            return submission_drafts.delete(client, args.course_id, args.assignment_id,
+                                            acknowledge_all=args.acknowledge_all_drafts, yes=args.yes, confirm=args.confirm)
+        values = {}
+        if args.text_file is not None or args.html_file is not None:
+            text = read_utf8(args.text_file if args.text_file is not None else args.html_file, label='Draft body')
+            values['body'] = submission_drafts.text_input(text) if args.text_file is not None else text
+        for option, key in (('url_file', 'url'), ('lti_url_file', 'ltiLaunchUrl')):
+            source = getattr(args, option)
+            if source is not None:
+                values[key] = read_utf8(source, label='Draft URL').strip()
+        for option, key in (('file_id', 'fileIds'), ('media_id', 'mediaId'), ('external_tool_id', 'externalToolId'),
+                            ('resource_link_lookup_uuid', 'resourceLinkLookupUuid')):
+            if getattr(args, option) is not None:
+                values[key] = getattr(args, option)
+        return submission_drafts.save(client, args.course_id, args.assignment_id, args.draft_type, values,
+                                      clear=args.clear_content, yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-languages':
         from .topic_view import languages
         return languages(client)
