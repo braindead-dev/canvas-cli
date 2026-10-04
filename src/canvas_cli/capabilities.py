@@ -44,6 +44,7 @@ def describe():
             'download', 'download-linked (preview unless --yes)', 'export-download',
         ],
         'canvas_write': [
+            'topic-schedule (ordinary course opening/closing instants or explicit clearing; shared-topic and availability-effect acknowledgements, native exact update permission, account/content/audience/time-zone/inventory-bound preview, one PUT with independent exact-instant readback; dates can publish drafts or reopen/close replies, course-midnight closing refused, no future-job guarantee/retry/rollback)',
             'topic-order (complete shared pinned-topic ordering; exact context read/moderation rights, all-pinned acknowledgement and account/inventory-bound preview, one native POST with exact order acknowledgement and independent paginated position readback; no text/pin/assignment changes, no retry/rollback)',
             'topic-configure (shared ungraded reply structure/likes/default views; exact update permission, additional initial-post visibility acknowledgement, account/content/audience/inventory-bound preview and exact option readback; native granular permission stripping is not hidden, no peer reads/retry/rollback)',
             'topic-publish/topic-unpublish/topic-close/topic-open/topic-pin/topic-unpin (ordinary ungraded shared states; native update/eligibility flags, closing-date/order acknowledgements, exact state and separate paginated inventory readback; observed collateral changes labeled, no retry/rollback)',

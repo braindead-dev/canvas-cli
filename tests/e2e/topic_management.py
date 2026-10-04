@@ -1,7 +1,9 @@
 """Independent synthetic native discussion prompt updates and soft-deletion state."""
 
 import copy
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlencode, urlsplit
+from zoneinfo import ZoneInfo
 
 from .appointments import _send
 
@@ -19,6 +21,7 @@ def initialize(state, *, enabled=False):
               'published': True, 'locked': False, 'pinned': True, 'position': 1, 'require_initial_post': False,
               'is_section_specific': False, 'sections': [], 'discussion_subentry_count': 0,
               'created_at': '2026-10-01T12:00:00Z', 'posted_at': '2026-10-01T12:00:00Z', 'last_reply_at': None,
+              'delayed_post_at': None, 'lock_at': None,
               'author': {'id': 7, 'email': 'synthetic-private-author@example.edu'},
               'permissions': {'update': True, 'delete': True, 'reply': True},
               'attachments': [{'id': 881, 'filename': 'synthetic.txt', 'display_name': 'Synthetic', 'size': 20,
@@ -46,6 +49,8 @@ def initialize(state, *, enabled=False):
     state.topic_order_enabled = state.topic_order_ignore = state.topic_order_read_denied = False
     state.topic_order_ack = None
     state.topic_read_forum = True
+    state.topic_schedule_enabled = state.topic_schedule_midnight_rewrite = False
+    state.topic_schedule_time_zone_after = None
 
 
 def _route(state, handler):
@@ -67,6 +72,8 @@ def read(state, handler):
         return False
     elif url.path == prefix:
         row = {'id': int(prefix.rsplit('/', 1)[1]), **state.topic_context}
+        if state.topic_written and state.topic_schedule_time_zone_after:
+            row['time_zone'] = state.topic_schedule_time_zone_after
         if parse_qs(url.query).get('include[]') == ['permissions']:
             row['permissions'] = {'create_discussion_topic': state.topic_create_permission, 'create_announcement': False}
         _send(handler, row)
@@ -176,6 +183,30 @@ def write(state, handler, body):
         _send(handler, {'private': 'synthetic-private-native-topic-permission-denial'}, 403)
         return True
     if set(body) - {'title', 'message'} or parse_qs(url.query) != {'no_verifiers': ['true']}:
+        if (state.topic_schedule_enabled and handler.command == 'PUT' and body and
+                set(body) <= {'delayed_post_at', 'lock_at'} and parse_qs(url.query) == {'no_verifiers': ['true']}):
+            # Native date callbacks are modeled independently, not by importing CLI validators.
+            selected = dict(body) if prefix.startswith('/api/v1/courses/') else {}
+            state.topic_written = True
+            if not state.topic_ignore:
+                old = {key: row[key] for key in ('delayed_post_at', 'lock_at')}
+                row.update({key: value for key, value in selected.items() if key not in state.topic_ignored_fields})
+                if old != {key: row[key] for key in old}:
+                    row['published'] = True  # post_delayed is published for ordinary discussions too
+                    closing = datetime.fromisoformat(row['lock_at'].replace('Z', '+00:00')) if row['lock_at'] else None
+                    row['locked'] = closing is not None and closing < datetime.now(timezone.utc)
+                if state.topic_schedule_midnight_rewrite and row['lock_at']:
+                    local = datetime.fromisoformat(row['lock_at'].replace('Z', '+00:00')).astimezone(ZoneInfo(state.topic_context['time_zone']))
+                    if (local.hour, local.minute, local.second, local.microsecond) == (0, 0, 0, 0):
+                        row['lock_at'] = (local + timedelta(days=1) - timedelta(seconds=1)).isoformat()
+                if state.topic_state_lose_edit:
+                    row['permissions']['update'] = False
+                state.topic_notifications.append(identifier)
+            response = copy.deepcopy(row)
+            if state.topic_ack_patch is not None:
+                response = {**response, **state.topic_ack_patch} if isinstance(state.topic_ack_patch, dict) else state.topic_ack_patch
+            _send(handler, response)
+            return True
         option_keys = {'discussion_type', 'require_initial_post', 'allow_rating', 'only_graders_can_rate',
                        'sort_order', 'sort_order_locked', 'expanded', 'expanded_locked'}
         if (state.topic_config_enabled and handler.command == 'PUT' and body and set(body) <= option_keys and

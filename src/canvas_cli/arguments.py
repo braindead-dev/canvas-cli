@@ -698,6 +698,18 @@ def parser():
     configuration.add_argument('--acknowledge-reply-visibility-change', action='store_true',
                                help='Required when setting require-initial-post; other participants can gain/lose reply visibility')
     _confirmation(configuration)
+    scheduling = sub.add_parser('topic-schedule', help='Preview course discussion dates, acknowledging native publication/reply-state effects')
+    scheduling.add_argument('course_id', type=identifier)
+    scheduling.add_argument('topic_id', type=identifier)
+    for label in ('opening', 'closing'):
+        selection = scheduling.add_mutually_exclusive_group()
+        selection.add_argument('--' + ('opens-at' if label == 'opening' else 'closes-at'), metavar='TIMESTAMP',
+                               help='RFC 3339 whole-second instant with Z or explicit offset')
+        selection.add_argument('--clear-' + label, action='store_true')
+    scheduling.add_argument('--acknowledge-shared-topic', action='store_true')
+    scheduling.add_argument('--acknowledge-availability-change', action='store_true',
+                            help='Required even for preview; dates can publish drafts or reopen/close replies')
+    _confirmation(scheduling)
     ordering = sub.add_parser('topic-order', help='Preview the complete shared pinned-topic order with native context moderation rights')
     ordering.add_argument('context_id', type=identifier)
     ordering.add_argument('topic_ids', nargs='+', type=identifier, metavar='TOPIC_ID')

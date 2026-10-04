@@ -9,6 +9,17 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command == 'topic-schedule':
+        from .topic_management import change
+        selected = {}
+        for key, value, clear in (('delayed_post_at', args.opens_at, args.clear_opening),
+                                  ('lock_at', args.closes_at, args.clear_closing)):
+            if value is not None or clear:
+                selected[key] = None if clear else value
+        return change(client, args.course_id, args.topic_id, schedule=selected,
+                      acknowledge_shared=args.acknowledge_shared_topic,
+                      acknowledge_availability=args.acknowledge_availability_change,
+                      max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
     if args.command == 'topic-order':
         from .topic_ordering import reorder
         return reorder(client, args.context_id, args.topic_ids, context_type=args.context,

@@ -101,6 +101,17 @@ Published is not a promise of immediate availability: existing opening dates, co
 
 Pin/unpin requires ordering acknowledgement because moving to the bottom of a native ordering scope can shift other topics. Account, exact prompt/audience/eligibility, scope and complete accessible inventory bind confirmation. One PUT must independently read back the requested state, any acknowledged closing-date removal and a matching inventory entry. Ignored states or unverified outcomes fail without retry/cleanup. Other observed fields and added/removed/changed inventory IDs are labeled, not attributed exclusively to the write; hidden ordering, notifications and future effects are not proven.
 
+### Schedule course discussion dates
+
+```sh
+canvas topic-schedule 123 456 --opens-at 2027-10-01T09:00:00-07:00 --closes-at 2027-10-15T23:59:00-07:00 --acknowledge-shared-topic --acknowledge-availability-change
+canvas topic-schedule 123 456 --clear-opening --clear-closing --acknowledge-shared-topic --acknowledge-availability-change
+```
+
+This sets selected opening/closing dates, not assignment due dates or private reminders. Omitted dates are preserved; clearing is explicit. Supply whole-second RFC 3339 instants with `Z` or an offset. Closing must follow opening, including preserved dates. Course-midnight closing is refused because Canvas rewrites it to end of day; a selected closing instant needs the course's reported IANA time zone. Group, graded, anonymous and root/group-set scheduling require separate workflows.
+
+Availability acknowledgement is required even for preview: native date changes can publish a draft, delay opening, reopen replies or close them immediately. Already-matching instants are no-ops, not publication controls. Account, context/time zone, prompt/audience and complete accessible inventory bind confirmation. One PUT must independently read back every selected instant or explicit clearing; equivalent offsets are accepted, changed instants and partial/ignored writes are not. Observed publication/closed-state changes are labeled, not predicted or attributed exclusively to this write. Future jobs, actual student availability through pacing/modules/overrides and notifications remain unverified. No peer-post reads, retries or rollback.
+
 ### Order all pinned topics
 
 ```sh
@@ -159,6 +170,6 @@ Dismiss hides one own notification; dismiss-all with all acknowledgement hides e
 
 [Conversations](https://developerdocs.instructure.com/services/canvas/resources/conversations), [Recipients](https://developerdocs.instructure.com/services/canvas/resources/search), [Discussions](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics), [Peer reviews](https://developerdocs.instructure.com/services/canvas/resources/peer_reviews), [Announcements](https://developerdocs.instructure.com/services/canvas/resources/announcements), [Activity](https://developerdocs.instructure.com/services/canvas/resources/users).
 
-Prompt-management semantics also follow Instructure's [controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_controller.rb), [API serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/discussion_topics.rb), [API reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_api_controller.rb), [topic model](https://github.com/instructure/canvas-lms/blob/master/app/models/discussion_topic.rb) and [native list ordering](https://github.com/instructure/canvas-lms/blob/master/gems/acts_as_list/lib/active_record/acts/list.rb).
+Prompt-management semantics also follow Instructure's [controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_controller.rb), [API serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/discussion_topics.rb), [API reads](https://github.com/instructure/canvas-lms/blob/master/app/controllers/discussion_topics_api_controller.rb), [topic model](https://github.com/instructure/canvas-lms/blob/master/app/models/discussion_topic.rb), [midnight normalization](https://github.com/instructure/canvas-lms/blob/master/gems/canvas_time/lib/canvas_time.rb) and [native list ordering](https://github.com/instructure/canvas-lms/blob/master/gems/acts_as_list/lib/active_record/acts/list.rb).
 
 Creation authorization follows the dynamic permissions in the native [course serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/course_json.rb) and [group serializer](https://github.com/instructure/canvas-lms/blob/master/lib/api/v1/group.rb), not a role-name guess.

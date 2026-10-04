@@ -49,7 +49,7 @@ def _brief(data):
         return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'edited_topic' in data:
         row = data['edited_topic']
-        verb = 'updated' if 'topic_state' in data or 'configured_topic_settings' in data else 'edited'
+        verb = 'updated' if any(key in data for key in ('topic_state', 'configured_topic_settings', 'scheduled_topic_dates')) else 'edited'
         lines = [f"{data['context_type'].title()} {data[data['context_type'] + '_id']} topic {row['id']} {verb}",
                  row['title'], row['html_url']]
         if 'topic_state' in data:
@@ -60,6 +60,10 @@ def _brief(data):
         if 'configured_topic_settings' in data:
             values = data['configured_topic_settings']['values']
             lines.append('Native options verified: ' + ', '.join(sorted(values)))
+        if 'scheduled_topic_dates' in data:
+            dates = data['scheduled_topic_dates']
+            lines.extend(key + ': ' + (value or 'cleared') for key, value in dates['stored'].items())
+            lines.append('Stored instants verified; future execution and student availability are not verified.')
         if 'observed_inventory_changes' in data:
             inventory = data['observed_inventory_changes']
             lines.append(f"Observed inventory changes: {len(inventory['added_ids'])} added, "

@@ -1,5 +1,6 @@
 """Exact native ungraded-topic text/state/deletion, not assignment administration."""
 
+from . import topic_dates
 from .client import CanvasError
 from .discussion import _message
 from .events import timestamp
@@ -59,6 +60,7 @@ def _topic(row, item, topic_id, context_type):
         raise CanvasError('Linked assignments, root/child topics and group-set discussions need separate management workflows')
     if (not isinstance(row.get('title'), str) or not row['title'] or 'message' not in row or
             row['message'] is not None and not isinstance(row['message'], str) or
+            any(key not in row for key in topic_dates.FIELDS) or
             any(type(row.get(key)) is not bool for key in ('published', 'locked', 'pinned', 'require_initial_post', 'is_section_specific')) or
             type(row.get('discussion_subentry_count')) is not int or row['discussion_subentry_count'] < 0):
         raise CanvasError('Canvas returned incomplete discussion-topic metadata')
@@ -114,10 +116,10 @@ def _scope(client, item, context_type):
     route, row = _context(client, item, context_type)
     if row.get('workflow_state') == 'deleted':
         raise CanvasError('The discussion context is deleted')
-    if (any(row.get(key) is not None and not isinstance(row[key], str) for key in ('name', 'workflow_state')) or
+    if (any(row.get(key) is not None and not isinstance(row[key], str) for key in ('name', 'workflow_state', 'time_zone')) or
             any(row.get(key) is not None and type(row[key]) is not bool for key in ('concluded', 'non_collaborative'))):
         raise CanvasError('Canvas returned malformed discussion context metadata')
-    return route, {key: row.get(key) for key in ('id', 'name', 'workflow_state', 'concluded', 'non_collaborative')}
+    return route, {key: row.get(key) for key in ('id', 'name', 'workflow_state', 'concluded', 'non_collaborative', 'time_zone')}
 
 
 def _read(client, route, item, topic_id, context_type):
@@ -165,9 +167,18 @@ def _inventory_delta(before, after):
                         for identifier in sorted(old.keys() & new.keys()) if old[identifier] != new[identifier]]}
 
 
+def _matches(row, key, value):
+    if key == 'message':
+        return row['message_digest'] == digest(value)
+    if key in topic_dates.FIELDS:
+        return topic_dates.matches(row, key, value)
+    return row[key] == value
+
+
 def change(client, item, topic_id, *, context_type='course', title=None, message=None, delete=False,
            action=None, acknowledge_shared=False, acknowledge_removal=False, acknowledge_ordering=False,
            acknowledge_schedule_removal=False, options=None, acknowledge_reply_visibility=False,
+           schedule=None, acknowledge_availability=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     if context_type not in ('course', 'group'):
@@ -182,20 +193,24 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if (type(acknowledge_ordering) is not bool or type(acknowledge_schedule_removal) is not bool or
             action is not None and (not isinstance(action, str) or action not in ACTIONS)):
         raise CanvasError('Select a known topic state action and explicit boolean acknowledgements')
-    if (delete and (title is not None or message is not None or action is not None or options is not None) or
-            action is not None and (title is not None or message is not None or options is not None) or
-            options is not None and (title is not None or message is not None)):
+    if sum((delete, action is not None, options is not None, schedule is not None,
+            title is not None or message is not None)) > 1:
         raise CanvasError('Topic deletion and state controls cannot include other operations or content edits')
     if ((action in ('pin', 'unpin')) != acknowledge_ordering or
             acknowledge_schedule_removal and action != 'open'):
         raise CanvasError('Pin/unpin requires --acknowledge-topic-ordering-change; schedule-removal acknowledgement is only for opening')
     if options is not None:
         options = validate(options, context_type)
+    if type(acknowledge_availability) is not bool or acknowledge_availability != (schedule is not None):
+        raise CanvasError('Scheduling requires --acknowledge-availability-change, including previews; not for other operations')
+    if schedule is not None:
+        schedule = topic_dates.validate(schedule, context_type)
     if (type(acknowledge_reply_visibility) is not bool or
             acknowledge_reply_visibility != (options is not None and 'require_initial_post' in options)):
         raise CanvasError('Changing require_initial_post requires --acknowledge-reply-visibility-change, including previews; not for other operations')
-    changes = options if options is not None else dict([ACTIONS[action]]) if action is not None else None if delete else _changes(title, message)
-    controlled = action is not None or options is not None
+    changes = (schedule if schedule is not None else options if options is not None else
+               dict([ACTIONS[action]]) if action is not None else None if delete else _changes(title, message))
+    controlled = action is not None or options is not None or schedule is not None
     identity = account(client)
     route, context = _scope(client, item, context_type)
     before = _read(client, route, item, topic_id, context_type)
@@ -211,8 +226,11 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
         raise CanvasError('Opening this closed topic clears its closing date; use --acknowledge-closing-schedule-removal, including previews')
     if options is not None:
         validate_current(options, before)
-    if not delete and all(before['message_digest'] == digest(value) if key == 'message' else before[key] == value
-                          for key, value in changes.items()):
+    if schedule is not None:
+        topic_dates.validate_current(schedule, before, context)
+    if not delete and all(_matches(before, key, value) for key, value in changes.items()):
+        if schedule is not None:
+            raise CanvasError('The selected topic dates already match; no schedule update needed')
         raise CanvasError('The selected topic settings already match; no update needed' if options is not None else
                           'The selected topic state already matches; no state update needed' if action is not None else
                           'The selected topic text already matches; no edit needed')
@@ -234,6 +252,8 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if options is not None:
         preview.update(acknowledge_reply_visibility_change=acknowledge_reply_visibility,
                        warning=WARNING + ' ' + OPTIONS_WARNING)
+    if schedule is not None:
+        preview.update(acknowledge_availability_change=True, warning=WARNING + ' ' + topic_dates.WARNING)
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -265,6 +285,8 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
             raise CanvasError('Stored topic acknowledgement and readback do not agree')
         if options is not None and any(after[key] != value for key, value in options.items()):
             raise CanvasError('Canvas did not store every selected native discussion option')
+        if schedule is not None and not all(_matches(after, key, value) for key, value in schedule.items()):
+            raise CanvasError('Canvas did not store every selected discussion date as the exact instant or explicit clearing')
         if action is not None:
             field, value = ACTIONS[action]
             if after[field] is not value or clears_schedule and after['lock_at'] is not None:
@@ -283,8 +305,7 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
                 'note': 'One native soft DELETE acknowledged, absent from the complete active-topic inventory and exact ID not found. '
                         'Stable account/context verified. No assertion of permanent erasure, module/notification cleanup or attachment deletion; '
                         'no CLI restore, automatic retry or rollback.'}
-    matched = {key: after['message_digest'] == digest(value) if key == 'message' else after[key] == value
-               for key, value in changes.items()}
+    matched = {key: _matches(after, key, value) for key, value in changes.items()}
     changed = [key for key in before if before[key] != after[key]]
     requested = {'message_digest' if key == 'message' else key for key in changes}
     result = {'edited_topic': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{topic_id}'},
@@ -307,4 +328,10 @@ def change(client, item, topic_id, *, context_type='course', title=None, message
     if options is not None:
         result['configured_topic_settings'] = {'values': options, 'verified': True,
                                                'reply_visibility_change_acknowledged': acknowledge_reply_visibility}
+    if schedule is not None:
+        result['scheduled_topic_dates'] = {'requested': schedule, 'stored': {key: after[key] for key in schedule},
+                                           'verified': True, 'availability_change_acknowledged': True,
+                                           'observed_states': {key: {'before': before[key], 'after': after[key]}
+                                                               for key in ('published', 'locked')},
+                                           'future_execution_verified': False}
     return result
