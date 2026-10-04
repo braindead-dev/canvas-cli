@@ -5,7 +5,7 @@ from .events import timestamp
 from .group_content import _id
 from .writes import digest
 
-WARNING = ('Replaces the shared course discussion section filter; it can grant or remove access to '
+WARNING = ('Replaces the shared course topic section filter; it can grant or remove access to '
            'the prompt and existing replies. Native update permission and visibility checks on both '
            'old and new sections remain authoritative; section-list access is not edit authority. '
            'All sections disables this filter, not participant overrides or other availability rules. '

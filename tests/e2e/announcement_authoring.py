@@ -28,6 +28,24 @@ def apply_date_lock(row, body, *, ignored_dates=(), ignore_comments=False, keep_
         row['locked'] = requested
 
 
+def apply_section_filter(row, value, catalog, *, visible=None, fail=False, ignore=False):
+    """Independent native association-before-error and stored flag semantics."""
+    selected = [] if value == 'all' else [int(part) for part in value.split(',')]
+    active = {section['id'] for section in catalog}
+    if value != 'all' and (not selected or set(selected) - active):
+        raise ValueError('Unknown synthetic section')
+    old = {section['id'] for section in row['sections']} if row['is_section_specific'] else set()
+    denied = fail or visible is not None and ((old & active) - set(visible) or set(selected) - set(visible))
+    if not ignore:
+        # Selected associations can persist before a later authorization/validation
+        # failure. All-sections clearing is deferred to the successful save path.
+        if not denied or value != 'all':
+            row['sections'] = [copy.deepcopy(section) for section in catalog if section['id'] in selected]
+        if not denied:
+            row['is_section_specific'] = value != 'all'
+    return not denied
+
+
 def _announcement(identifier):
     return {'id': identifier, 'title': 'Synthetic announcement',
             'message': '<p>synthetic-private-original-announcement</p>', 'is_announcement': True,
@@ -42,7 +60,7 @@ def _announcement(identifier):
             'permissions': {'update': True, 'delete': True, 'reply': False},
             'attachments': [{'id': 51, 'filename': 'synthetic.txt', 'display_name': 'Synthetic', 'size': 20,
                              'url': 'https://storage.example.edu/?token=synthetic-private-attachment'}],
-            'ungraded_discussion_overrides': [], 'private': 'synthetic-private-opaque-metadata'}
+            'ungraded_discussion_overrides': None, 'private': 'synthetic-private-opaque-metadata'}
 
 
 def initialize(state, *, enabled=False):
@@ -68,6 +86,13 @@ def initialize(state, *, enabled=False):
     state.announcement_notifications = []
     state.announcement_preference_writes = 0
     state.announcement_entries = [{'id': 301, 'message': 'synthetic-private-peer-comment'}]
+    state.announcement_sections = [{'id': value, 'course_id': 123, 'name': 'synthetic-private-section',
+                                    'nonxlist_course_id': 99, 'start_at': None, 'end_at': None,
+                                    'restrict_enrollments_to_section_dates': False} for value in (33, 34)]
+    state.announcement_section_visible_ids = None
+    state.announcement_sections_denied = state.announcement_sections_denied_after = False
+    state.announcement_sections_after = None
+    state.announcement_sections_error_after_apply = state.announcement_ignore_sections = False
 
 
 def _route(state, handler):
@@ -103,6 +128,16 @@ def read(state, handler):
             row['permissions'] = {'create_announcement': state.announcement_creation,
                                   'create_discussion_topic': True}
         _send(handler, row)
+    elif url.path == prefix + '/sections' and '/courses/' in prefix:
+        if state.announcement_sections_denied or state.announcement_written and state.announcement_sections_denied_after:
+            _send(handler, {'private': 'synthetic-private-section-list-denial'}, 403)
+        else:
+            rows = (state.announcement_sections_after if state.announcement_written and state.announcement_sections_after is not None
+                    else state.announcement_sections)
+            page = int(query.get('page', ['1'])[0])
+            query['page'] = [str(page + 1)]
+            link = f'<{url.path}?{urlencode(query, doseq=True)}>; rel="next"' if page < len(rows) else None
+            _send(handler, rows[page - 1:page], link=link)
     elif url.path == prefix + '/discussion_topics':
         if query.get('only_announcements') != ['true']:
             _send(handler, {'private': 'synthetic-private-unfiltered-announcements'}, 400)
@@ -145,13 +180,28 @@ def write(state, handler, body):
     deleting = handler.command == 'DELETE'
     identifier = state.announcement_next_id if creating else int(url.path.rsplit('/', 1)[1])
     row = _announcement(identifier) if creating else state.announcements.get(identifier)
-    allowed = {'title', 'message', 'is_announcement', 'lock_comment'} | ({'delayed_post_at', 'lock_at'} if '/courses/' in prefix else set())
+    allowed = {'title', 'message', 'is_announcement', 'lock_comment'} | ({'delayed_post_at', 'lock_at', 'specific_sections'} if '/courses/' in prefix else set())
     if (handler.command not in ('POST', 'PUT', 'DELETE') or query != {'no_verifiers': ['true']} or
             deleting and body or not deleting and (set(body) - allowed or body.get('is_announcement') is not True)):
         _send(handler, {'private': 'synthetic-private-invalid-announcement-write'}, 400)
         return True
-    if (state.announcement_denied or row is None or creating and not state.announcement_creation or
+    if (row is None or creating and not state.announcement_creation or
             not creating and row['permissions']['delete' if deleting else 'update'] is not True):
+        _send(handler, {'private': 'synthetic-private-native-announcement-denial'}, 403)
+        return True
+    if 'specific_sections' in body:
+        try:
+            accepted = apply_section_filter(row, body['specific_sections'], state.announcement_sections,
+                                            visible=state.announcement_section_visible_ids,
+                                            fail=state.announcement_denied or state.announcement_sections_error_after_apply,
+                                            ignore=state.announcement_ignore_sections)
+        except (ValueError, AttributeError):
+            accepted = False
+        if not accepted:
+            _send(handler, {'private': 'synthetic-private-native-section-error-after-association'},
+                  403 if state.announcement_denied else 400)
+            return True
+    elif state.announcement_denied:
         _send(handler, {'private': 'synthetic-private-native-announcement-denial'}, 403)
         return True
     state.announcement_mutations.append((handler.command, handler.path, copy.deepcopy(body)))

@@ -716,17 +716,21 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
-    for name in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule'):
+    for name in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule', 'announcement-sections'):
         announcement = sub.add_parser(name, help='Preview native shared announcement authoring; not a discussion draft or reply')
-        announcement.add_argument('context_id', type=identifier)
-        announcement.add_argument('--context', choices=('course', 'group'), default='course')
+        course_only = name in ('announcement-schedule', 'announcement-sections')
+        announcement.add_argument('context_id', type=identifier, metavar='COURSE_ID' if course_only else None)
+        if course_only:
+            announcement.set_defaults(context='course')
+        else:
+            announcement.add_argument('--context', choices=('course', 'group'), default='course')
         announcement.add_argument('--acknowledge-shared-announcement', action='store_true', help='Required including previews')
         if name != 'announcement-create':
             announcement.add_argument('announcement_id', type=identifier)
         if name == 'announcement-delete':
             announcement.add_argument('--acknowledge-announcement-removal', action='store_true', help='Required for soft deletion; notifications are not recalled')
         else:
-            if name != 'announcement-schedule':
+            if name in ('announcement-create', 'announcement-edit'):
                 announcement.add_argument('--title', required=name == 'announcement-create')
                 announcement.add_argument('--message-file', type=Path, required=name == 'announcement-create', help='UTF-8 plain text escaped to HTML')
             announcement.add_argument('--acknowledge-broadcast', action='store_true', help='Required for possible participant/observer notifications, including previews')
@@ -744,6 +748,11 @@ def parser():
                 selection.add_argument(flag, metavar='TIMESTAMP', help=f'Course-only {field} whole-second instant with Z or explicit offset; past dates permitted')
                 selection.add_argument(clearing, action='store_true')
             announcement.add_argument('--acknowledge-availability-change', action='store_true', help='Required including previews; dates can activate delayed announcements or reopen/close comments')
+        if name == 'announcement-sections':
+            selection = announcement.add_mutually_exclusive_group(required=True)
+            selection.add_argument('--section-id', type=identifier, action='append', help='Active course section; repeatable')
+            selection.add_argument('--all-sections', action='store_true', help='Disable this filter, not other visibility rules')
+            announcement.add_argument('--acknowledge-audience-change', action='store_true', help='Required including previews; access to the announcement and existing comments can change')
         _confirmation(announcement)
     sub.add_parser('topic-languages', help='Read native schema-accepted language preferences, not service-access proof')
     for name in ('topic-view', 'topic-view-set'):

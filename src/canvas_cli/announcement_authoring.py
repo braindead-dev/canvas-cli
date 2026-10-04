@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from . import topic_dates
+from . import topic_dates, topic_sections
 from .client import CanvasError
 from .events import timestamp
 from .group_content import _id, _number, base
@@ -17,15 +17,15 @@ from .topic_management import (
     _scope,
     _topic,
 )
-from .writes import account, check_flags, confirmed, digest
+from .writes import account, check_flags, confirmed, digest, review
 
 WARNING = ('Changes a shared announcement, not a private draft, reply or note. Native announcements '
            'are always published; future posting is scheduling, not draft privacy. Creation/updates '
            'can notify participants and observers and update activity/participant records. Delivery '
            'and future execution are not verified. Native permissions, HTML processing, course comment '
            'locks and blueprint restrictions remain authoritative. Deletion does not recall notifications '
-           'or prove permanent erasure. No peer replies, grading, attachments, audience changes or settings '
-           'beyond selected comment/date operations and acknowledged closing-date clearing, '
+           'or prove permanent erasure. No peer replies, grading, attachments or settings '
+           'beyond selected comment/date/section operations and acknowledged closing-date clearing, '
            'automatic retry, cleanup or rollback are requested. Preflight is not an atomic lock.')
 UNCERTAIN = ('Could not verify the announcement operation. It may already have succeeded; check Canvas '
              'before repeating. No automatic retry, cleanup, rollback or private response-body logging.')
@@ -68,12 +68,12 @@ def _published(parsed):
     return {**parsed, 'is_announcement': True}
 
 
-def _metadata(row, item, identifier, context_type):
-    return _published(_topic(row, item, identifier, context_type, announcement=True))
+def _metadata(row, item, identifier, context_type, *, require_audience=False):
+    return _published(_topic(row, item, identifier, context_type, announcement=True, require_audience=require_audience))
 
 
-def _current(client, route, item, identifier, context_type):
-    return _published(_read(client, route, item, identifier, context_type, announcement=True))
+def _current(client, route, item, identifier, context_type, *, require_audience=False):
+    return _published(_read(client, route, item, identifier, context_type, announcement=True, require_audience=require_audience))
 
 
 def _listed(row):
@@ -150,6 +150,7 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
            acknowledge_shared=False, acknowledge_broadcast=False, acknowledge_removal=False,
            comments=None, acknowledge_comments=False, acknowledge_schedule_removal=False,
            schedule=None, acknowledge_availability=False,
+           sections=None, acknowledge_audience=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     _local(item, context_type, max_pages, acknowledge_shared)
@@ -168,8 +169,16 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
         if context_type != 'course' or delete or title is not None or message is not None or comments is not None:
             raise CanvasError('Select course announcement dates separately from text, comment-state and deletion operations')
         schedule = topic_dates.validate(schedule, context_type)
+    if type(acknowledge_audience) is not bool or acknowledge_audience != (sections is not None):
+        raise CanvasError('Announcement section filtering needs --acknowledge-audience-change, including previews; not for other edits')
+    if sections is not None:
+        if delete or title is not None or message is not None or comments is not None or schedule is not None:
+            raise CanvasError('Select announcement sections separately from text, comments, dates and deletion')
+        sections = topic_sections.validate(sections, context_type)
     if delete:
         changes = None
+    elif sections is not None:
+        changes = sections
     elif schedule is not None:
         changes = schedule
     elif title is not None or message is not None or comments is None:
@@ -178,9 +187,12 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
         changes = {}
     identity = account(client)
     route, context = _scope(client, item, context_type)
-    before = _current(client, route, item, identifier, context_type)
+    before = _current(client, route, item, identifier, context_type, require_audience=sections is not None)
     if before['permissions']['delete' if delete else 'update'] is not True:
         raise CanvasError('Canvas does not permit this exact announcement operation')
+    section_inventory = topic_sections.inventory(client, route, item, max_pages) if sections is not None else None
+    if sections is not None:
+        topic_sections.check_selection(sections, section_inventory)
     if schedule is not None:
         topic_dates.validate_current(schedule, before, context)
     locked = before['locked'] if comments is None else not comments
@@ -192,10 +204,13 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if not delete and all(_matches(before, key, value) for key, value in changes.items()) and before['locked'] is locked:
         raise CanvasError('The selected announcement state already matches; no update needed')
     inventory = _inventory(client, route, item, context_type, max_pages, announcement=True)
-    if (_listed(before) not in inventory or _current(client, route, item, identifier, context_type) != before or
+    if (_listed(before) not in inventory or
+            _current(client, route, item, identifier, context_type, require_audience=sections is not None) != before or
             _scope(client, item, context_type) != (route, context) or
             _inventory(client, route, item, context_type, max_pages, announcement=True) != inventory or account(client) != identity):
         raise CanvasError('Announcement/context/inventory/account changed during preflight')
+    if sections is not None and topic_sections.inventory(client, route, item, max_pages) != section_inventory:
+        raise CanvasError('Active course sections changed during preflight; review a fresh preview')
     # Native updates default locked=false. Send only the selected/preserved
     # comment state; the original locked parameter can write creator preferences.
     body = None if delete else {**changes, 'is_announcement': True, 'lock_comment': locked}
@@ -211,7 +226,18 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if schedule is not None:
         preview.update(acknowledge_availability_change=True, comment_policy='native_date_effects',
                        warning=WARNING + ' ' + DATES_WARNING)
-    response = confirmed(client, preview, yes, confirm)
+    if sections is not None:
+        preview.update(acknowledge_audience_change=True, section_inventory_digest=digest(section_inventory),
+                       active_section_ids=[row['id'] for row in section_inventory], warning=WARNING + ' ' + topic_sections.WARNING)
+        # Reject stale confirmation before catching transport errors: native section
+        # associations may change even when the endpoint ultimately returns an error.
+        review(preview, yes, confirm)
+    try:
+        response = confirmed(client, preview, yes, confirm)
+    except CanvasError:
+        if sections is not None and yes:
+            raise CanvasError(UNCERTAIN) from None
+        raise
     if not yes:
         return response
     try:
@@ -233,13 +259,16 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
             else:
                 raise CanvasError('Deleted announcement remains readable')
         else:
-            after = _metadata(response, item, identifier, context_type)
-            if (_current(client, route, item, identifier, context_type) != after or
+            after = _metadata(response, item, identifier, context_type, require_audience=sections is not None)
+            if (_current(client, route, item, identifier, context_type, require_audience=sections is not None) != after or
                     schedule is None and after['locked'] is not locked or
                     clearing and after['lock_at'] is not None):
                 raise CanvasError('Announcement readback or selected/preserved comment lock/date clearing did not agree')
             if schedule is not None and not all(matches(after, key, value) for key, value in schedule.items()):
                 raise CanvasError('Canvas did not store every selected announcement date as an exact instant or explicit clearing')
+            if sections is not None and (not topic_sections.matches(after, sections) or
+                                        topic_sections.inventory(client, route, item, max_pages) != section_inventory):
+                raise CanvasError('Announcement section filter or active course section inventory did not agree')
             remaining = _inventory(client, route, item, context_type, max_pages, announcement=True)
             if _listed(after) not in remaining:
                 raise CanvasError('Edited announcement is absent from its accessible inventory')
@@ -257,6 +286,8 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                         'verified with stable context/account. No permanent-erasure, attachment cleanup or '
                         'notification-recall proof; no retry or rollback.'}
     requested = {'message_digest' if key == 'message' else key for key in changes}
+    if sections is not None:
+        requested.update(('is_section_specific', 'section_ids'))
     if comments is not None:
         requested.add('locked')
     if clearing:
@@ -269,7 +300,7 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                                               'participant_reply_access_verified': False}} if comments is not None else {}),
             'stored_text_matches_request': {key: _matches(after, key, value) for key, value in changes.items() if key in ('title', 'message')},
             'changed_fields': changed, 'unrequested_changed_fields': [key for key in changed if key not in requested],
-            'note': 'One native PUT, independent announcement/inventory readback and selected text/comment/date state '
+            'note': 'One native PUT, independent announcement/inventory readback and selected text/comment/date/section state '
                     'verified with stable context/account. HTML normalization and other observed changes are '
                     'labeled, not causal proof. No private prompt, peer replies, explicit preference write, retry or rollback.' +
                     (' ' + COMMENTS_WARNING if comments is not None else '')}
@@ -281,4 +312,10 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
             'reported_context_comments_disabled': after['comments_disabled'],
             'participant_visibility_verified': False, 'participant_reply_access_verified': False,
             'future_execution_verified': False}, note=result['note'] + ' ' + DATES_WARNING)
+    if sections is not None:
+        result.update(announcement_section_filter={
+            'specific_sections': sections['specific_sections'], 'section_ids': after['section_ids'],
+            'is_section_specific': after['is_section_specific'], 'verified': True,
+            'audience_change_acknowledged': True, 'effective_participant_visibility_verified': False,
+            'participant_record_effects_verified': False}, note=result['note'] + ' ' + topic_sections.WARNING)
     return result

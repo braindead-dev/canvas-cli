@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
-from e2e.announcement_authoring import apply_date_lock
+from e2e.announcement_authoring import apply_date_lock, apply_section_filter
 from test_topic_management import TopicClient, topic
 
 from canvas_cli.announcement_authoring import change, create
@@ -18,7 +18,8 @@ from canvas_cli.client import CanvasError
 def announcement(identifier=9):
     return {**topic(identifier), 'is_announcement': True, 'can_unpublish': False,
             'can_lock': True, 'comments_disabled': False,
-            'locked': True, 'type': 'Announcement', 'context_type': 'Course', 'context_id': 123}
+            'locked': True, 'type': 'Announcement', 'context_type': 'Course', 'context_id': 123,
+            'ungraded_discussion_overrides': None}
 
 
 class AnnouncementClient(TopicClient):
@@ -31,6 +32,13 @@ class AnnouncementClient(TopicClient):
         self.force_comment_lock = self.ignore_posting = False
         self.ignore_comment_lock = self.keep_closing_date = False
         self.store_date_offset = self.shift_date = self.lose_update = False
+        self.sections = [{'id': value, 'course_id': 123, 'name': 'synthetic-private-section',
+                          'nonxlist_course_id': 99, 'start_at': None, 'end_at': None,
+                          'restrict_enrollments_to_section_dates': False} for value in (33, 34)]
+        self.section_reads = 0
+        self.sections_denied = self.sections_denied_after = False
+        self.sections_after = self.section_mutation = self.section_visible_ids = None
+        self.sections_error_after_apply = self.ignore_sections = False
 
     def request(self, route, method='GET', body=None):
         url = urlsplit(route)
@@ -44,7 +52,12 @@ class AnnouncementClient(TopicClient):
         if method == 'GET':
             return super().request(route, method, body)
         self.calls.append((method, route, copy.deepcopy(body)))
-        if self.denied or method == 'POST' and not self.creation:
+        if method == 'PUT' and 'specific_sections' in body:
+            if not apply_section_filter(self.topics[int(url.path.rsplit('/', 1)[1])], body['specific_sections'], self.sections,
+                                        visible=self.section_visible_ids, fail=self.denied or self.sections_error_after_apply,
+                                        ignore=self.ignore or self.ignore_sections or 'specific_sections' in self.ignored_fields):
+                raise CanvasError('synthetic-private-native-error-after-section-association', status=400)
+        elif self.denied or method == 'POST' and not self.creation:
             raise CanvasError('synthetic-private-native-denial', status=403)
         self.written = True
         self.native_effects.append('participant/observer/activity')
@@ -90,6 +103,14 @@ class AnnouncementClient(TopicClient):
         return response, ''
 
     def list(self, route, max_pages):
+        if route.endswith('/sections?per_page=100'):
+            self.calls.append(('GET', route, None))
+            self.section_reads += 1
+            if self.sections_denied or self.written and self.sections_denied_after or max_pages < 2:
+                raise CanvasError('synthetic-private-section-read-denial', status=403)
+            if self.section_reads == 2 and self.section_mutation:
+                self.section_mutation(self)
+            return copy.deepcopy(self.sections_after if self.written and self.sections_after is not None else self.sections)
         if parse_qs(urlsplit(route).query).get('only_announcements') != ['true']:
             raise AssertionError('Unfiltered announcement inventory')
         return super().list(route, max_pages)

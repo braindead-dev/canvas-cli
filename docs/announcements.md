@@ -74,12 +74,29 @@ Deletion uses the exact reported native delete permission, not ownership or a gu
 
 This does not recall notifications, prove permanent erasure, delete attachments explicitly or provide a CLI restore. Replies may become inaccessible. Uncertain outcomes require checking Canvas before repeating; no retry, cleanup or rollback occurs.
 
+## Course sections
+
+```sh
+canvas announcement-sections 123 456 --section-id 33 --section-id 34 --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-audience-change
+canvas announcement-sections 123 456 --all-sections --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-audience-change
+```
+
+Replace the section filter on an existing course announcement. All three acknowledgements are required even for preview; audience access to the announcement and existing comments can change. This command does not accept group contexts, text/comment/date edits, deletion or creation-time targeting.
+
+Repeat unique active course section IDs, or restore `--all-sections`. The complete paginated section catalog is checked without roster reads. Exact announcement update permission is required, not creation or modern Assign To permission; native old/new section visibility checks remain authoritative. Announcements report null ungraded participant overrides, not a discussion override list. All sections disables this filter, not every other visibility restriction.
+
+Account, context, prior announcement metadata/content fingerprint, exact rights, complete accessible announcement inventory and section catalog bind confirmation. Names and private metadata are fingerprinted rather than printed. A matching filter is a no-op. One PUT sends only the filter, announcement kind and preserved comment lock, then independently verifies the exact section IDs/flag, unchanged catalog, comment lock and matching announcement/inventory readback.
+
+Native section changes can synchronize participant/read-tracking records and activity. Stored-filter verification does not prove effective access for each participant, comment access, participant-record updates or notification delivery. Other observed metadata changes are labeled, not automatically repaired.
+
+Section associations may persist before the endpoint reports an authorization or validation error. **An HTTP error does not prove nothing changed.** Every attempted section update with failed or unverifiable readback is uncertain; inspect Canvas before repeating. No peer comments, participant overrides, enrollment/settings changes, retry, cleanup or rollback are requested.
+
 ## Boundaries
 
-Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Attachments, section/participant targeting, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
+Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Creation-time section targeting, attachments, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
 
 Validation covers unit tests and subprocess/local HTTPS fixtures with synthetic records. No real announcement mutation has been live-tested. Delivery, future jobs, hidden inventory effects and remote preference storage remain unverified.
 
 ## Primary references
 
-[Discussion topic API](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics), [native announcement model](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/models/announcement.rb), [native announcement request handling](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/controllers/discussion_topics_controller.rb), [native lock/global-comment rules](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/models/discussion_topic.rb).
+[Discussion topic API](https://developerdocs.instructure.com/services/canvas/resources/discussion_topics), [native announcement model](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/models/announcement.rb), [native announcement request handling](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/controllers/discussion_topics_controller.rb), [native lock/audience rules](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/models/discussion_topic.rb), [native serialization](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/lib/api/v1/discussion_topics.rb).

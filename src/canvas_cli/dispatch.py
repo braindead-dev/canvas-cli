@@ -150,7 +150,7 @@ def execute(client, args):
                       acknowledge_ordering=getattr(args, 'acknowledge_topic_ordering_change', False),
                       acknowledge_schedule_removal=getattr(args, 'acknowledge_closing_schedule_removal', False),
                       max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
-    if args.command in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule'):
+    if args.command in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule', 'announcement-sections'):
         from .announcement_authoring import change, create
         source = getattr(args, 'message_file', None)
         options = {'context_type': args.context, 'acknowledge_shared': args.acknowledge_shared_announcement,
@@ -166,6 +166,11 @@ def execute(client, args):
                     selected[key] = value
             return change(client, args.context_id, args.announcement_id, schedule=selected,
                           acknowledge_availability=args.acknowledge_availability_change,
+                          acknowledge_broadcast=args.acknowledge_broadcast, **options)
+        if args.command == 'announcement-sections':
+            return change(client, args.context_id, args.announcement_id,
+                          sections={'specific_sections': 'all' if args.all_sections else [int(value) for value in args.section_id]},
+                          acknowledge_audience=args.acknowledge_audience_change,
                           acknowledge_broadcast=args.acknowledge_broadcast, **options)
         return change(client, args.context_id, args.announcement_id, title=getattr(args, 'title', None),
                       message=read_utf8(source, label='Announcement message') if source else None,

@@ -91,8 +91,12 @@ def _topic(row, item, topic_id, context_type, *, require_audience=False, announc
     if len({row['id'] for row in attached}) != len(attached):
         raise CanvasError('Canvas returned duplicate discussion-topic attachments')
     sections = row.get('sections', [])
-    if require_audience and not isinstance(row.get('ungraded_discussion_overrides'), list):
-        raise CanvasError('Canvas did not report the current ungraded participant override metadata')
+    if require_audience:
+        if announcement:
+            if 'ungraded_discussion_overrides' not in row or row['ungraded_discussion_overrides'] is not None:
+                raise CanvasError('Canvas did not report native announcement audience metadata without participant overrides')
+        elif not isinstance(row.get('ungraded_discussion_overrides'), list):
+            raise CanvasError('Canvas did not report the current ungraded participant override metadata')
     if (not isinstance(sections, list) or row['is_section_specific'] and not sections or
             context_type == 'group' and row['is_section_specific']):
         raise CanvasError('Canvas did not report the section-specific topic audience')
