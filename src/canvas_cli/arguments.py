@@ -716,7 +716,7 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
-    for name in ('announcement-create', 'announcement-edit', 'announcement-delete'):
+    for name in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule'):
         announcement = sub.add_parser(name, help='Preview native shared announcement authoring; not a discussion draft or reply')
         announcement.add_argument('context_id', type=identifier)
         announcement.add_argument('--context', choices=('course', 'group'), default='course')
@@ -726,16 +726,24 @@ def parser():
         if name == 'announcement-delete':
             announcement.add_argument('--acknowledge-announcement-removal', action='store_true', help='Required for soft deletion; notifications are not recalled')
         else:
-            announcement.add_argument('--title', required=name == 'announcement-create')
-            announcement.add_argument('--message-file', type=Path, required=name == 'announcement-create', help='UTF-8 plain text escaped to HTML')
+            if name != 'announcement-schedule':
+                announcement.add_argument('--title', required=name == 'announcement-create')
+                announcement.add_argument('--message-file', type=Path, required=name == 'announcement-create', help='UTF-8 plain text escaped to HTML')
             announcement.add_argument('--acknowledge-broadcast', action='store_true', help='Required for possible participant/observer notifications, including previews')
         if name == 'announcement-create':
             announcement.add_argument('--post-at', help='Future whole-second timestamp with UTC offset; course only, not a private draft')
             announcement.add_argument('--comments', action=argparse.BooleanOptionalAction, default=False, help='Allow comments; default requests closed comments without changing creator preferences')
         if name == 'announcement-edit':
             announcement.add_argument('--comments', action=argparse.BooleanOptionalAction, default=None, help='Select shared comment access; omission preserves it')
-            announcement.add_argument('--acknowledge-comment-access-change', action='store_true', help='Required when selecting comments, including previews; changes participant reply access')
+            announcement.add_argument('--acknowledge-comment-access-change', action='store_true', help='Required when selecting comments, including previews; acknowledges possible participant reply-access changes')
             announcement.add_argument('--acknowledge-closing-schedule-removal', action='store_true', help='Required only when opening a closed announcement with a closing date')
+        if name == 'announcement-schedule':
+            for field, flag, clearing in (('posting', '--post-at', '--clear-posting'),
+                                           ('closing', '--closes-at', '--clear-closing')):
+                selection = announcement.add_mutually_exclusive_group()
+                selection.add_argument(flag, metavar='TIMESTAMP', help=f'Course-only {field} whole-second instant with Z or explicit offset; past dates permitted')
+                selection.add_argument(clearing, action='store_true')
+            announcement.add_argument('--acknowledge-availability-change', action='store_true', help='Required including previews; dates can activate delayed announcements or reopen/close comments')
         _confirmation(announcement)
     sub.add_parser('topic-languages', help='Read native schema-accepted language preferences, not service-access proof')
     for name in ('topic-view', 'topic-view-set'):

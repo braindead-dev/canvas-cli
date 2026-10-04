@@ -150,7 +150,7 @@ def execute(client, args):
                       acknowledge_ordering=getattr(args, 'acknowledge_topic_ordering_change', False),
                       acknowledge_schedule_removal=getattr(args, 'acknowledge_closing_schedule_removal', False),
                       max_pages=args.max_pages, yes=args.yes, confirm=args.confirm)
-    if args.command in ('announcement-create', 'announcement-edit', 'announcement-delete'):
+    if args.command in ('announcement-create', 'announcement-edit', 'announcement-delete', 'announcement-schedule'):
         from .announcement_authoring import change, create
         source = getattr(args, 'message_file', None)
         options = {'context_type': args.context, 'acknowledge_shared': args.acknowledge_shared_announcement,
@@ -158,6 +158,15 @@ def execute(client, args):
         if args.command == 'announcement-create':
             return create(client, args.context_id, title=args.title, message=read_utf8(source, label='Announcement message'),
                           post_at=args.post_at, comments=args.comments, acknowledge_broadcast=args.acknowledge_broadcast, **options)
+        if args.command == 'announcement-schedule':
+            selected = {}
+            for key, value, clear in (('delayed_post_at', args.post_at, args.clear_posting),
+                                      ('lock_at', args.closes_at, args.clear_closing)):
+                if value is not None or clear:
+                    selected[key] = value
+            return change(client, args.context_id, args.announcement_id, schedule=selected,
+                          acknowledge_availability=args.acknowledge_availability_change,
+                          acknowledge_broadcast=args.acknowledge_broadcast, **options)
         return change(client, args.context_id, args.announcement_id, title=getattr(args, 'title', None),
                       message=read_utf8(source, label='Announcement message') if source else None,
                       delete=args.command == 'announcement-delete',

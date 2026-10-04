@@ -1,9 +1,31 @@
 """Synthetic native announcement behavior, independent of CLI validators."""
 
 import copy
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from .appointments import _send
+
+
+def apply_date_lock(row, body, *, ignored_dates=(), ignore_comments=False, keep_closing=False):
+    """Synthetic native date processing followed by comment-lock precedence."""
+    def instant(value):
+        return datetime.fromisoformat(value.replace('Z', '+00:00')) if value else None
+
+    before = {key: instant(row[key]) for key in ('delayed_post_at', 'lock_at')}
+    row.update({key: body[key] for key in before if key in body and key not in ignored_dates})
+    after = {key: instant(row[key]) for key in before}
+    if after != before:
+        now = datetime.now(timezone.utc)
+        row['workflow_state'] = 'post_delayed' if after['delayed_post_at'] and after['delayed_post_at'] > now else 'active'
+        row['locked'] = after['lock_at'] is not None and after['lock_at'] < now
+    # A changed closing date owns the resulting lock state. With an unchanged
+    # closing date, the explicit/default comment choice can close or reopen it.
+    requested = body.get('lock_comment', False)
+    if after['lock_at'] == before['lock_at'] and not ignore_comments and row['locked'] != requested:
+        if not requested and not keep_closing:
+            row['lock_at'] = None
+        row['locked'] = requested
 
 
 def _announcement(identifier):
@@ -36,6 +58,8 @@ def initialize(state, *, enabled=False):
     state.announcement_read_denied = state.announcement_inventory_denied = False
     state.announcement_force_lock = state.announcement_ignore_date = state.announcement_ignore_delete = False
     state.announcement_ignore_comment_lock = state.announcement_keep_closing_date = False
+    state.announcement_ignored_dates = set()
+    state.announcement_store_date_offset = state.announcement_shift_date = state.announcement_lose_update = False
     state.announcement_account_changed = state.announcement_context_changed = state.announcement_sanitize = False
     state.announcement_ack_patch = state.announcement_read_patch = None
     state.announcement_hide_after = False
@@ -121,7 +145,7 @@ def write(state, handler, body):
     deleting = handler.command == 'DELETE'
     identifier = state.announcement_next_id if creating else int(url.path.rsplit('/', 1)[1])
     row = _announcement(identifier) if creating else state.announcements.get(identifier)
-    allowed = {'title', 'message', 'is_announcement', 'lock_comment'} | ({'delayed_post_at'} if creating and '/courses/' in prefix else set())
+    allowed = {'title', 'message', 'is_announcement', 'lock_comment'} | ({'delayed_post_at', 'lock_at'} if '/courses/' in prefix else set())
     if (handler.command not in ('POST', 'PUT', 'DELETE') or query != {'no_verifiers': ['true']} or
             deleting and body or not deleting and (set(body) - allowed or body.get('is_announcement') is not True)):
         _send(handler, {'private': 'synthetic-private-invalid-announcement-write'}, 400)
@@ -142,15 +166,18 @@ def write(state, handler, body):
             state.announcements[identifier] = row
             state.announcement_next_id += 1
         row.update({key: body[key] for key in ('title', 'message') if key in body})
-        # Canvas's announcement update path defaults to unlocked when omitted.
-        # A course-level lock can override a requested open comment state.
-        requested_lock = body.get('lock_comment', False)
-        if row['locked'] and not requested_lock and not state.announcement_keep_closing_date:
-            row['lock_at'] = None
-        if not state.announcement_ignore_comment_lock:
-            row['locked'] = state.announcement_force_lock and '/courses/' in prefix or requested_lock
-        if 'delayed_post_at' in body and not state.announcement_ignore_date:
-            row['delayed_post_at'] = body['delayed_post_at']
+        ignored = state.announcement_ignored_dates | ({'delayed_post_at', 'lock_at'} if state.announcement_ignore_date else set())
+        apply_date_lock(row, body, ignored_dates=ignored, ignore_comments=state.announcement_ignore_comment_lock,
+                        keep_closing=state.announcement_keep_closing_date)
+        if state.announcement_force_lock and '/courses/' in prefix:
+            row['locked'] = True
+        if state.announcement_store_date_offset:
+            row.update({key: datetime.fromisoformat(row[key].replace('Z', '+00:00')).isoformat()
+                        for key in ('delayed_post_at', 'lock_at') if row[key] is not None})
+        if state.announcement_shift_date:
+            row['lock_at'] = '2099-10-03T19:00:00Z'
+        if state.announcement_lose_update:
+            row['permissions']['update'] = False
         if state.announcement_sanitize:
             row['message'] = row['message'].replace('<br>', '<br />')
         state.announcement_notifications.append(identifier)

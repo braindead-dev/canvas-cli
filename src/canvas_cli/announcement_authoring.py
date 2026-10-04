@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
+from . import topic_dates
 from .client import CanvasError
 from .events import timestamp
 from .group_content import _id, _number, base
@@ -24,7 +25,7 @@ WARNING = ('Changes a shared announcement, not a private draft, reply or note. N
            'and future execution are not verified. Native permissions, HTML processing, course comment '
            'locks and blueprint restrictions remain authoritative. Deletion does not recall notifications '
            'or prove permanent erasure. No peer replies, grading, attachments, audience changes or settings '
-           'beyond the selected comment lock and acknowledged closing-date clearing, '
+           'beyond selected comment/date operations and acknowledged closing-date clearing, '
            'automatic retry, cleanup or rollback are requested. Preflight is not an atomic lock.')
 UNCERTAIN = ('Could not verify the announcement operation. It may already have succeeded; check Canvas '
              'before repeating. No automatic retry, cleanup, rollback or private response-body logging.')
@@ -33,6 +34,13 @@ COMMENTS_WARNING = ('Changing the shared comment lock affects whether participan
                     'Opening a closed announcement can clear its closing date. Only the stored lock and '
                     'any acknowledged date clearing are verified, not participant reply access, global '
                     'course/account restrictions, notifications or future jobs. No peer comments are read.')
+DATES_WARNING = ('Changing or clearing course announcement dates can activate a delayed announcement, '
+                 'change availability, reopen or close comments and trigger native activity/participant/observer effects. '
+                 'Announcements remain published, never private drafts. Changed closing dates can override the '
+                 'requested current comment lock; native reply-state handling can clear an unselected closing date. '
+                 'Only selected stored instants and observed changes are verified, not participant visibility/reply '
+                 'access, notifications or future jobs. Course-midnight closing is rewritten to end of day; '
+                 'select an explicit non-midnight instant. No peer comments, retry or rollback.')
 
 
 def _local(item, context_type, max_pages, acknowledge_shared):
@@ -141,6 +149,7 @@ def create(client, item, *, title, message, context_type='course', post_at=None,
 def change(client, item, identifier, *, context_type='course', title=None, message=None, delete=False,
            acknowledge_shared=False, acknowledge_broadcast=False, acknowledge_removal=False,
            comments=None, acknowledge_comments=False, acknowledge_schedule_removal=False,
+           schedule=None, acknowledge_availability=False,
            max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     _local(item, context_type, max_pages, acknowledge_shared)
@@ -153,12 +162,27 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
         raise CanvasError('Select --comments/--no-comments with --acknowledge-comment-access-change; date-removal consent is separate')
     if delete and (title is not None or message is not None or comments is not None):
         raise CanvasError('Announcement deletion cannot include text or comment-state edits')
-    changes = None if delete else (_changes(title, message) if title is not None or message is not None or comments is None else {})
+    if type(acknowledge_availability) is not bool or acknowledge_availability != (schedule is not None):
+        raise CanvasError('Announcement scheduling needs --acknowledge-availability-change, including previews; not for other edits')
+    if schedule is not None:
+        if context_type != 'course' or delete or title is not None or message is not None or comments is not None:
+            raise CanvasError('Select course announcement dates separately from text, comment-state and deletion operations')
+        schedule = topic_dates.validate(schedule, context_type)
+    if delete:
+        changes = None
+    elif schedule is not None:
+        changes = schedule
+    elif title is not None or message is not None or comments is None:
+        changes = _changes(title, message)
+    else:
+        changes = {}
     identity = account(client)
     route, context = _scope(client, item, context_type)
     before = _current(client, route, item, identifier, context_type)
     if before['permissions']['delete' if delete else 'update'] is not True:
         raise CanvasError('Canvas does not permit this exact announcement operation')
+    if schedule is not None:
+        topic_dates.validate_current(schedule, before, context)
     locked = before['locked'] if comments is None else not comments
     clearing = comments is True and before['locked'] is True and before['lock_at'] is not None
     if acknowledge_schedule_removal is not clearing:
@@ -166,7 +190,7 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if comments is False and before['locked'] is False and before['can_lock'] is not True:
         raise CanvasError('Canvas did not report eligibility to close this announcement to comments')
     if not delete and all(_matches(before, key, value) for key, value in changes.items()) and before['locked'] is locked:
-        raise CanvasError('The selected announcement text/comment state already matches; no update needed')
+        raise CanvasError('The selected announcement state already matches; no update needed')
     inventory = _inventory(client, route, item, context_type, max_pages, announcement=True)
     if (_listed(before) not in inventory or _current(client, route, item, identifier, context_type) != before or
             _scope(client, item, context_type) != (route, context) or
@@ -184,6 +208,9 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                'acknowledge_announcement_removal': acknowledge_removal, 'method': 'DELETE' if delete else 'PUT',
                'route': route + '/discussion_topics/' + identifier + '?no_verifiers=true', 'body': body,
                'warning': WARNING + (' ' + COMMENTS_WARNING if comments is not None else '')}
+    if schedule is not None:
+        preview.update(acknowledge_availability_change=True, comment_policy='native_date_effects',
+                       warning=WARNING + ' ' + DATES_WARNING)
     response = confirmed(client, preview, yes, confirm)
     if not yes:
         return response
@@ -207,9 +234,12 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
                 raise CanvasError('Deleted announcement remains readable')
         else:
             after = _metadata(response, item, identifier, context_type)
-            if (_current(client, route, item, identifier, context_type) != after or after['locked'] is not locked or
+            if (_current(client, route, item, identifier, context_type) != after or
+                    schedule is None and after['locked'] is not locked or
                     clearing and after['lock_at'] is not None):
                 raise CanvasError('Announcement readback or selected/preserved comment lock/date clearing did not agree')
+            if schedule is not None and not all(matches(after, key, value) for key, value in schedule.items()):
+                raise CanvasError('Canvas did not store every selected announcement date as an exact instant or explicit clearing')
             remaining = _inventory(client, route, item, context_type, max_pages, announcement=True)
             if _listed(after) not in remaining:
                 raise CanvasError('Edited announcement is absent from its accessible inventory')
@@ -232,14 +262,23 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if clearing:
         requested.add('lock_at')
     changed = [key for key in before if before[key] != after[key]]
-    return {**shared, 'edited_announcement': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{identifier}'},
+    result = {**shared, 'edited_announcement': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{identifier}'},
             'acknowledgement_matches_readback': True, 'comment_lock_preserved': after['locked'] is before['locked'],
             **({'announcement_comment_state': {'comments_locked': after['locked'], 'closing_schedule_cleared': clearing,
                                               'reported_context_comments_disabled': after['comments_disabled'],
                                               'participant_reply_access_verified': False}} if comments is not None else {}),
-            'stored_text_matches_request': {key: _matches(after, key, value) for key, value in changes.items()},
+            'stored_text_matches_request': {key: _matches(after, key, value) for key, value in changes.items() if key in ('title', 'message')},
             'changed_fields': changed, 'unrequested_changed_fields': [key for key in changed if key not in requested],
-            'note': 'One native PUT, independent announcement/inventory readback and selected/preserved comment lock '
+            'note': 'One native PUT, independent announcement/inventory readback and selected text/comment/date state '
                     'verified with stable context/account. HTML normalization and other observed changes are '
                     'labeled, not causal proof. No private prompt, peer replies, explicit preference write, retry or rollback.' +
                     (' ' + COMMENTS_WARNING if comments is not None else '')}
+    if schedule is not None:
+        result.update(scheduled_announcement_dates={
+            'requested': schedule, 'stored': {key: after[key] for key in schedule}, 'verified': True,
+            'availability_change_acknowledged': True,
+            'observed_states': {key: {'before': before[key], 'after': after[key]} for key in ('published', 'locked')},
+            'reported_context_comments_disabled': after['comments_disabled'],
+            'participant_visibility_verified': False, 'participant_reply_access_verified': False,
+            'future_execution_verified': False}, note=result['note'] + ' ' + DATES_WARNING)
+    return result

@@ -46,6 +46,23 @@ Opening a closed announcement with a closing date implicitly clears that date in
 
 Results distinguish the stored lock from the reported global `comments_disabled` flag. A group can store an open lock while its parent still disables replies; a course restriction can force the lock closed. Stored-state verification is not participant reply-access, notification, future-job or global-setting proof. Ignored choices or unverified date clearing fail as uncertain without retry or repair.
 
+## Course dates
+
+```sh
+canvas announcement-schedule 123 456 --post-at '2099-10-01T09:00:00-07:00' --closes-at '2099-10-02T12:00:00-07:00' --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-availability-change
+canvas announcement-schedule 123 456 --clear-posting --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-availability-change
+canvas announcement-schedule 123 456 --closes-at '2020-10-02T12:00:00-07:00' --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-availability-change
+canvas announcement-schedule 123 456 --clear-closing --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-availability-change
+```
+
+Set or explicitly clear either date on an existing course announcement. All three acknowledgements are required even for preview. Group dates are excluded by the native group parameter set. Date operations are separate from text/comment edits and deletion, use the exact announcement update right, and do not require creation permission.
+
+Use whole-second instants with `Z` or an explicit UTC offset. Unlike creation's future-only scheduling guard, existing date edits accept past instants. Closing must follow posting, including a preserved date. A closing instant at course-local midnight is refused because Canvas rewrites it to end of day; select the intended non-midnight instant instead. The reported course time zone is required for closing validation, not guessed.
+
+Date processing can activate a delayed announcement or reopen/close comments. A changed future closing date can reopen a currently closed announcement, even though the request includes its current comment lock. Clearing a closing date can also reopen comments. Native comment-state handling can clear an unselected closing date. Omitted dates are not sent; any observed collateral changes are labeled, not silently assumed preserved or attributed exclusively to this write. Announcements remain published, never private drafts.
+
+Account, context/time zone, exact prior content/date/state/rights and complete accessible inventory bind confirmation. Matching instants are a no-op, not a broadcast. One PUT must match independent announcement/inventory readback and every selected instant or clearing; equivalent offset representations are accepted. Ignored, shifted or unverifiable dates fail as uncertain without retry or repair. Results report observed comment state and global restrictions, not participant visibility/reply access, notification delivery or future execution. No peer comments or explicit creator preference are read/written.
+
 ## Delete
 
 ```sh
@@ -59,7 +76,7 @@ This does not recall notifications, prove permanent erasure, delete attachments 
 
 ## Boundaries
 
-Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Attachments, section/participant targeting, general date edits on existing announcements, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
+Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Attachments, section/participant targeting, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
 
 Validation covers unit tests and subprocess/local HTTPS fixtures with synthetic records. No real announcement mutation has been live-tested. Delivery, future jobs, hidden inventory effects and remote preference storage remain unverified.
 

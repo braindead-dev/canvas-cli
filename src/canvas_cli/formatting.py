@@ -153,6 +153,11 @@ def _brief(data):
             lines.append('Stored comments: ' + ('closed' if state['comments_locked'] else 'open') + '; participant reply access is unverified.')
             if state['closing_schedule_cleared']:
                 lines.append('Closing schedule cleared with explicit acknowledgement.')
+        if 'scheduled_announcement_dates' in data:
+            dates = data['scheduled_announcement_dates']
+            lines.extend(key + ': ' + (value or 'cleared') for key, value in dates['stored'].items())
+            lines.append('Stored instants verified; future execution and participant availability/reply access are not verified.')
+            lines.append('Observed comment lock: ' + ('closed' if row['locked'] else 'open') + '; native date rules remain authoritative.')
         if data.get('unrequested_changed_fields'):
             lines.append('Other observed changes: ' + ', '.join(data['unrequested_changed_fields']))
         return '\n'.join([*lines, data['note']])

@@ -51,7 +51,7 @@ tests/
     topic_management.py  native prompt authoring/states/dates/settings/deletion, pinned ordering and permissions
     topic_duplication.py  native prompt copies, eligibility and serialize-before-insert position evidence
     topic_sections.py  native course section associations and old/new visibility checks
-    announcement_authoring.py  separate always-published/broadcast/comment-lock/soft-delete semantics
+    announcement_authoring.py  native always-published/broadcast/date/comment-lock precedence and soft-delete semantics
     topic_view.py    native GraphQL own preferences, initialization and effective-value resolution
     test_<area>.py   subprocess lifecycle regressions by workflow
 ```

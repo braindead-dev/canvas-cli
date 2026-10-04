@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
+from e2e.announcement_authoring import apply_date_lock
 from test_topic_management import TopicClient, topic
 
 from canvas_cli.announcement_authoring import change, create
@@ -29,6 +30,7 @@ class AnnouncementClient(TopicClient):
         self.permission_reads = 0
         self.force_comment_lock = self.ignore_posting = False
         self.ignore_comment_lock = self.keep_closing_date = False
+        self.store_date_offset = self.shift_date = self.lose_update = False
 
     def request(self, route, method='GET', body=None):
         url = urlsplit(route)
@@ -69,13 +71,17 @@ class AnnouncementClient(TopicClient):
                 for key in ('title', 'message'):
                     if key in body:
                         row[key] = body[key]
-                requested_lock = body.get('lock_comment', False)
-                if row['locked'] and not requested_lock and not self.keep_closing_date:
-                    row['lock_at'] = None
-                if not self.ignore_comment_lock:
-                    row['locked'] = True if self.force_comment_lock else requested_lock
-                if 'delayed_post_at' in body and not self.ignore_posting:
-                    row['delayed_post_at'] = body['delayed_post_at']
+                apply_date_lock(row, body, ignored_dates=self.ignored_fields | ({'delayed_post_at'} if self.ignore_posting else set()),
+                                ignore_comments=self.ignore_comment_lock, keep_closing=self.keep_closing_date)
+                if self.force_comment_lock:
+                    row['locked'] = True
+                if self.store_date_offset:
+                    row.update({key: datetime.fromisoformat(row[key].replace('Z', '+00:00')).isoformat()
+                                for key in ('delayed_post_at', 'lock_at') if row[key] is not None})
+                if self.shift_date:
+                    row['lock_at'] = '2099-10-03T19:00:00Z'
+                if self.lose_update:
+                    row['permissions']['update'] = False
                 if self.sanitize:
                     row['message'] = row['message'].replace('<br>', '<br />')
             response = copy.deepcopy(row)
