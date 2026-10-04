@@ -36,10 +36,14 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and 'discussion_languages' in data:
+        rows = data['discussion_languages']['values']
+        return '\n'.join([*(row['enum'] + (' (deprecated)' if row['deprecated'] else '') for row in rows), data['note']])
     if isinstance(data, dict) and 'topic_view' in data:
         row = data['topic_view']
         lines = [f"Own view for {row['context_type']} {row['context_id']} topic {row['topic_id']}",
-                 'Reported: ' + ', '.join(key + '=' + str(value).lower() for key, value in row['reported'].items())]
+                 'Reported: ' + ', '.join(key + '=' + (value if key == 'preferred_language' and isinstance(value, str)
+                                                       else str(value).lower()) for key, value in row['reported'].items())]
         if data.get('mutation_acknowledged'):
             lines.append('Mutation acknowledged; selected native readback independently verified.')
         if data.get('masked_by_shared_locks'):

@@ -22,7 +22,11 @@ class ViewClient:
         self.row = {'_id': '9', 'contextId': '123', 'contextType': 'Course', 'sortOrder': 'desc',
                     'sortOrderLocked': False, 'expanded': False, 'expandedLocked': False,
                     'permissions': {'read': True, 'update': False}, 'private': 'synthetic-private'}
-        self.own = {'sortOrder': None, 'expanded': None, 'showPinnedEntries': None}
+        self.own = {'sortOrder': 'inherit', 'expanded': None, 'showPinnedEntries': True,
+                    'preferredLanguage': None, 'summaryEnabled': False}
+        self.language_type = {'name': 'PreferredLanguageType', 'kind': 'ENUM',
+                              'enumValues': [{'name': name, 'isDeprecated': False} for name in ('EN', 'FR', 'PT_BR')]}
+        self.language_error = False
         self.ignored = set()
         self.written = False
         self.ack = self.after_patch = self.query_patch = None
@@ -39,6 +43,10 @@ class ViewClient:
 
     def graphql(self, document, variables, operation_name):
         self.calls.append((operation_name, document, copy.deepcopy(variables)))
+        if operation_name == 'CanvasDiscussionLanguages':
+            if self.language_error:
+                raise CanvasError('Native schema denied', status=403)
+            return {'__type': copy.deepcopy(self.language_type)}
         if operation_name == 'CanvasTopicViewSet':
             self.written = True
             for key, value in variables['input'].items():
@@ -55,9 +63,15 @@ class ViewClient:
             raise CanvasError('synthetic-private')
         row = copy.deepcopy(self.row)
         if 'participant {' in document:
-            row['participant'] = {key: row[key] if row[key + 'Locked'] or self.own[key] is None else self.own[key]
+            row['participant'] = {key: row[key] if row[key + 'Locked'] or self.own[key] in (None, 'inherit') else self.own[key]
                                   for key in ('sortOrder', 'expanded')}
             row['participant']['showPinnedEntries'] = self.own['showPinnedEntries']
+            for key in ('preferredLanguage', 'summaryEnabled'):
+                if key in document:
+                    value = self.own[key]
+                    if key == 'preferredLanguage' and value not in {item['name'] for item in self.language_type['enumValues']}:
+                        value = None
+                    row['participant'][key] = value
         if self.query_patch:
             row.update(copy.deepcopy(self.query_patch))
         if self.written and self.after_patch:
@@ -85,7 +99,7 @@ class TopicViewTests(unittest.TestCase):
             read(self.client, '123', '9')
         self.assertEqual(self.client.calls, [])
         result = read(self.client, '123', '9', acknowledge=True)
-        self.assertEqual(result['topic_view']['reported'], {'sort_order': 'desc', 'expanded': False, 'show_pinned_entries': None})
+        self.assertEqual(result['topic_view']['reported'], {'sort_order': 'desc', 'expanded': False, 'show_pinned_entries': True})
         self.assertTrue(result['native_query_may_initialize_participant'])
         self.assertEqual(command_help(parser(), 'topic-view')['safety'], 'Canvas queries (server-side effects possible)')
         self.assertNotIn('synthetic-private', json.dumps(result))
@@ -114,12 +128,12 @@ class TopicViewTests(unittest.TestCase):
         self.assertEqual(self.client.row, source)
         self.assertIn('Raw saved sort/expansion overrides are not verified', brief(result))
 
-    def test_explicit_inheritance_sends_null_not_default_and_does_not_claim_raw_override_verification(self):
+    def test_explicit_expansion_inheritance_sends_null_not_default_and_does_not_claim_raw_override_verification(self):
         self.client.own.update(sortOrder='asc', expanded=True, showPinnedEntries=True)
-        result = self.execute({'sort_order': None, 'expanded': None, 'show_pinned_entries': None})
-        self.assertEqual(self.mutations()[0][2]['input'], {'discussionTopicId': '9', 'sortOrder': None,
-                                                         'expanded': None, 'showPinnedEntries': None})
-        self.assertEqual(result['topic_view']['reported']['sort_order'], 'desc')
+        result = self.execute({'expanded': None})
+        self.assertEqual(self.mutations()[0][2]['input'], {'discussionTopicId': '9', 'expanded': None})
+        self.assertEqual(result['topic_view']['reported']['sort_order'], 'asc')
+        self.assertIsNone(self.client.own['expanded'])
         self.assertFalse(result['verification']['expanded']['stored_override_verified'])
 
     def test_locks_mask_valid_native_overrides_but_are_never_claimed_saved_or_visible(self):
@@ -143,8 +157,8 @@ class TopicViewTests(unittest.TestCase):
         self.assertEqual(len(self.mutations()), 1)
 
     def test_invalid_options_flags_or_context_fail_before_network(self):
-        for values in ({}, [], {'unsupported': True}, {'sort_order': 'inherit'}, {'sort_order': True},
-                       {'expanded': 1}, {'show_pinned_entries': 'false'}):
+        for values in ({}, [], {'unsupported': True}, {'sort_order': 'inherit'}, {'sort_order': True}, {'sort_order': None},
+                       {'expanded': 1}, {'show_pinned_entries': 'false'}, {'show_pinned_entries': None}, {'summary_enabled': None}):
             with self.subTest(values=values), self.assertRaises(CanvasError):
                 self.preview(values)
         for kwargs in ({'yes': True}, {'confirm': 'bad'}, {'acknowledge': False}, {'context_type': 'account'}):
@@ -239,7 +253,7 @@ class TopicViewTests(unittest.TestCase):
             self.client = ViewClient()
             self.client.ignored = {key}
             with self.subTest(key=key), self.assertRaisesRegex(CanvasError, 'Some changes may have applied'):
-                self.execute({'sort_order': 'asc', 'expanded': True, 'show_pinned_entries': True})
+                self.execute({'sort_order': 'asc', 'expanded': True, 'show_pinned_entries': False})
             self.assertEqual(len(self.mutations()), 1)
         self.client = ViewClient()
         self.client.after_patch = {'participant': {'sortOrder': 'asc', 'expanded': True, 'showPinnedEntries': False}}
@@ -260,11 +274,10 @@ class TopicViewTests(unittest.TestCase):
     @patch('canvas_cli.auth.connect')
     def test_parser_dispatch_negative_options_explicit_nulls_and_group_context(self, connect):
         connect.return_value = self.client
-        args = parser().parse_args(['topic-view-set', '123', '9', '--sort-order', 'inherit', '--inherit-expansion',
-                                   '--clear-pinned-entry-preference', '--acknowledge-participant-initialization'])
+        args = parser().parse_args(['topic-view-set', '123', '9', '--inherit-expansion',
+                                   '--acknowledge-participant-initialization'])
         result = run(args)
-        self.assertEqual(result['body']['variables']['input'], {'discussionTopicId': '9', 'sortOrder': None,
-                                                               'expanded': None, 'showPinnedEntries': None})
+        self.assertEqual(result['body']['variables']['input'], {'discussionTopicId': '9', 'expanded': None})
         args = parser().parse_args(['topic-view-set', '123', '9', '--no-expanded', '--no-show-pinned-entries',
                                    '--acknowledge-participant-initialization'])
         self.assertEqual(run(args)['requested'], {'expanded': False, 'show_pinned_entries': False})

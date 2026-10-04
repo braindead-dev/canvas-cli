@@ -22,9 +22,15 @@ def initialize(state, *, enabled=False):
     state.view_query_count = 0
     state.view_query_error = state.view_write_error = state.view_post_error = None
     state.view_query_patch = None
+    state.view_language_type = {'name': 'PreferredLanguageType', 'kind': 'ENUM',
+                               'enumValues': [{'name': name, 'isDeprecated': False} for name in ('EN', 'FR', 'PT_BR')]}
+    state.view_language_error = None
+    state.view_generation_requests = []
 
 
 def read(state, handler):
+    if _generation(state, handler):
+        return True
     if state.topic_view_enabled and handler.path == '/api/v1/users/self/profile':
         _send(handler, {'id': 8 if state.view_written and state.view_account_after else state.view_viewer,
                         'email': 'synthetic-private@example.edu'})
@@ -35,7 +41,7 @@ def read(state, handler):
 def _participant(state):
     if state.view_own is None:
         state.view_initialized = True
-        state.view_own = {'sortOrder': None, 'expanded': None, 'showPinnedEntries': None,
+        state.view_own = {'sortOrder': 'inherit', 'expanded': None, 'showPinnedEntries': True,
                           'read': False, 'subscribed': state.view_author == state.view_viewer,
                           'unreadCount': 2, 'hasUnreadPinnedEntry': True, 'summaryEnabled': False,
                           'preferredLanguage': None, 'plannerCacheCleared': True}
@@ -46,17 +52,41 @@ def _effective(state):
     own = _participant(state)
     values = {}
     for key in ('sortOrder', 'expanded'):
-        values[key] = state.view_topic[key] if state.view_topic[key + 'Locked'] or own[key] is None else own[key]
+        values[key] = state.view_topic[key] if state.view_topic[key + 'Locked'] or own[key] in (None, 'inherit') else own[key]
     values['showPinnedEntries'] = own['showPinnedEntries']
     return values
 
 
+def _generation(state, handler):
+    if state.topic_view_enabled and handler.path.endswith(('/summaries', '/translate')):
+        state.view_generation_requests.append(handler.path)
+        _send(handler, {'private': 'synthetic-private-no-service-access'}, 403)
+        return True
+    return False
+
+
 def execute(state, handler, body):
-    if not state.topic_view_enabled or handler.path != '/api/graphql':
+    if not state.topic_view_enabled:
+        return False
+    if _generation(state, handler):
+        return True
+    if handler.path != '/api/graphql':
         return False
     document, variables, name = body.get('query'), body.get('variables'), body.get('operationName')
     if handler.command != 'POST' or not isinstance(document, str) or not isinstance(variables, dict):
         _send(handler, {'errors': [{'message': 'synthetic-private-invalid-request'}]}, 400)
+        return True
+    if name == 'CanvasDiscussionLanguages':
+        if (variables != {} or document != 'query CanvasDiscussionLanguages { __type(name: "PreferredLanguageType") { '
+                'name kind enumValues(includeDeprecated: true) { name isDeprecated } } }'):
+            _send(handler, {'errors': [{'message': 'synthetic-private-unsupported-catalogue'}]})
+            return True
+        if state.view_language_error:
+            status = state.view_language_error if isinstance(state.view_language_error, int) else 200
+            _send(handler, {'data': {'__type': state.view_language_type},
+                            'errors': [{'message': 'synthetic-private-schema-denial'}]}, status)
+        else:
+            _send(handler, {'data': {'__type': state.view_language_type}})
         return True
     if name == 'CanvasTopicView':
         state.view_query_count += 1
@@ -75,6 +105,12 @@ def execute(state, handler, body):
         row = {key: copy.deepcopy(value) for key, value in state.view_topic.items() if key != 'private'}
         if 'participant {' in document:
             row['participant'] = _effective(state)
+            for key in ('preferredLanguage', 'summaryEnabled'):
+                if key in document:
+                    value = state.view_own[key]
+                    if key == 'preferredLanguage' and value not in {item['name'] for item in state.view_language_type['enumValues']}:
+                        value = None
+                    row['participant'][key] = value
         if state.view_query_patch:
             row.update(state.view_query_patch)
         if state.view_written and state.view_readback_patch:
@@ -86,11 +122,22 @@ def execute(state, handler, body):
         return True
     selected = variables.get('input')
     if (not isinstance(selected, dict) or selected.get('discussionTopicId') != '931' or
-            set(selected) - {'discussionTopicId', 'sortOrder', 'expanded', 'showPinnedEntries'} or
+            set(selected) - {'discussionTopicId', 'sortOrder', 'expanded', 'showPinnedEntries', 'preferredLanguage', 'summaryEnabled'} or
             'participant {' in document):
         _send(handler, {'errors': [{'message': 'synthetic-private-unsupported-mutation'}]})
         return True
     state.view_mutations.append(copy.deepcopy(selected))
+    # Native storage constraints, unlike the nullable GraphQL input declaration.
+    if any(key in selected and selected[key] is None for key in ('sortOrder', 'showPinnedEntries', 'summaryEnabled')):
+        _send(handler, {'errors': [{'message': 'synthetic-private-native-not-null-violation'}]})
+        return True
+    if ('sortOrder' in selected and selected['sortOrder'] not in ('asc', 'desc') or
+            any(key in selected and type(selected[key]) is not bool for key in ('showPinnedEntries', 'summaryEnabled')) or
+            'expanded' in selected and selected['expanded'] is not None and type(selected['expanded']) is not bool or
+            'preferredLanguage' in selected and selected['preferredLanguage'] is not None and
+            selected['preferredLanguage'] not in {item['name'] for item in state.view_language_type['enumValues']}):
+        _send(handler, {'errors': [{'message': 'synthetic-private-invalid-native-input'}]})
+        return True
     if not state.view_topic['permissions']['read'] or state.view_write_error:
         _send(handler, {'errors': [{'message': 'synthetic-private-permission-denial'}]}, state.view_write_error or 200)
         return True

@@ -692,6 +692,7 @@ def parser():
                           help='Omitted uses native default: moderator draft, other creator published')
     creation.add_argument('--acknowledge-shared-topic', action='store_true', help='Required even for a creation preview')
     _confirmation(creation)
+    sub.add_parser('topic-languages', help='Read native schema-accepted language preferences, not service-access proof')
     for name in ('topic-view', 'topic-view-set'):
         view = sub.add_parser(name, help='Read own effective discussion view; native queries can initialize your participant record' if name == 'topic-view' else
                               'Preview own discussion display preferences, not shared topic defaults')
@@ -700,14 +701,20 @@ def parser():
         view.add_argument('--context', choices=('course', 'group'), default='course')
         view.add_argument('--acknowledge-participant-initialization', action='store_true',
                           help='Required even for reads/previews; native query can create your own participant/default state')
+        if name == 'topic-view':
+            view.add_argument('--include-assist-preferences', action='store_true',
+                              help='Opt in to stored language/summary fields; does not query either service')
         if name == 'topic-view-set':
-            view.add_argument('--sort-order', choices=('asc', 'desc', 'inherit'), help='Shared locks can mask a saved override')
+            view.add_argument('--sort-order', choices=('asc', 'desc'), help='Shared locks can mask a saved override; no native inheritance reset')
             expansion = view.add_mutually_exclusive_group()
             expansion.add_argument('--expanded', action=argparse.BooleanOptionalAction, default=None)
             expansion.add_argument('--inherit-expansion', action='store_true', help='Request explicit null, not a copied shared default')
-            pinned = view.add_mutually_exclusive_group()
-            pinned.add_argument('--show-pinned-entries', action=argparse.BooleanOptionalAction, default=None)
-            pinned.add_argument('--clear-pinned-entry-preference', action='store_true')
+            view.add_argument('--show-pinned-entries', action=argparse.BooleanOptionalAction, default=None)
+            language = view.add_mutually_exclusive_group()
+            language.add_argument('--preferred-language', metavar='ENUM', help='Exact value from topic-languages, e.g. PT_BR; not a UI locale')
+            language.add_argument('--clear-preferred-language', action='store_true')
+            view.add_argument('--summary-enabled', action=argparse.BooleanOptionalAction, default=None,
+                              help='Stored own preference only; does not grant summary-generation access')
             _confirmation(view)
     from .topic_options import FIELDS
     configuration = sub.add_parser('topic-configure', help='Preview shared ungraded reply/like/view settings, not personal preferences')

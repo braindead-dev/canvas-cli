@@ -78,13 +78,12 @@ class TopicViewE2E(CanvasFixture):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(self.view_own['expanded'])
         self.assertTrue(self.view_own['showPinnedEntries'])
-        reset = ('topic-view-set', '131', '931', '--sort-order', 'inherit', '--inherit-expansion',
-                 '--clear-pinned-entry-preference', '--acknowledge-participant-initialization')
+        reset = ('topic-view-set', '131', '931', '--inherit-expansion', '--acknowledge-participant-initialization')
         preview = self.invoke(*reset)
         result = self.invoke(*reset, '--yes', '--confirm', json.loads(preview.stdout)['confirm'], '--format', 'brief')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.view_mutations[-1], {'discussionTopicId': '931', 'sortOrder': None, 'expanded': None, 'showPinnedEntries': None})
-        self.assertIn('sort_order=desc', result.stdout)
+        self.assertEqual(self.view_mutations[-1], {'discussionTopicId': '931', 'expanded': None})
+        self.assertIn('sort_order=asc', result.stdout)
         self.assertIn('Raw saved sort/expansion overrides are not verified', result.stdout)
 
     def test_locked_preferences_remain_masked_and_storage_unverified_even_when_native_save_is_ignored(self):
@@ -94,7 +93,7 @@ class TopicViewE2E(CanvasFixture):
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertEqual(data['masked_by_shared_locks'], ['sort_order', 'expanded'])
-        self.assertIsNone(self.view_own['sortOrder'])
+        self.assertEqual(self.view_own['sortOrder'], 'inherit')
         self.assertEqual(data['topic_view']['reported']['sort_order'], 'desc')
         self.assertFalse(data['verification']['sort_order']['stored_override_verified'])
         self.assertEqual(len(self.view_mutations), 1)
