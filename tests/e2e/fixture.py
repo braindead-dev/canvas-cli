@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from . import (
     appointments,
     channels,
+    feedback_comments,
     module_items,
     module_paths,
     page_authoring,
@@ -62,6 +63,7 @@ class CanvasFixture(unittest.TestCase):
         submission_drafts.initialize(cls)
         submission_comments.initialize(cls)
         submission_attention.initialize(cls)
+        feedback_comments.initialize(cls)
         cls.event = {'id': 61, 'context_code': 'user_7', 'title': 'Synthetic event',
                      'start_at': '2026-10-05T09:00:00-07:00', 'end_at': '2026-10-05T10:00:00-07:00',
                      'all_day': False, 'workflow_state': 'active', 'updated_at': '2026-10-01T12:00:00Z'}
@@ -202,6 +204,8 @@ class CanvasFixture(unittest.TestCase):
                     return
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
+                if feedback_comments.read(cls, self):
+                    return
                 if submission_attention.read(cls, self):
                     return
                 if submission_comments.read(cls, self):
@@ -708,6 +712,8 @@ class CanvasFixture(unittest.TestCase):
                 if self.headers.get('Authorization') != 'Bearer synthetic-token':
                     self.send_response(401); self.end_headers(); return
                 body = json.loads(raw) if raw else {}
+                if feedback_comments.execute(cls, self, body):
+                    return
                 if submission_attention.execute(cls, self, body):
                     return
                 if submission_comments.execute(cls, self, body):

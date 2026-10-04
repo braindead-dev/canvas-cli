@@ -2,7 +2,12 @@
 
 from .client import CanvasError
 from .group_content import _number
-from .own_submission import ASSIGNMENT_FIELDS, SUBMISSION_FIELDS, context
+from .own_submission import (
+    ASSIGNMENT_FIELDS,
+    SUBMISSION_FIELDS,
+    context,
+    with_read_state,
+)
 from .writes import account, check_flags, review
 
 SURFACES = ('overall', 'grade', 'comment', 'rubric', 'annotations', 'rubric-feedback')
@@ -40,18 +45,15 @@ def _inspect(client, course_id, assignment_id, preferences=()):
     _number(assignment_id)
     identity = account(client)
     data = client.graphql(_READ, {'assignmentId': assignment_id, 'userId': str(identity['user_id'])}, 'CanvasSubmissionAttention')
-    state = context(data, identity, course_id, assignment_id)
-    selected, read_state = {}, None
+    state = with_read_state(context(data, identity, course_id, assignment_id), data)
+    selected = {}
     if state['submission'] is not None:
-        read_state = data['submission'].get('readState')
-        if read_state not in ('read', 'unread'):
-            raise CanvasError('Canvas returned unavailable aggregate submission read state')
         for name in preferences:
             row, _ = client.request(_base(state) + '/' + _PREFERENCES[name] + '/read')
             selected[name] = _boolean(row)
     if account(client) != identity:
         raise CanvasError('Signed-in account changed during feedback-indicator inspection; no mutation was sent')
-    return {**state, 'aggregate_read_state': read_state, 'preference_read_markers': selected,
+    return {**state, 'preference_read_markers': selected,
             'attention_status': 'unknown_no_accessible_submission' if state['submission'] is None else 'reported', 'note': _NOTE}
 
 

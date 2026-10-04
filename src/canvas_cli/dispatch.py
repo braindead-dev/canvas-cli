@@ -9,6 +9,14 @@ from .text import read_utf8
 
 
 def execute(client, args):
+    if args.command in ('feedback-comments', 'feedback-comment-mark-read'):
+        from . import feedback_comments
+        if args.command == 'feedback-comments':
+            return feedback_comments.read(client, args.course_id, args.assignment_id, attempt=args.attempt,
+                                          all_attempts=args.all_attempts, max_pages=args.max_pages)
+        return feedback_comments.mark_read(client, args.course_id, args.assignment_id, args.comment_id,
+                                           attempt=args.attempt, max_pages=args.max_pages,
+                                           acknowledge=args.acknowledge_feedback_indicators, yes=args.yes, confirm=args.confirm)
     if args.command in ('submission-attention', 'submission-mark-read', 'submission-mark-unread'):
         from . import submission_attention
         if args.command == 'submission-attention':

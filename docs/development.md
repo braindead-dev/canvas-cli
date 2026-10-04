@@ -30,6 +30,7 @@ src/canvas_cli/
   text.py         bounded explicit UTF-8 file inputs
   wiki_content.py shared native page metadata and private content fingerprints
   own_submission.py shared exact own GraphQL submission/assignment metadata checks
+  comment_inventory.py shared bounded own-submission comment pagination, with explicit author/feedback projections
   download.py     credential-free binary transport
   <domain>.py     resource-specific validation/projection/behavior
 tests/

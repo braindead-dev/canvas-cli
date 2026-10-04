@@ -36,6 +36,13 @@ def brief(data):
 
 
 def _brief(data):
+    if isinstance(data, dict) and data.get('feedback_comment_indicators') and not data.get('dry_run'):
+        lines = [f"Feedback comment indicators: course {data['course_id']}, assignment {data['assignment_id']}",
+                 data['inventory_status'], 'Aggregate: ' + str(data['aggregate_read_state'])]
+        lines.extend(f"{row['id']}: attempt {row['attempt']}, " + ('read' if row['effective_read'] else 'unread') for row in data['comments'])
+        if data.get('mutation_acknowledged'):
+            lines.append(f"Comment {data['selected_comment_id']} acknowledged; effective readback verified, viewed-row storage unverified.")
+        return '\n'.join([*lines, data['note']])
     if isinstance(data, dict) and 'attention_status' in data and not data.get('dry_run'):
         lines = [f"Own feedback indicators: course {data['course_id']}, assignment {data['assignment_id']}",
                  data['attention_status'], 'Aggregate: ' + str(data['aggregate_read_state'])]

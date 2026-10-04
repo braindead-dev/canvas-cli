@@ -887,6 +887,20 @@ def parser():
                 s.add_argument('--surface', choices=SURFACES, default='overall', help='Native overall/item/preference markers have distinct effects and readback limits')
             s.add_argument('--acknowledge-feedback-indicators', action='store_true', help='Required for preview; acknowledges native indicators/counters, not proof of content viewing or work completion')
             _confirmation(s)
+    for name in ('feedback-comments', 'feedback-comment-mark-read'):
+        s = sub.add_parser(name, help='Inspect visible published comment read indicators on your own submission without bodies' if name == 'feedback-comments'
+                           else 'Preview marking one exact visible published feedback comment read, not every comment')
+        s.add_argument('course_id', type=identifier)
+        s.add_argument('assignment_id', type=identifier)
+        if name == 'feedback-comment-mark-read':
+            s.add_argument('comment_id', type=identifier)
+        selection = s.add_mutually_exclusive_group()
+        selection.add_argument('--attempt', type=int, help='Choose a reported nonnegative attempt; native attempts 0 and 1 share a bucket')
+        if name == 'feedback-comments':
+            selection.add_argument('--all-attempts', action='store_true', help='Query each reported attempt bucket with bounded pagination')
+        else:
+            s.add_argument('--acknowledge-feedback-indicators', action='store_true', help='Required for preview; one viewed-comment indicator is not feedback comprehension or coursework completion')
+            _confirmation(s)
     schema_command = sub.add_parser('schema', help='Offline machine-readable argument and safety catalog from the actual parser')
     schema_command.add_argument('--search', help='Find command schemas by name, description or safety category')
     help_command = sub.add_parser('help', help='Search commands or show exact options without authenticating')

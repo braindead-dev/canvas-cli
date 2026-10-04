@@ -42,6 +42,23 @@ Native counters, activity and planner caches can change. Confirmation is not an 
 
 Denied, malformed or unavailable responses and changed context after a write produce uncertainty: the operation may already have applied. Check Canvas before repeating. There is no bulk acknowledgement, automatic retry or rollback, and no coursework completion is requested.
 
+## One feedback comment
+
+```sh
+canvas feedback-comments 123 456 --format brief
+canvas feedback-comments 123 456 --all-attempts
+canvas feedback-comment-mark-read 123 456 987 --acknowledge-feedback-indicators
+canvas feedback-comment-mark-read 123 456 987 --attempt 1 --acknowledge-feedback-indicators
+```
+
+These inspect visible **published** comments on your own existing submission, regardless of author, without requesting bodies or author identities. This is different from `submission-comments`, which selects your authored comments and drafts. Draft/provisional comments are excluded. The default is the current attempt; all-attempt inspection uses separate filtered connections within `--max-pages`, preserving the native shared 0/1 bucket.
+
+Marking requires an exact reported comment ID and a fresh account/policy/attempt/inventory/indicator-bound preview. The native mutation receives exactly one ID, followed by a separate fully paginated own readback. It does not mark every comment, clear participation-item indicators or start an assessment. No unread inverse is provided.
+
+Effective comment read can be true because the overall submission is read, even without an independently verified viewed-comment row. Results keep that distinction explicit, including for already-read comments. Other observed inventory/indicator changes are reported without exclusive attribution to the write. Hidden or truncated inventories are not empty feedback, and missing own submissions are not initialized. Uncertain outcomes are never automatically retried.
+
 ## Native contracts
 
 [Submission API](https://developerdocs.instructure.com/services/canvas/resources/submissions), [indicator routes and acknowledgements](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/controllers/submissions_api_controller.rb), [aggregate/default-item semantics](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/models/content_participation.rb), [submission callbacks](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/models/submission.rb).
+
+[Selected-comment mutation](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/mutations/mark_submission_comments_read.rb), [effective comment-read resolver](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/types/submission_comment_type.rb), [native attempt/author filtering](https://github.com/instructure/canvas-lms/blob/1c9f0bb8013ed69c4f2efe11fd483025469b7e6c/app/graphql/interfaces/submission_interface.rb).

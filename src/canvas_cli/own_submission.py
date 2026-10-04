@@ -41,3 +41,10 @@ def context(data, identity, course_id, assignment_id):
                       'submitted_at': row['submittedAt']}
     return {**identity, 'course_id': course_id, 'assignment_id': assignment_id,
             'assignment_policy': policy, 'submission': submission}
+
+
+def with_read_state(state, data):
+    value = None if state['submission'] is None else data['submission'].get('readState')
+    if state['submission'] is not None and value not in ('read', 'unread'):
+        raise CanvasError('Canvas returned unavailable aggregate submission read state')
+    return {**state, 'aggregate_read_state': value}
