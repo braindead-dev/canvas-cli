@@ -155,6 +155,9 @@ def execute(client, args):
         source = getattr(args, 'message_file', None)
         options = {'context_type': args.context, 'acknowledge_shared': args.acknowledge_shared_announcement,
                    'max_pages': args.max_pages, 'yes': args.yes, 'confirm': args.confirm}
+        if args.command in ('announcement-create', 'announcement-sections'):
+            options.update(sections={'specific_sections': 'all' if args.all_sections else [int(value) for value in args.section_id]}
+                           if args.all_sections or args.section_id else None, acknowledge_audience=args.acknowledge_audience_change)
         if args.command == 'announcement-create':
             return create(client, args.context_id, title=args.title, message=read_utf8(source, label='Announcement message'),
                           post_at=args.post_at, comments=args.comments, acknowledge_broadcast=args.acknowledge_broadcast, **options)
@@ -169,8 +172,6 @@ def execute(client, args):
                           acknowledge_broadcast=args.acknowledge_broadcast, **options)
         if args.command == 'announcement-sections':
             return change(client, args.context_id, args.announcement_id,
-                          sections={'specific_sections': 'all' if args.all_sections else [int(value) for value in args.section_id]},
-                          acknowledge_audience=args.acknowledge_audience_change,
                           acknowledge_broadcast=args.acknowledge_broadcast, **options)
         return change(client, args.context_id, args.announcement_id, title=getattr(args, 'title', None),
                       message=read_utf8(source, label='Announcement message') if source else None,

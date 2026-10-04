@@ -91,49 +91,87 @@ def _creation_rights(client, item, context_type):
     return route, context
 
 
+def _confirm(client, preview, yes, confirm, sections):
+    if sections is not None:
+        # Reject stale confirmation before catching transport errors: native section
+        # associations may change even when the endpoint ultimately returns an error.
+        review(preview, yes, confirm)
+    try:
+        return confirmed(client, preview, yes, confirm)
+    except CanvasError:
+        if sections is not None and yes:
+            raise CanvasError(UNCERTAIN) from None
+        raise
+
+
+def _section_result(after, sections):
+    return {'specific_sections': sections['specific_sections'], 'section_ids': after['section_ids'],
+            'is_section_specific': after['is_section_specific'], 'verified': True,
+            'audience_change_acknowledged': True, 'effective_participant_visibility_verified': False,
+            'participant_record_effects_verified': False}
+
+
 def create(client, item, *, title, message, context_type='course', post_at=None, comments=False,
-           acknowledge_shared=False, acknowledge_broadcast=False, max_pages=100, yes=False, confirm=None):
+           acknowledge_shared=False, acknowledge_broadcast=False, sections=None, acknowledge_audience=False,
+           max_pages=100, yes=False, confirm=None):
     check_flags(yes, confirm)
     _local(item, context_type, max_pages, acknowledge_shared)
     if acknowledge_broadcast is not True or type(comments) is not bool or title is None or message is None:
         raise CanvasError('Announcement creation needs a title, message, boolean comment choice and --acknowledge-broadcast')
+    if type(acknowledge_audience) is not bool or acknowledge_audience != (sections is not None):
+        raise CanvasError('Selecting initial announcement sections needs --acknowledge-audience-change, including previews; not for the default audience')
+    if sections is not None:
+        sections = topic_sections.validate(sections, context_type)
     body = {**_changes(title, message), 'is_announcement': True, 'lock_comment': not comments}
+    if sections is not None:
+        body.update(sections)
     posting = _posting(post_at, context_type)
     if posting is not None:
         body['delayed_post_at'] = posting
     identity = account(client)
     route, context = _creation_rights(client, item, context_type)
+    section_inventory = topic_sections.inventory(client, route, item, max_pages) if sections is not None else None
+    if sections is not None:
+        topic_sections.check_selection(sections, section_inventory)
     inventory = _inventory(client, route, item, context_type, max_pages, announcement=True)
     if (_creation_rights(client, item, context_type) != (route, context) or
             _inventory(client, route, item, context_type, max_pages, announcement=True) != inventory or
             account(client) != identity):
         raise CanvasError('Announcement context, permission, inventory or account changed during preflight')
+    if sections is not None and topic_sections.inventory(client, route, item, max_pages) != section_inventory:
+        raise CanvasError('Active course sections changed during creation preflight; review a fresh preview')
     _posting(posting, context_type)
     preview = {**identity, 'context_type': context_type, f'{context_type}_id': int(item), 'context': context,
                'permissions': {'create_announcement': True}, 'inventory_digest': digest(inventory),
                'acknowledge_shared_announcement': True, 'acknowledge_broadcast': True,
                'posting_choice': 'scheduled' if posting else 'post_now',
                'method': 'POST', 'route': route + '/discussion_topics?no_verifiers=true', 'body': body, 'warning': WARNING}
-    response = confirmed(client, preview, yes, confirm)
+    if sections is not None:
+        preview.update(acknowledge_audience_change=True, section_inventory_digest=digest(section_inventory),
+                       active_section_ids=[row['id'] for row in section_inventory], warning=WARNING + ' ' + topic_sections.WARNING)
+    response = _confirm(client, preview, yes, confirm, sections)
     if not yes:
         return response
     try:
         identifier = _id(response)
         if identifier in {row['id'] for row in inventory}:
             raise CanvasError('Canvas acknowledged an existing announcement')
-        after = _metadata(response, item, str(identifier), context_type)
+        after = _metadata(response, item, str(identifier), context_type, require_audience=sections is not None)
         if (after['author_id'] != identity['user_id'] or after['locked'] is not (not comments) or
                 not matches(after, 'delayed_post_at', posting)):
             raise CanvasError('Canvas did not store the requested announcement author/comment state/posting instant')
         if (_creation_rights(client, item, context_type) != (route, context) or account(client) != identity or
-                _current(client, route, item, str(identifier), context_type) != after):
+                _current(client, route, item, str(identifier), context_type, require_audience=sections is not None) != after):
             raise CanvasError('Announcement acknowledgement and independent readback do not agree')
+        if sections is not None and (not topic_sections.matches(after, sections) or
+                                    topic_sections.inventory(client, route, item, max_pages) != section_inventory):
+            raise CanvasError('Initial announcement section filter or active course section inventory did not agree')
         remaining = _inventory(client, route, item, context_type, max_pages, announcement=True)
         if _listed(after) not in remaining or account(client) != identity:
             raise CanvasError('The new announcement was not verified in the complete accessible inventory')
     except CanvasError:
         raise CanvasError(UNCERTAIN) from None
-    return {'created_announcement': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{identifier}'},
+    result = {'created_announcement': {**after, 'html_url': client.host + f'/{context_type}s/{item}/discussion_topics/{identifier}'},
             'context_type': context_type, f'{context_type}_id': int(item), 'new_id_verified': True,
             'acknowledgement_matches_readback': True,
             'stored_text_matches_request': {key: _matches(after, key, body[key]) for key in ('title', 'message')},
@@ -144,6 +182,9 @@ def create(client, item, *, title, message, context_type='course', post_at=None,
                     'topic/inventory readback verified with stable identity/context/creation permission. '
                     'Text normalization and other inventory changes are labeled. Published is not delivery or '
                     'availability proof; no private prompt, peer replies, retry or cleanup.'}
+    if sections is not None:
+        result.update(announcement_section_filter=_section_result(after, sections), note=result['note'] + ' ' + topic_sections.WARNING)
+    return result
 
 
 def change(client, item, identifier, *, context_type='course', title=None, message=None, delete=False,
@@ -229,15 +270,7 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
     if sections is not None:
         preview.update(acknowledge_audience_change=True, section_inventory_digest=digest(section_inventory),
                        active_section_ids=[row['id'] for row in section_inventory], warning=WARNING + ' ' + topic_sections.WARNING)
-        # Reject stale confirmation before catching transport errors: native section
-        # associations may change even when the endpoint ultimately returns an error.
-        review(preview, yes, confirm)
-    try:
-        response = confirmed(client, preview, yes, confirm)
-    except CanvasError:
-        if sections is not None and yes:
-            raise CanvasError(UNCERTAIN) from None
-        raise
+    response = _confirm(client, preview, yes, confirm, sections)
     if not yes:
         return response
     try:
@@ -313,9 +346,5 @@ def change(client, item, identifier, *, context_type='course', title=None, messa
             'participant_visibility_verified': False, 'participant_reply_access_verified': False,
             'future_execution_verified': False}, note=result['note'] + ' ' + DATES_WARNING)
     if sections is not None:
-        result.update(announcement_section_filter={
-            'specific_sections': sections['specific_sections'], 'section_ids': after['section_ids'],
-            'is_section_specific': after['is_section_specific'], 'verified': True,
-            'audience_change_acknowledged': True, 'effective_participant_visibility_verified': False,
-            'participant_record_effects_verified': False}, note=result['note'] + ' ' + topic_sections.WARNING)
+        result.update(announcement_section_filter=_section_result(after, sections), note=result['note'] + ' ' + topic_sections.WARNING)
     return result

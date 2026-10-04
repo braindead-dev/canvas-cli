@@ -76,6 +76,11 @@ class AnnouncementClient(TopicClient):
                 row['context_type'] = 'Group' if '/groups/' in url.path else 'Course'
                 row.update(author={'id': self.identity}, attachments=None, pinned=False,
                            position=len(self.topics) + 1, delayed_post_at=None, title=body['title'], message=body['message'])
+                if 'specific_sections' in body and not apply_section_filter(
+                        row, body['specific_sections'], self.sections, visible=self.section_visible_ids,
+                        fail=self.sections_error_after_apply,
+                        ignore=self.ignore or self.ignore_sections or 'specific_sections' in self.ignored_fields):
+                    raise CanvasError('synthetic-private-native-initial-section-denial', status=400)
                 self.topics[identifier] = row
             else:
                 identifier = int(url.path.rsplit('/', 1)[1])

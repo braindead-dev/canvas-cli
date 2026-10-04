@@ -10,6 +10,7 @@ These commands change a course/group announcement, not your reply or a private n
 canvas announcement-create 123 --title 'Team update' --message-file announcement.txt --acknowledge-shared-announcement --acknowledge-broadcast
 canvas announcement-create 123 --context group --title 'Team update' --message-file announcement.txt --acknowledge-shared-announcement --acknowledge-broadcast
 canvas announcement-create 123 --title 'Scheduled update' --message-file announcement.txt --post-at '2099-10-01T09:00:00-07:00' --acknowledge-shared-announcement --acknowledge-broadcast
+canvas announcement-create 123 --title 'Section update' --message-file announcement.txt --section-id 33 --section-id 34 --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-audience-change
 ```
 
 Both acknowledgements are required even for preview. Title and UTF-8 plain-text message are required; the message is escaped to HTML. Creation checks the exact context's dynamic `create_announcement` permission with `include[]=permissions`, not a guessed role or permission to create discussions. Without it, the CLI refuses rather than risk a native fallback to an ordinary discussion.
@@ -18,7 +19,9 @@ Comments default to closed. `--comments` requests open comments; `--no-comments`
 
 `--post-at` is course-only. Supply an offset-aware, whole-second future timestamp; it is normalized to UTC and must still be at least 60 seconds ahead after preflight. Stored scheduling is not draft privacy, proof of immediate visibility, notification delivery or future execution. No scheduling poll or automatic retry runs.
 
-Account, exact context/creation right, complete accessible announcement inventory, content, comment choice and date bind confirmation. One POST must return a new announcement ID and own author, then match independent announcement and inventory readback. Stored HTML normalization is labeled. The CLI does not inspect peer comments or explicitly change attachments, audience, assignments or creator preferences.
+Optionally set the initial course audience with repeatable `--section-id` or explicit `--all-sections`. Either choice requires `--acknowledge-audience-change`, even for preview, and the complete active section catalog must be readable. Omission preserves native default targeting and does not require a catalog lookup or extra audience consent. Group contexts reject both selectors. Posting/comment choices may be combined with initial targeting in one POST. Section-list access does not grant authoring authority; native creation and section-visibility checks remain authoritative.
+
+Account, exact context/creation right, complete accessible announcement inventory, content, comment choice/date and any selected section catalog bind confirmation. One POST must return a new announcement ID and own author, then match independent announcement/inventory readback and any exact selected filter. Catalog names/private metadata are fingerprinted, not printed. A used creation preview cannot be reused after the inventory changes; the CLI does not retry or delete an uncertain creation. Stored state is not proof of parameter acceptance, effective participant visibility, participant-record effects or delivery. Stored HTML normalization is labeled. No peer comments, participant overrides, assignments, explicit attachments or creator-preference changes are requested.
 
 ## Edit
 
@@ -81,7 +84,7 @@ canvas announcement-sections 123 456 --section-id 33 --section-id 34 --acknowled
 canvas announcement-sections 123 456 --all-sections --acknowledge-shared-announcement --acknowledge-broadcast --acknowledge-audience-change
 ```
 
-Replace the section filter on an existing course announcement. All three acknowledgements are required even for preview; audience access to the announcement and existing comments can change. This command does not accept group contexts, text/comment/date edits, deletion or creation-time targeting.
+Replace the section filter on an existing course announcement. All three acknowledgements are required even for preview; audience access to the announcement and existing comments can change. This command does not accept group contexts, text/comment/date edits or deletion. Use `announcement-create` for initial targeting.
 
 Repeat unique active course section IDs, or restore `--all-sections`. The complete paginated section catalog is checked without roster reads. Exact announcement update permission is required, not creation or modern Assign To permission; native old/new section visibility checks remain authoritative. Announcements report null ungraded participant overrides, not a discussion override list. All sections disables this filter, not every other visibility restriction.
 
@@ -93,7 +96,7 @@ Section associations may persist before the endpoint reports an authorization or
 
 ## Boundaries
 
-Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Creation-time section targeting, attachments, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
+Only readable, non-anonymous course/group announcements without assignment/root/child/group-set associations are supported. Attachments, podcasts and bulk operations remain separate work. Native permissions, locks and blueprint restrictions stay authoritative. Preflight is not an atomic lock; concurrent edits can be overwritten.
 
 Validation covers unit tests and subprocess/local HTTPS fixtures with synthetic records. No real announcement mutation has been live-tested. Delivery, future jobs, hidden inventory effects and remote preference storage remain unverified.
 

@@ -748,11 +748,11 @@ def parser():
                 selection.add_argument(flag, metavar='TIMESTAMP', help=f'Course-only {field} whole-second instant with Z or explicit offset; past dates permitted')
                 selection.add_argument(clearing, action='store_true')
             announcement.add_argument('--acknowledge-availability-change', action='store_true', help='Required including previews; dates can activate delayed announcements or reopen/close comments')
-        if name == 'announcement-sections':
-            selection = announcement.add_mutually_exclusive_group(required=True)
+        if name in ('announcement-create', 'announcement-sections'):
+            selection = announcement.add_mutually_exclusive_group(required=name == 'announcement-sections')
             selection.add_argument('--section-id', type=identifier, action='append', help='Active course section; repeatable')
             selection.add_argument('--all-sections', action='store_true', help='Disable this filter, not other visibility rules')
-            announcement.add_argument('--acknowledge-audience-change', action='store_true', help='Required including previews; access to the announcement and existing comments can change')
+            announcement.add_argument('--acknowledge-audience-change', action='store_true', help='Required when selecting sections, including previews; changes the shared course audience')
         _confirmation(announcement)
     sub.add_parser('topic-languages', help='Read native schema-accepted language preferences, not service-access proof')
     for name in ('topic-view', 'topic-view-set'):
