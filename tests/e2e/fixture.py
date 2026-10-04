@@ -109,6 +109,7 @@ class CanvasFixture(unittest.TestCase):
         cls.profile_fail_readback = False
         cls.profile_written = False
         cls.sync_switch_viewer = False
+        cls.planning_assignments = None
         cls.dashboard_positions = {'course_101': 1, 'course_102': 2, 'group_12': '9'}
         channels.initialize(cls)
         cls.raw_json_response = b'{"id":1}'
@@ -345,8 +346,9 @@ class CanvasFixture(unittest.TestCase):
                         self.send_header('Link', f'<{self.path}&page=2>; rel="next"')
                         data = []
                 elif self.path == '/api/v1/courses/101/assignments?per_page=100':
-                    data = [{'id': 88, 'name': 'Synthetic paper',
-                             'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()}]
+                    data = (cls.planning_assignments if cls.planning_assignments is not None else
+                            [{'id': 88, 'name': 'Synthetic paper',
+                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()}])
                 elif self.path.startswith('/api/v1/courses/101/students/submissions?'):
                     query = parse_qs(urlsplit(self.path).query)
                     data = cls.student_submissions
@@ -363,12 +365,13 @@ class CanvasFixture(unittest.TestCase):
                     data = [{'id': 88, 'name': 'Synthetic paper',
                              'due_at': '2026-10-01T00:00:00Z'}]
                 elif self.path == '/api/v1/courses/101/assignments?include%5B%5D=submission&per_page=100':
-                    data = [{'id': 88, 'name': 'Synthetic paper',
-                             'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
-                             'submission': {'workflow_state': 'submitted', 'submitted_at': '2026-09-01T12:00:00Z'}},
-                            {'id': 89, 'name': 'Unfinished project',
-                             'due_at': (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
-                             'submission': {'workflow_state': 'unsubmitted'}}]
+                    data = (cls.planning_assignments if cls.planning_assignments is not None else
+                            [{'id': 88, 'name': 'Synthetic paper',
+                              'due_at': (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
+                              'submission': {'workflow_state': 'submitted', 'submitted_at': '2026-09-01T12:00:00Z'}},
+                             {'id': 89, 'name': 'Unfinished project',
+                              'due_at': (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
+                              'submission': {'workflow_state': 'unsubmitted'}}])
                 elif self.path == '/api/v1/courses/101?include[]=syllabus_body':
                     if cls.sync_switch_viewer:
                         cls.own_profile = {**cls.own_profile, 'id': 8}

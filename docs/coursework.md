@@ -21,6 +21,8 @@ canvas news --days 30 --format brief
 
 `work` includes dated/undated items by default; `--days` selects upcoming dated work. Agenda separates undated items and handles daylight saving per deadline.
 
+Invalid or timezone-free due dates remain undated. A valid instant outside the selected time zone's display range fails with an instruction to use UTC instead of shifting or hiding that deadline. Availability labels describe only reported date bounds, not permission to submit. Invalid or contradictory bounds are `unknown_invalid_dates`; `within_window` requires two valid bounds containing the current instant. Course/module restrictions can still prevent access.
+
 Missing uses native submittable/current-grading-period filters. Listed locked work may not accept a late submission. Optional planner markers are checkboxes, not submissions.
 
 Multi-course views report unavailable courses. Auth, rate-limit, network, malformed-response, and pagination failures are errors, not empty classes. These views cannot infer attendance, recurring meetings, reading, or external-tool requirements.

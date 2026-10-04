@@ -3,10 +3,97 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 from canvas_cli.client import CanvasError
+from canvas_cli.formatting import brief
 from canvas_cli.planning import agenda, deadlines, work
 
 
 class PlanningTests(unittest.TestCase):
+    def agenda_for(self, assignments, time_zone='UTC'):
+        client = Mock()
+        client.list.side_effect = [[{'id': 8}], assignments]
+        result = agenda(client, 100, now=datetime(2030, 10, 3, tzinfo=timezone.utc),
+                        time_zone=time_zone, include_undated=True)
+        self.assertEqual(client.list.call_count, 2)
+        return result
+
+    def test_agenda_invalid_availability_dates_are_unknown_not_within_window(self):
+        invalid = ('invalid', '', '2030-10-02T00:00:00', 1, True, {}, [],
+                   '0001-01-01T00:00:00+01:00', '9999-12-31T23:59:59-01:00')
+        for field in ('unlock_at', 'lock_at'):
+            for value in invalid:
+                with self.subTest(field=field, value=value):
+                    assignment = {'id': 1, 'due_at': '2030-10-05T12:00:00Z',
+                                  'unlock_at': '2030-10-01T00:00:00Z',
+                                  'lock_at': '2030-10-06T00:00:00Z', field: value}
+                    result = self.agenda_for([assignment])
+                    item = result['items'][0]
+                    self.assertEqual(item['availability'], 'unknown_invalid_dates')
+                    self.assertEqual(item[field], value)
+                    self.assertIn('unknown_invalid_dates', brief(result))
+
+    def test_agenda_contradictory_bounds_are_unknown_even_when_both_parse(self):
+        result = self.agenda_for([{'id': 1, 'due_at': '2030-10-05T12:00:00Z',
+                                  'unlock_at': '2030-10-06T00:00:00Z',
+                                  'lock_at': '2030-10-01T00:00:00Z'}])
+        self.assertEqual(result['items'][0]['availability'], 'unknown_invalid_dates')
+
+    def test_agenda_valid_bounds_use_instants_and_partial_bounds_do_not_claim_open(self):
+        cases = [({}, 'not_specified'),
+                 ({'unlock_at': None, 'lock_at': None}, 'not_specified'),
+                 ({'unlock_at': '2030-10-01T00:00:00Z'}, 'not_specified'),
+                 ({'lock_at': '2030-10-06T00:00:00Z'}, 'not_specified'),
+                 ({'unlock_at': '2030-10-04T00:00:00Z'}, 'not_yet_open'),
+                 ({'lock_at': '2030-10-02T00:00:00Z'}, 'closed'),
+                 ({'unlock_at': '2030-10-03T01:00:00+02:00',
+                   'lock_at': '2030-10-02T23:00:00-02:00'}, 'within_window'),
+                 ({'unlock_at': '2030-10-03T00:00:00Z',
+                   'lock_at': '2030-10-03T00:00:00Z'}, 'within_window')]
+        for bounds, expected in cases:
+            with self.subTest(bounds=bounds):
+                result = self.agenda_for([{'id': 1, 'due_at': '2030-10-05T12:00:00Z', **bounds}])
+                self.assertEqual(result['items'][0]['availability'], expected)
+
+    def test_agenda_invalid_due_dates_stay_undated_not_completion_claims(self):
+        invalid = (None, '', 'invalid', '2030-10-05T12:00:00', 1, True, {}, [],
+                   '0001-01-01T00:00:00+01:00', '9999-12-31T23:59:59-01:00')
+        result = self.agenda_for([{'id': index + 1, 'due_at': value}
+                                  for index, value in enumerate(invalid)])
+        self.assertEqual(result['items'], [])
+        self.assertEqual(result['undated_count'], len(invalid))
+        self.assertEqual({item['assignment_id']: item['due_at'] for item in result['undated']},
+                         dict(enumerate(invalid, start=1)))
+        self.assertTrue(all(item['status'] == 'unknown' for item in result['undated']))
+
+    def test_agenda_out_of_range_display_fails_without_shifting_or_hiding_a_known_instant(self):
+        assignment = {'id': 1, 'due_at': '0001-01-01T00:00:00Z'}
+        with self.assertRaisesRegex(CanvasError, 'selected time zone display range; use UTC'):
+            self.agenda_for([assignment], time_zone='America/Los_Angeles')
+        result = self.agenda_for([assignment])
+        self.assertEqual(result['items'][0]['due_local'], '0001-01-01T00:00:00+00:00')
+        self.assertEqual(result['undated_count'], 0)
+
+    def test_deadlines_skip_invalid_due_dates_without_crashing_or_inventing_instants(self):
+        valid = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        invalid = (None, '', 'invalid', '2030-10-05T12:00:00', 1, True, {}, [],
+                   '0001-01-01T00:00:00+01:00', '9999-12-31T23:59:59-01:00')
+        client = Mock()
+        client.list.return_value = [{'id': index + 1, 'due_at': value}
+                                    for index, value in enumerate((*invalid, valid))]
+        result = deadlines(client, 100, course_id='8')
+        self.assertEqual([item['due_at'] for item in result['assignments']], [valid])
+        client.list.assert_called_once_with('/api/v1/courses/8/assignments?per_page=100', 100)
+
+    def test_work_keeps_invalid_due_dates_unfiltered_but_excludes_them_from_date_windows(self):
+        invalid = (None, '', 'invalid', '2030-10-05T12:00:00', 1, True, {}, [],
+                   '0001-01-01T00:00:00+01:00', '9999-12-31T23:59:59-01:00')
+        client = Mock()
+        client.list.return_value = [{'id': index + 1, 'due_at': value}
+                                    for index, value in enumerate(invalid)]
+        result = work(client, 100, course_id='8')
+        self.assertEqual({item['assignment_id']: item['due_at'] for item in result['assignments']},
+                         dict(enumerate(invalid, start=1)))
+        self.assertEqual(work(client, 100, course_id='8', days=14)['assignments'], [])
+
     def test_sorts_by_instant_not_lexical_timezone(self):
         soon = datetime.now(timezone.utc) + timedelta(days=1)
         client = Mock()

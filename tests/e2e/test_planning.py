@@ -1,11 +1,71 @@
 """Installed-CLI HTTPS regression tests for planning workflows."""
 
 import json
+from datetime import datetime, timedelta, timezone
 
 from .fixture import CanvasFixture
 
 
 class PlanningE2E(CanvasFixture):
+    def test_agenda_malformed_and_contradictory_dates_are_unknown_over_tls_in_json_and_brief(self):
+        before = len(self.calls)
+        now = datetime.now(timezone.utc)
+        due = (now + timedelta(days=2)).isoformat()
+        rows = [{'id': 1, 'name': 'Synthetic invalid bounds', 'due_at': due,
+                 'unlock_at': 'invalid', 'lock_at': 'invalid'},
+                {'id': 2, 'name': 'Synthetic contradictory bounds', 'due_at': due,
+                 'unlock_at': (now + timedelta(days=3)).isoformat(),
+                 'lock_at': (now - timedelta(days=1)).isoformat()},
+                {'id': 3, 'name': 'Synthetic valid bounds', 'due_at': due,
+                 'unlock_at': (now - timedelta(days=1)).isoformat(),
+                 'lock_at': (now + timedelta(days=3)).isoformat()},
+                {'id': 4, 'name': 'Synthetic completed', 'due_at': due,
+                 'submission': {'workflow_state': 'graded'}}]
+        type(self).planning_assignments = rows
+        try:
+            result = self.invoke('agenda', '--course', '101', '--timezone', 'UTC')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            items = json.loads(result.stdout)['items']
+            self.assertEqual([item['assignment_id'] for item in items], [1, 2, 3])
+            self.assertEqual([item['availability'] for item in items],
+                             ['unknown_invalid_dates', 'unknown_invalid_dates', 'within_window'])
+            self.assertTrue(all(item['status'] == 'unknown' for item in items))
+            self.assertEqual(items[0]['unlock_at'], 'invalid')
+            result = self.invoke('agenda', '--course', '101', '--timezone', 'UTC', '--format', 'brief')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.count('unknown_invalid_dates'), 2)
+            self.assertNotIn('Synthetic completed', result.stdout)
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+            self.assertFalse(any('/assignments/' in route for _, route in self.calls[before:]))
+        finally:
+            type(self).planning_assignments = None
+
+    def test_invalid_due_dates_are_preserved_as_unknown_but_never_upcoming_deadlines_over_tls(self):
+        before = len(self.calls)
+        rows = [{'id': 1, 'name': 'Synthetic invalid date', 'due_at': {}},
+                {'id': 2, 'name': 'Synthetic timezone-free', 'due_at': '2030-10-03T00:00:00'},
+                {'id': 3, 'name': 'Synthetic UTC overflow', 'due_at': '0001-01-01T00:00:00+01:00'}]
+        type(self).planning_assignments = rows
+        try:
+            result = self.invoke('work', '--course', '101')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            items = json.loads(result.stdout)['assignments']
+            self.assertEqual([item['due_at'] for item in items], [row['due_at'] for row in rows])
+            self.assertTrue(all(item['status'] == 'unknown' for item in items))
+            for command in ('deadlines', 'work'):
+                result = self.invoke(command, '--course', '101', '--days', '14')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)['assignments'], [])
+            result = self.invoke('agenda', '--course', '101', '--include-undated')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data['items'], [])
+            self.assertEqual(data['undated_count'], 3)
+            self.assertEqual([item['due_at'] for item in data['undated']], [row['due_at'] for row in rows])
+            self.assertTrue(all(method == 'GET' for method, _ in self.calls[before:]))
+        finally:
+            type(self).planning_assignments = None
+
     def test_missing_work_paginates_native_filters_and_does_not_treat_planner_marker_as_submitted(self):
         before = len(self.calls)
         result = self.invoke('missing', '--timezone', 'America/Los_Angeles', '--include-planner')

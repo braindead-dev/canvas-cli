@@ -5,6 +5,34 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .client import CanvasError
 
 
+def _instant(value):
+    """Parse a reported aware date; absent or invalid dates remain unknown."""
+    if not isinstance(value, str):
+        return None
+    try:
+        instant = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return instant.astimezone(timezone.utc) if instant.tzinfo else None
+    except (ValueError, OverflowError):
+        return None
+
+
+def _availability(assignment, now):
+    """Describe reported date bounds, not native access or submission permission."""
+    opening, closing = (_instant(assignment.get(field)) for field in ('unlock_at', 'lock_at'))
+    if any(assignment.get(field) is not None and instant is None
+           for field, instant in (('unlock_at', opening), ('lock_at', closing))):
+        return 'unknown_invalid_dates'
+    if opening is not None and closing is not None and opening > closing:
+        return 'unknown_invalid_dates'
+    if closing is not None and closing < now:
+        return 'closed'
+    if opening is not None and opening > now:
+        return 'not_yet_open'
+    if opening is not None and closing is not None:
+        return 'within_window'
+    return 'not_specified'
+
+
 def active_courses(client, max_pages):
     return client.list('/api/v1/courses?enrollment_state=active&per_page=100', max_pages)
 
@@ -29,14 +57,8 @@ def deadlines(client, max_pages, days=14, course_id=None, courses=None):
             continue
         for assignment in assignments:
             raw_due = assignment.get('due_at')
-            if not raw_due:
-                continue
-            try:
-                due = datetime.fromisoformat(raw_due.replace('Z', '+00:00'))
-                if due.tzinfo is None:
-                    continue
-                due = due.astimezone(timezone.utc)
-            except ValueError:
+            due = _instant(raw_due)
+            if due is None:
                 continue
             if due < now or (cutoff is not None and due > cutoff):
                 continue
@@ -76,13 +98,7 @@ def work(client, max_pages, course_id=None, days=None, status=None):
             continue
         for assignment in assignments:
             raw_due = assignment.get('due_at')
-            due = None
-            if raw_due:
-                try:
-                    due = datetime.fromisoformat(raw_due.replace('Z', '+00:00'))
-                    due = due.astimezone(timezone.utc) if due.tzinfo else None
-                except ValueError:
-                    pass
+            due = _instant(raw_due)
             if cutoff is not None and (due is None or not now <= due <= cutoff):
                 continue
             submission = assignment.get('submission')
@@ -151,13 +167,7 @@ def agenda(client, max_pages, days=14, course_id=None, time_zone='local',
         if assignment['status'] in finished:
             continue
         raw_due = assignment.get('due_at')
-        due = None
-        if raw_due:
-            try:
-                parsed = datetime.fromisoformat(raw_due.replace('Z', '+00:00'))
-                due = parsed.astimezone(timezone.utc) if parsed.tzinfo else None
-            except ValueError:
-                pass
+        due = _instant(raw_due)
         base = {key: assignment.get(key) for key in
                 ('course_id', 'course_name', 'assignment_id', 'name', 'html_url',
                  'due_at', 'unlock_at', 'lock_at', 'status')}
@@ -167,7 +177,10 @@ def agenda(client, max_pages, days=14, course_id=None, time_zone='local',
             continue
         if due > cutoff:
             continue
-        due_local = due.astimezone(zone) if zone else due.astimezone()
+        try:
+            due_local = due.astimezone(zone) if zone else due.astimezone()
+        except OverflowError:
+            raise CanvasError('Assignment due date is outside the selected time zone display range; use UTC') from None
         base['due_local'] = due_local.isoformat()
         base['due_display'] = due_local.strftime('%a %b %d, %Y %I:%M %p %Z')
         if due < now:
@@ -178,21 +191,7 @@ def agenda(client, max_pages, days=14, course_id=None, time_zone='local',
             base['urgency'] = 'next_72h'
         else:
             base['urgency'] = 'later'
-        base['availability'] = 'not_specified'
-        for field, label, condition in (('unlock_at', 'not_yet_open', lambda t: t > now),
-                                        ('lock_at', 'closed', lambda t: t < now)):
-            value = assignment.get(field)
-            if not value:
-                continue
-            try:
-                instant = datetime.fromisoformat(value.replace('Z', '+00:00'))
-                if instant.tzinfo and condition(instant.astimezone(timezone.utc)):
-                    base['availability'] = label
-            except ValueError:
-                pass
-        if (base['availability'] == 'not_specified' and assignment.get('unlock_at')
-                and assignment.get('lock_at')):
-            base['availability'] = 'within_window'
+        base['availability'] = _availability(assignment, now)
         items.append((due, base))
     items.sort(key=lambda pair: (pair[0] >= now,
                                  -pair[0].timestamp() if pair[0] < now else pair[0].timestamp(),
